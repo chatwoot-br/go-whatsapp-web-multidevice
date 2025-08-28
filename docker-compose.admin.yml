@@ -7,6 +7,7 @@ services:
       dockerfile: docker/golang.Dockerfile
     ports:
       - "8088:8088"  # Admin API port
+      - "9001:9001"  # Supervisor web interface
       - "3001-3010:3001-3010"  # Range for GOWA instances
     environment:
       # Admin API Configuration
