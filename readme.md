@@ -152,6 +152,27 @@ Note: Command-line flags will override any values set in environment variables o
 
 ## How to use
 
+### Development Environment (Recommended)
+
+For the best development experience with Admin API support:
+
+1. **VS Code Dev Container** (Includes everything pre-configured):
+   - Clone this repo: `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
+   - Open in VS Code
+   - When prompted, click "Reopen in Container"
+   - Wait for the container to build and setup automatically
+   - Use `./.devcontainer/dev.sh help` for available commands
+   - See `.devcontainer/README.md` for detailed development guide
+
+2. **Features included in Dev Container**:
+   - ✅ Go 1.24+ with all tools
+   - ✅ FFmpeg pre-installed
+   - ✅ Supervisord configured and running
+   - ✅ Admin API ready to use
+   - ✅ Development helper scripts
+   - ✅ Port forwarding configured
+   - ✅ Environment variables pre-set
+
 ### Basic
 
 1. Clone this repo: `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
@@ -181,6 +202,24 @@ Note: Command-line flags will override any values set in environment variables o
     2. Windows: `.\whatsapp.exe rest` (for REST API mode)
         1. run `.\whatsapp.exe --help` for more detail flags
 6. open `http://localhost:3000` in browser
+
+### Admin API (Multi-Instance Management)
+
+For managing multiple WhatsApp instances:
+
+1. **Using Dev Container** (easiest):
+   ```bash
+   ./.devcontainer/dev.sh start-admin
+   ./.devcontainer/dev.sh create 3001
+   ```
+
+2. **Manual setup**:
+   - Install and configure supervisord
+   - Set required environment variables (see `.src/.env.dev`)
+   - Run: `go run . admin --port 8088`
+   - See [docs/admin-api.md](./docs/admin-api.md) for details
+
+**Note**: The Admin API supports all environment variables listed above. Use `GOWA_*` prefixed versions to configure defaults for instances (e.g., `GOWA_DEBUG=true`, `GOWA_WEBHOOK=https://webhook.site/xxx`). All instances created through the Admin API will inherit these settings and support the full feature set of standalone GOWA instances.
 
 ### MCP Server (Model Context Protocol)
 
