@@ -16,6 +16,28 @@ var (
 	McpPort = "8080"
 	McpHost = "localhost"
 
+	// Admin API Configuration
+	AdminPort             = "8088"
+	AdminToken            = ""
+	SupervisorURL         = "http://127.0.0.1:9001/RPC2"
+	SupervisorUser        = ""
+	SupervisorPass        = ""
+	SupervisorConfDir     = "/etc/supervisor/conf.d"
+	InstancesDir          = "/app/instances"
+	SupervisorLogDir      = "/var/log/supervisor"
+	GowaBin               = "/usr/local/bin/whatsapp"
+	GowaBasicAuth         = "admin:admin"
+	GowaDebug             = false
+	GowaOS                = "Chrome"
+	GowaAccountValidation = false
+	GowaBasePath          = ""
+	GowaAutoReply         = ""
+	GowaAutoMarkRead      = false
+	GowaWebhook           = ""
+	GowaWebhookSecret     = "secret"
+	GowaChatStorage       = true
+	LockDir               = "/tmp"
+
 	PathQrCode    = "statics/qrcode"
 	PathSendItems = "statics/senditems"
 	PathMedia     = "statics/media"
