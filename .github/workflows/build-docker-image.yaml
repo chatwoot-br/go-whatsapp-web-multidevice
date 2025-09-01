@@ -9,10 +9,47 @@ on:
       - '*'
 
 jobs:
+  create-runner-amd:
+    name: Create Hetzner Cloud AMD runner
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.create-hcloud-runner.outputs.label }}
+      server_id: ${{ steps.create-hcloud-runner.outputs.server_id }}
+    steps:
+      - name: Create runner
+        id: create-hcloud-runner
+        uses: Cyclenerd/hcloud-github-runner@v1
+        with:
+          mode: create
+          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          server_type: cx32
+          location: hel1  # Helsinki, Finland
+          image: ubuntu-24.04 # Ubuntu 24.04
+
+  create-runner-arm:
+    name: Create Hetzner Cloud ARM runner
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.create-hcloud-runner.outputs.label }}
+      server_id: ${{ steps.create-hcloud-runner.outputs.server_id }}
+    steps:
+      - name: Create runner
+        id: create-hcloud-runner
+        uses: Cyclenerd/hcloud-github-runner@v1
+        with:
+          mode: create
+          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          server_type: cax21
+          location: hel1  # Helsinki, Finland
+          image: ubuntu-24.04 # Ubuntu 24.04
+
   build-and-push-amd:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     environment: production
-    runs-on: ubuntu-latest
+    needs: create-runner-amd # required to start the main job when the runner is ready
+    runs-on: ${{ needs.create-runner-amd.outputs.label }} # run the job on the newly created runner
     permissions:
       contents: read
       packages: write
@@ -40,7 +77,8 @@ jobs:
   build-and-push-arm:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     environment: production
-    runs-on: [ARM64]
+    needs: create-runner-arm # required to start the main job when the runner is ready
+    runs-on: ${{ needs.create-runner-arm.outputs.label }} # run the job on the newly created runner
     permissions:
       contents: read
       packages: write
@@ -66,7 +104,7 @@ jobs:
 
   merge-manifest:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.create-runner-amd.outputs.label }} # run the job on the newly created runner
     needs: [build-and-push-amd, build-and-push-arm]
     permissions:
       contents: read
@@ -90,3 +128,37 @@ jobs:
           docker buildx imagetools create -t ghcr.io/aldinokemal/go-whatsapp-web-multidevice:latest \
             ghcr.io/aldinokemal/go-whatsapp-web-multidevice:latest-amd \
             ghcr.io/aldinokemal/go-whatsapp-web-multidevice:latest-arm
+
+  delete-runner-amd:
+    name: Delete Hetzner Cloud AMD runner
+    needs:
+      - create-runner-amd # required to get output from the create-runner-amd job
+      - build-and-push-amd # required to wait when the main job is done
+    runs-on: ubuntu-latest
+    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
+    steps:
+      - name: Delete runner
+        uses: Cyclenerd/hcloud-github-runner@v1
+        with:
+          mode: delete
+          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          name: ${{ needs.create-runner-amd.outputs.label }}
+          server_id: ${{ needs.create-runner-amd.outputs.server_id }}
+
+  delete-runner-arm:
+    name: Delete Hetzner Cloud ARM runner
+    needs:
+      - create-runner-arm # required to get output from the create-runner-arm job
+      - build-and-push-arm # required to wait when the main job is done
+    runs-on: ubuntu-latest
+    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
+    steps:
+      - name: Delete runner
+        uses: Cyclenerd/hcloud-github-runner@v1
+        with:
+          mode: delete
+          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          name: ${{ needs.create-runner-arm.outputs.label }}
+          server_id: ${{ needs.create-runner-arm.outputs.server_id }}
