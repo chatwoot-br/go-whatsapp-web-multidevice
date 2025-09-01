@@ -9,13 +9,11 @@
 	"features": {
 		"ghcr.io/devcontainers/features/github-cli:1": {}
 	},
-
 	// Configure port forwarding for the application
 	"forwardPorts": [
-		3000,    // Main GOWA REST API
-		8088,    // Admin API
-		9001,    // Supervisor web interface
-		3001,    // Instance port range start
+		8088, // Admin API
+		9001, // Supervisor web interface
+		3001, // Instance port range start
 		3002,
 		3003,
 		3004,
@@ -24,15 +22,10 @@
 		3007,
 		3008,
 		3009,
-		3010     // Instance port range end
+		3010 // Instance port range end
 	],
-
 	// Set port attributes
 	"portsAttributes": {
-		"3000": {
-			"label": "GOWA REST API",
-			"onAutoForward": "notify"
-		},
 		"8088": {
 			"label": "Admin API",
 			"onAutoForward": "notify"
@@ -42,7 +35,6 @@
 			"onAutoForward": "silent"
 		}
 	},
-
 	// Environment variables for development
 	"containerEnv": {
 		"ADMIN_TOKEN": "dev-token-123",
@@ -51,10 +43,8 @@
 		"SUPERVISOR_PASS": "admin123",
 		"GOWA_BIN": "/usr/local/bin/whatsapp"
 	},
-
 	// Run setup script after container is created
 	"postCreateCommand": "/usr/local/bin/setup.sh && /workspaces/go-whatsapp-web-multidevice/.devcontainer/quickstart.sh",
-
 	// VS Code customizations
 	"customizations": {
 		"vscode": {
@@ -73,12 +63,10 @@
 			}
 		}
 	},
-
 	// Mount points for development
 	"mounts": [
 		"source=${localWorkspaceFolder}/.devcontainer/.env.dev,target=/workspaces/go-whatsapp-web-multidevice/src/.env,type=bind"
 	],
-
 	// Use vscode user (non-root)
 	"remoteUser": "vscode"
 }
