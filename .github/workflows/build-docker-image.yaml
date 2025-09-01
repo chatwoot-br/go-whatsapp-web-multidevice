@@ -120,14 +120,14 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Create Versioned Manifest (GHCR) (${{ github.ref_name }})
         run: |
-          docker buildx imagetools create -t ghcr.io/aldinokemal/go-whatsapp-web-multidevice:${{ github.ref_name }} \
-            ghcr.io/aldinokemal/go-whatsapp-web-multidevice:${{ github.ref_name }}-amd \
-            ghcr.io/aldinokemal/go-whatsapp-web-multidevice:${{ github.ref_name }}-arm
+          docker buildx imagetools create -t ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ github.ref_name }} \
+            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ github.ref_name }}-amd \
+            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ github.ref_name }}-arm
       - name: Create Latest Manifest (GHCR)
         run: |
-          docker buildx imagetools create -t ghcr.io/aldinokemal/go-whatsapp-web-multidevice:latest \
-            ghcr.io/aldinokemal/go-whatsapp-web-multidevice:latest-amd \
-            ghcr.io/aldinokemal/go-whatsapp-web-multidevice:latest-arm
+          docker buildx imagetools create -t ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:latest \
+            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:latest-amd \
+            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:latest-arm
 
   delete-runner-amd:
     name: Delete Hetzner Cloud AMD runner
