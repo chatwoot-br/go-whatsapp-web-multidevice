@@ -25,7 +25,7 @@ jobs:
           hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
           server_type: cx32
           location: hel1  # Helsinki, Finland
-          image: ubuntu-24.04 # Ubuntu 24.04
+          image: docker-ce # Docker CE
 
   create-runner-arm:
     name: Create Hetzner Cloud ARM runner
@@ -43,7 +43,7 @@ jobs:
           hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
           server_type: cax21
           location: hel1  # Helsinki, Finland
-          image: ubuntu-24.04 # Ubuntu 24.04
+          image: docker-ce # Docker CE
 
   build-and-push-amd:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
