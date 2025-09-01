@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,7 +15,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestAdminAPI_CreateInstance_Simple(t *testing.T) {
+func TestAdminAPI_UpdateInstance(t *testing.T) {
 	// Set required environment variable
 	os.Setenv("ADMIN_TOKEN", "test-token")
 	defer os.Unsetenv("ADMIN_TOKEN")
@@ -31,49 +32,77 @@ func TestAdminAPI_CreateInstance_Simple(t *testing.T) {
 		State: StateRunning,
 	}
 
-	// Test 1: Minimal config - should call CreateInstance
-	t.Run("minimal config calls CreateInstance", func(t *testing.T) {
-		mockLifecycle.On("CreateInstance", 3001).Return(expectedInstance, nil).Once()
+	// Test 1: Update instance with partial config
+	t.Run("update instance with partial config", func(t *testing.T) {
+		mockLifecycle.On("UpdateInstanceConfig", 3001, mock.Anything).Return(expectedInstance, nil).Once()
 
 		app := fiber.New()
 		api.SetupRoutes(app)
 
-		reqBody := CreateInstanceRequest{Port: 3001}
-		bodyBytes, _ := json.Marshal(reqBody)
-
-		req := httptest.NewRequest("POST", "/admin/instances", bytes.NewReader(bodyBytes))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer test-token")
-
-		resp, err := app.Test(req)
-		assert.NoError(t, err)
-		assert.Equal(t, http.StatusCreated, resp.StatusCode)
-
-		mockLifecycle.AssertExpectations(t)
-	})
-
-	// Test 2: Custom config - should call CreateInstanceWithConfig
-	t.Run("custom config calls CreateInstanceWithConfig", func(t *testing.T) {
-		// Use mock.Anything for the config to avoid strict matching issues
-		mockLifecycle.On("CreateInstanceWithConfig", 3002, mock.Anything).Return(expectedInstance, nil).Once()
-
-		app := fiber.New()
-		api.SetupRoutes(app)
-
-		reqBody := CreateInstanceRequest{
-			Port:      3002,
-			BasicAuth: "custom:auth",
+		reqBody := UpdateInstanceRequest{
+			Debug:   new(bool), // false
+			Webhook: stringPtr("https://new-webhook.com"),
 		}
+		*reqBody.Debug = false
 		bodyBytes, _ := json.Marshal(reqBody)
 
-		req := httptest.NewRequest("POST", "/admin/instances", bytes.NewReader(bodyBytes))
+		req := httptest.NewRequest("PATCH", "/admin/instances/3001", bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer test-token")
 
 		resp, err := app.Test(req)
 		assert.NoError(t, err)
-		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		mockLifecycle.AssertExpectations(t)
 	})
+
+	// Test 2: Update instance - instance not found
+	t.Run("update non-existent instance", func(t *testing.T) {
+		mockLifecycle.On("UpdateInstanceConfig", 3002, mock.Anything).Return(nil, fmt.Errorf("instance on port 3002 not found")).Once()
+
+		app := fiber.New()
+		api.SetupRoutes(app)
+
+		reqBody := UpdateInstanceRequest{
+			Debug: new(bool),
+		}
+		*reqBody.Debug = true
+		bodyBytes, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest("PATCH", "/admin/instances/3002", bytes.NewReader(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer test-token")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+		mockLifecycle.AssertExpectations(t)
+	})
+
+	// Test 3: Update instance - invalid port
+	t.Run("update instance with invalid port", func(t *testing.T) {
+		app := fiber.New()
+		api.SetupRoutes(app)
+
+		reqBody := UpdateInstanceRequest{
+			Debug: new(bool),
+		}
+		*reqBody.Debug = true
+		bodyBytes, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest("PATCH", "/admin/instances/invalid", bytes.NewReader(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer test-token")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+}
+
+// Helper function to create string pointers
+func stringPtr(s string) *string {
+	return &s
 }

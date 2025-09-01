@@ -180,6 +180,59 @@ Get information about a specific instance.
 - `400` - Invalid port parameter
 - `404` - Instance not found
 
+#### Update Instance
+
+**PATCH** `/admin/instances/{port}`
+
+Update configuration of an existing instance. Only the provided fields will be updated.
+
+**Request:**
+```json
+{
+  "basic_auth": "newuser:newpassword",
+  "debug": false,
+  "os": "UpdatedApp",
+  "webhook": "https://new-webhook.example.com/whatsapp"
+}
+```
+
+**Field Descriptions:**
+- `basic_auth` (optional): Basic authentication credentials (format: "user:password")
+- `debug` (optional): Enable debug logging (boolean)
+- `os` (optional): OS name (device name in WhatsApp)
+- `account_validation` (optional): Enable account validation (boolean)
+- `base_path` (optional): Base path for subpath deployment
+- `auto_reply` (optional): Auto-reply message for incoming messages
+- `auto_mark_read` (optional): Auto-mark incoming messages as read (boolean)
+- `webhook` (optional): Webhook URL for events
+- `webhook_secret` (optional): Webhook secret for validation
+- `chat_storage` (optional): Enable chat storage (boolean)
+
+**Response (200 OK):**
+```json
+{
+  "data": {
+    "port": 3001,
+    "state": "RUNNING",
+    "pid": 12346,
+    "uptime": "3s",
+    "logs": {
+      "stdout": "/var/log/supervisor/gowa_3001.out.log",
+      "stderr": "/var/log/supervisor/gowa_3001.err.log"
+    }
+  },
+  "message": "Instance configuration updated successfully",
+  "request_id": "uuid-here",
+  "timestamp": "2025-08-28T10:00:00Z"
+}
+```
+
+**Errors:**
+- `400` - Invalid port parameter or JSON
+- `404` - Instance not found
+- `409` - Port locked by another operation
+- `500` - Update failed
+
 #### Delete Instance
 
 **DELETE** `/admin/instances/{port}`
@@ -275,6 +328,30 @@ curl -X GET "http://localhost:8088/admin/instances/3001" \
   -H "Authorization: Bearer your-secure-token-here"
 ```
 
+#### Update instance configuration:
+```bash
+curl -X PATCH "http://localhost:8088/admin/instances/3001" \
+  -H "Authorization: Bearer your-secure-token-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "basic_auth": "newuser:newpassword",
+    "debug": false,
+    "webhook": "https://new-webhook.example.com/whatsapp"
+  }'
+```
+
+#### Delete instance:
+```bash
+curl -X GET "http://localhost:8088/admin/instances" \
+  -H "Authorization: Bearer your-secure-token-here"
+```
+
+#### Get specific instance:
+```bash
+curl -X GET "http://localhost:8088/admin/instances/3001" \
+  -H "Authorization: Bearer your-secure-token-here"
+```
+
 #### Delete instance:
 ```bash
 curl -X DELETE "http://localhost:8088/admin/instances/3001" \
@@ -318,6 +395,15 @@ http GET localhost:8088/admin/instances \
   Authorization:"Bearer your-secure-token-here"
 ```
 
+#### Update instance configuration:
+```bash
+http PATCH localhost:8088/admin/instances/3001 \
+  Authorization:"Bearer your-secure-token-here" \
+  basic_auth="newuser:newpassword" \
+  debug:=false \
+  webhook="https://new-webhook.example.com/whatsapp"
+```
+
 ## Instance States
 
 - `RUNNING` - Instance is running normally
@@ -342,6 +428,51 @@ startretries=3
 stdout_logfile=/var/log/supervisor/gowa_3001.out.log
 stderr_logfile=/var/log/supervisor/gowa_3001.err.log
 environment=APP_PORT="3001",APP_DEBUG="false",APP_OS="Chrome",APP_BASIC_AUTH="admin:admin",DB_URI="file:/app/instances/3001/storages/whatsapp.db?_foreign_keys=on",WHATSAPP_AUTO_MARK_READ="true",WHATSAPP_WEBHOOK="https://webhook.site/xxx",WHATSAPP_WEBHOOK_SECRET="super-secret-key",WHATSAPP_ACCOUNT_VALIDATION="false",WHATSAPP_CHAT_STORAGE="true"
+```
+
+## Development and Testing
+
+For development and testing purposes, you can use the included helper script `.devcontainer/dev.sh`:
+
+### Helper Script Commands
+
+```bash
+# Start the admin server
+./dev.sh start-admin
+
+# Create a new instance
+./dev.sh create 3001
+
+# List all instances
+./dev.sh list
+
+# Update instance configuration
+./dev.sh update 3001 '{"debug": false, "webhook": "https://new-webhook.com"}'
+
+# Delete an instance
+./dev.sh delete 3001
+
+# Show all available commands
+./dev.sh help
+```
+
+### Example Development Workflow
+
+```bash
+# 1. Start the admin server
+./dev.sh start-admin
+
+# 2. Create an instance with basic configuration
+./dev.sh create 3001
+
+# 3. Update the instance with webhook configuration
+./dev.sh update 3001 '{"webhook": "https://webhook.site/unique-id", "debug": true}'
+
+# 4. Check the instance status
+./dev.sh list
+
+# 5. Update webhook secret
+./dev.sh update 3001 '{"webhook_secret": "my-secret-key"}'
 ```
 
 ## Security Considerations

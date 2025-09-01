@@ -185,6 +185,19 @@ delete_instance() {
         || log_error "Failed to delete instance. Make sure Admin API is running."
 }
 
+# Update an instance configuration
+update_instance() {
+    local port=${1:-3001}
+    local config=${2:-'{"debug": true}'}
+    log_info "Updating GOWA instance on port $port with config: $config"
+    
+    curl -X PATCH "http://localhost:8088/admin/instances/$port" \
+        -H "Authorization: Bearer dev-token-123" \
+        -H "Content-Type: application/json" \
+        -d "$config" \
+        || log_error "Failed to update instance. Make sure Admin API is running."
+}
+
 # Show help
 help() {
     echo ""
@@ -202,12 +215,14 @@ help() {
     echo "  create [port]      Create new instance (default port: 3001)"
     echo "  list               List all instances"
     echo "  delete [port]      Delete instance (default port: 3001)"
+    echo "  update [port] [config]  Update instance config (default port: 3001)"
     echo "  help               Show this help"
     echo ""
     echo "Examples:"
     echo "  $0 build"
     echo "  $0 start-admin"
     echo "  $0 create 3002"
+    echo "  $0 update 3002 '{\"debug\": false, \"webhook\": \"https://new-webhook.com\"}'"
     echo "  $0 delete 3002"
     echo ""
     echo "🔗 URLs:"
@@ -245,6 +260,9 @@ case "${1:-help}" in
         ;;
     delete)
         delete_instance "$2"
+        ;;
+    update)
+        update_instance "$2" "$3"
         ;;
     help|--help|-h)
         help

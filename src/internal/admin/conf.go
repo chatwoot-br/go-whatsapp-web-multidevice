@@ -137,6 +137,59 @@ func (cw *ConfigWriter) WriteConfig(port int) error {
 	return nil
 }
 
+// WriteConfigWithCustom atomically writes a supervisord configuration file with custom configuration
+func (cw *ConfigWriter) WriteConfigWithCustom(port int, customConfig *InstanceConfig) error {
+	config := *customConfig
+	config.Port = port
+
+	// Ensure the config directory exists
+	if err := os.MkdirAll(config.ConfDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory %s: %w", config.ConfDir, err)
+	}
+
+	// Ensure the instance storage directory exists
+	storageDir := filepath.Join(config.InstancesDir, strconv.Itoa(port), "storages")
+	if err := os.MkdirAll(storageDir, 0755); err != nil {
+		return fmt.Errorf("failed to create storage directory %s: %w", storageDir, err)
+	}
+
+	// Ensure the log directory exists
+	if err := os.MkdirAll(config.LogDir, 0755); err != nil {
+		return fmt.Errorf("failed to create log directory %s: %w", config.LogDir, err)
+	}
+
+	// Generate config content
+	configPath := filepath.Join(config.ConfDir, fmt.Sprintf("gowa-%d.conf", port))
+	tempPath := configPath + ".tmp"
+
+	// Write to temporary file first
+	tempFile, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to create temp config file %s: %w", tempPath, err)
+	}
+	defer tempFile.Close()
+
+	if err := cw.tmpl.Execute(tempFile, config); err != nil {
+		return fmt.Errorf("failed to execute config template: %w", err)
+	}
+
+	// Ensure data is written to disk
+	if err := tempFile.Sync(); err != nil {
+		return fmt.Errorf("failed to sync temp config file: %w", err)
+	}
+
+	tempFile.Close()
+
+	// Atomically move the temporary file to the final location
+	if err := os.Rename(tempPath, configPath); err != nil {
+		// Clean up temp file on failure
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to move temp config file to final location: %w", err)
+	}
+
+	return nil
+}
+
 // RemoveConfig removes the supervisord configuration file for a given port
 func (cw *ConfigWriter) RemoveConfig(port int) error {
 	configPath := filepath.Join(cw.config.ConfDir, fmt.Sprintf("gowa-%d.conf", port))

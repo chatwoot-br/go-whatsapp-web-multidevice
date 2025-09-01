@@ -39,6 +39,20 @@ type CreateInstanceRequest struct {
 	ChatStorage       *bool  `json:"chat_storage,omitempty"`
 }
 
+// UpdateInstanceRequest represents the request body for updating an instance
+type UpdateInstanceRequest struct {
+	BasicAuth         *string `json:"basic_auth,omitempty"`
+	Debug             *bool   `json:"debug,omitempty"`
+	OS                *string `json:"os,omitempty"`
+	AccountValidation *bool   `json:"account_validation,omitempty"`
+	BasePath          *string `json:"base_path,omitempty"`
+	AutoReply         *string `json:"auto_reply,omitempty"`
+	AutoMarkRead      *bool   `json:"auto_mark_read,omitempty"`
+	Webhook           *string `json:"webhook,omitempty"`
+	WebhookSecret     *string `json:"webhook_secret,omitempty"`
+	ChatStorage       *bool   `json:"chat_storage,omitempty"`
+}
+
 // ErrorResponse represents an error response
 type ErrorResponse struct {
 	Error     string `json:"error"`
@@ -96,6 +110,7 @@ func (api *AdminAPI) SetupRoutes(app *fiber.App) {
 	admin.Post("/instances", api.createInstanceHandler)
 	admin.Get("/instances", api.listInstancesHandler)
 	admin.Get("/instances/:port", api.getInstanceHandler)
+	admin.Patch("/instances/:port", api.updateInstanceHandler)
 	admin.Delete("/instances/:port", api.deleteInstanceHandler)
 }
 
@@ -236,6 +251,46 @@ func (api *AdminAPI) deleteInstanceHandler(c *fiber.Ctx) error {
 	}
 
 	return api.successResponse(c, http.StatusOK, nil, "Instance deleted successfully")
+}
+
+// updateInstanceHandler handles PATCH /admin/instances/:port
+func (api *AdminAPI) updateInstanceHandler(c *fiber.Ctx) error {
+	portStr := c.Params("port")
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return api.errorResponse(c, http.StatusBadRequest, "invalid_port", "Port must be a valid integer")
+	}
+
+	var req UpdateInstanceRequest
+	if err := c.BodyParser(&req); err != nil {
+		return api.errorResponse(c, http.StatusBadRequest, "invalid_json", "Invalid JSON in request body")
+	}
+
+	api.logger.Infof("Updating instance on port %d with new configuration", port)
+
+	// Build the custom configuration from the update request
+	customConfig := api.buildInstanceConfigFromUpdate(port, req)
+
+	instance, err := api.lifecycle.UpdateInstanceConfig(port, customConfig)
+	if err != nil {
+		api.logger.Errorf("Failed to update instance on port %d: %v", port, err)
+
+		// Determine appropriate HTTP status code based on error
+		status := http.StatusInternalServerError
+		errorCode := "update_failed"
+
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+			errorCode = "instance_not_found"
+		} else if strings.Contains(err.Error(), "locked") {
+			status = http.StatusConflict
+			errorCode = "port_locked"
+		}
+
+		return api.errorResponse(c, status, errorCode, err.Error())
+	}
+
+	return api.successResponse(c, http.StatusOK, instance, "Instance configuration updated successfully")
 }
 
 // healthHandler handles GET /healthz
@@ -391,6 +446,47 @@ func (api *AdminAPI) buildInstanceConfig(req CreateInstanceRequest) *InstanceCon
 	}
 	if req.WebhookSecret != "" {
 		config.WebhookSecret = req.WebhookSecret
+	}
+	if req.ChatStorage != nil {
+		config.ChatStorage = *req.ChatStorage
+	}
+
+	return config
+}
+
+// buildInstanceConfigFromUpdate creates an InstanceConfig from the API update request
+func (api *AdminAPI) buildInstanceConfigFromUpdate(port int, req UpdateInstanceRequest) *InstanceConfig {
+	// Start with default configuration
+	config := DefaultInstanceConfig()
+	config.Port = port
+
+	// Override with values from request only if they are provided
+	if req.BasicAuth != nil {
+		config.BasicAuth = *req.BasicAuth
+	}
+	if req.Debug != nil {
+		config.Debug = *req.Debug
+	}
+	if req.OS != nil {
+		config.OS = *req.OS
+	}
+	if req.AccountValidation != nil {
+		config.AccountValidation = *req.AccountValidation
+	}
+	if req.BasePath != nil {
+		config.BasePath = *req.BasePath
+	}
+	if req.AutoReply != nil {
+		config.AutoReply = *req.AutoReply
+	}
+	if req.AutoMarkRead != nil {
+		config.AutoMarkRead = *req.AutoMarkRead
+	}
+	if req.Webhook != nil {
+		config.Webhook = *req.Webhook
+	}
+	if req.WebhookSecret != nil {
+		config.WebhookSecret = *req.WebhookSecret
 	}
 	if req.ChatStorage != nil {
 		config.ChatStorage = *req.ChatStorage

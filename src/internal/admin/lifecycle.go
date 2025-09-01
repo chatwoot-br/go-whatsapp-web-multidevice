@@ -41,6 +41,7 @@ type LogFiles struct {
 type ILifecycleManager interface {
 	CreateInstance(port int) (*Instance, error)
 	CreateInstanceWithConfig(port int, customConfig *InstanceConfig) (*Instance, error)
+	UpdateInstanceConfig(port int, customConfig *InstanceConfig) (*Instance, error)
 	ListInstances() ([]*Instance, error)
 	GetInstance(port int) (*Instance, error)
 	DeleteInstance(port int) error
@@ -171,6 +172,72 @@ func (lm *LifecycleManager) DeleteInstance(port int) error {
 
 	lm.logger.Infof("Successfully deleted instance on port %d", port)
 	return nil
+}
+
+// UpdateInstanceConfig updates a GOWA instance configuration with new settings
+func (lm *LifecycleManager) UpdateInstanceConfig(port int, customConfig *InstanceConfig) (*Instance, error) {
+	// Acquire lock for this port
+	lockFile, err := lm.lockManager.AcquireLock(port)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire lock: %w", err)
+	}
+	defer lm.lockManager.ReleaseLock(lockFile)
+
+	programName := fmt.Sprintf("gowa_%d", port)
+
+	lm.logger.Infof("Updating instance configuration on port %d", port)
+
+	// Check if instance exists
+	if !lm.instanceExists(programName) {
+		return nil, fmt.Errorf("instance on port %d not found", port)
+	}
+
+	client := lm.supervisor.GetClient()
+
+	// Stop the process if it's running
+	lm.logger.Infof("Stopping instance on port %d for configuration update", port)
+	if err := client.StopProcess(programName, true); err != nil {
+		lm.logger.Warnf("Failed to stop process %s: %v", programName, err)
+	}
+
+	// Remove the current process group
+	if err := client.RemoveProcessGroup(programName); err != nil {
+		lm.logger.Warnf("Failed to remove process group %s: %v", programName, err)
+	}
+
+	// Set the port in the custom config
+	if customConfig == nil {
+		customConfig = DefaultInstanceConfig()
+	}
+	customConfig.Port = port
+
+	// Write the new configuration
+	if err := lm.configWriter.WriteConfigWithCustom(port, customConfig); err != nil {
+		return nil, fmt.Errorf("failed to write config: %w", err)
+	}
+
+	// Add the new configuration to supervisord
+	if err := client.Update(); err != nil {
+		return nil, fmt.Errorf("failed to update supervisord configuration: %w", err)
+	}
+
+	// Wait a moment for supervisord to process the reload
+	time.Sleep(1 * time.Second)
+
+	// Start the process with new configuration
+	lm.logger.Infof("Starting instance on port %d with updated configuration", port)
+	if err := client.StartProcess(programName, true); err != nil {
+		return nil, fmt.Errorf("failed to start process: %w", err)
+	}
+
+	// Wait for the instance to be in running state
+	instance, err := lm.waitForInstanceState(port, StateRunning, 30*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("instance failed to start: %w", err)
+	}
+
+	lm.logger.Infof("Successfully updated instance configuration on port %d", port)
+	return instance, nil
 }
 
 // ListInstances returns a list of all GOWA instances
