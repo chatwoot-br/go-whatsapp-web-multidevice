@@ -84,7 +84,7 @@ test() {
 
 # Start the main GOWA REST API
 start_rest() {
-    log_info "Starting GOWA REST API on port 3000..."
+    log_info "Starting GOWA REST API on port 3001..."
     cd "$SRC_DIR"
     go run . rest
 }
@@ -131,7 +131,7 @@ status() {
         fi
     }
     
-    check_port 3000 "GOWA REST API"
+    check_port 3001 "GOWA REST API"
     check_port 8088 "Admin API"
     check_port 9001 "Supervisor Web UI"
 }
@@ -208,7 +208,7 @@ help() {
     echo "Commands:"
     echo "  build              Build the GOWA binary"
     echo "  test               Run tests"
-    echo "  start-rest         Start GOWA REST API (port 3000)"
+    echo "  start-rest         Start GOWA REST API (port 3001)"
     echo "  start-admin        Start Admin API (port 8088)"
     echo "  status             Show status of all services"
     echo "  stop               Stop all services"
@@ -226,7 +226,7 @@ help() {
     echo "  $0 delete 3002"
     echo ""
     echo "🔗 URLs:"
-    echo "  • GOWA REST API: http://localhost:3000"
+    echo "  • GOWA REST API: http://localhost:3001"
     echo "  • Admin API: http://localhost:8088"
     echo "  • Supervisor Web UI: http://localhost:9001"
     echo ""
