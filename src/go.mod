@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/PuerkitoBio/goquery v1.10.3
+	github.com/abrander/go-supervisord v0.0.0-20241025195033-ca03911ce450
 	github.com/disintegration/imaging v1.6.2
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
@@ -21,14 +22,13 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/valyala/fasthttp v1.65.0
 	go.mau.fi/libsignal v0.2.0
-	go.mau.fi/whatsmeow v0.0.0-20250816112049-1b82e4b52df1
+	go.mau.fi/whatsmeow v0.0.0-20250829123043-72d2ed58e998
 	golang.org/x/image v0.30.0
-	google.golang.org/protobuf v1.36.7
+	google.golang.org/protobuf v1.36.8
 )
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/abrander/go-supervisord v0.0.0-20241025195033-ca03911ce450 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
