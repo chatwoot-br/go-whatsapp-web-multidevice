@@ -538,6 +538,20 @@ paths:
       tags:
         - send
       summary: Send Audio
+      description: |
+        Send audio messages to WhatsApp contacts or groups. The API automatically converts audio files to optimal formats for WhatsApp compatibility when FFmpeg is available.
+        
+        **Audio Format Optimization:**
+        - The system automatically converts audio to OGG Opus format for best WhatsApp compatibility
+        - If FFmpeg is not available, the original format will be used
+        - Supported input formats: MP3, WAV, AAC, M4A, OGG, FLAC, WMA, AMR
+        - Maximum file size: 16MB (WhatsApp limit)
+        
+        **Quality Settings:**
+        - Converted to 64kbps bitrate for optimal quality/size ratio
+        - 48kHz sample rate for high quality
+        - Mono audio (WhatsApp preference for voice messages)
+        - Optimized for voice transmission
       requestBody:
         content:
           multipart/form-data:
@@ -551,11 +565,16 @@ paths:
                 audio:
                   type: string
                   format: binary
-                  description: Audio to send
+                  description: |
+                    Audio file to send. Supports multiple formats (MP3, WAV, AAC, M4A, OGG, FLAC, WMA, AMR).
+                    The file will be automatically converted to OGG Opus format for optimal WhatsApp compatibility.
+                    Maximum file size: 16MB.
                 audio_url:
                   type: string
                   example: https://example.com/audio.mp3
-                  description: Audio URL to send
+                  description: |
+                    Audio URL to send instead of uploading a file. The audio will be downloaded and processed
+                    with the same format optimization as uploaded files.
                 is_forwarded:
                   type: boolean
                   example: false
