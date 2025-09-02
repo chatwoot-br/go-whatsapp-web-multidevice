@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "charts.fullname" . }}
+  name: {{ include "gowa.fullname" . }}
   labels:
-    {{- include "charts.labels" . | nindent 4 }}
+    {{- include "gowa.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "charts.selectorLabels" . | nindent 6 }}
+      {{- include "gowa.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -18,7 +18,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "charts.labels" . | nindent 8 }}
+        {{- include "gowa.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -27,12 +27,36 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "charts.serviceAccountName" . }}
+      serviceAccountName: {{ include "gowa.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        - name: init-directories
+          image: busybox:1.35
+          command: ['sh', '-c']
+          args:
+            - |
+              set -e
+              echo "Creating necessary directories..."
+              mkdir -p /app/statics/media /app/statics/qrcode /app/statics/senditems
+              mkdir -p /app/storages
+              mkdir -p /app/instances
+              mkdir -p /var/log/supervisor
+              mkdir -p /etc/supervisor/conf.d
+              mkdir -p /tmp
+              echo "Setting permissions..."
+              chmod -R 755 /app
+              chmod -R 755 /var/log/supervisor
+              chmod -R 755 /tmp
+              echo "Directories created successfully"
+          volumeMounts:
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       containers:
+        # Admin API container
         - name: {{ .Chart.Name }}
           {{- with .Values.securityContext }}
           securityContext:
@@ -40,9 +64,85 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh"]
+          args: 
+            - "-c"
+            - |
+              echo "Starting gowa container..."
+              echo "Waiting for supervisord to be fully ready..."
+              sleep 25
+              
+              echo "Testing supervisord connection..."
+              echo "URL: $SUPERVISOR_URL"
+              echo "Username: $SUPERVISOR_USER"
+              
+              echo "Starting Admin API on port {{ .Values.admin.port }}..."
+              exec /usr/local/bin/whatsapp admin --port {{ .Values.admin.port }}
+          {{- if .Values.env }}
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+            {{- if or .Values.admin.token .Values.admin.existingSecret }}
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.admin.token }}
+                  name: {{ include "gowa.fullname" . }}-admin-secret
+                  key: admin-token
+                  {{- else }}
+                  name: {{ .Values.admin.existingSecret }}
+                  key: {{ .Values.admin.existingSecretKey | default "admin-token" }}
+                  {{- end }}
+            {{- end }}
+          {{- else }}
+          {{- if or .Values.admin.token .Values.admin.existingSecret }}
+          env:
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.admin.token }}
+                  name: {{ include "gowa.fullname" . }}-admin-secret
+                  key: admin-token
+                  {{- else }}
+                  name: {{ .Values.admin.existingSecret }}
+                  key: {{ .Values.admin.existingSecretKey | default "admin-token" }}
+                  {{- end }}
+          {{- end }}
+          {{- end }}
           ports:
-            - name: http
-              containerPort: {{ .Values.service.port }}
+            # Admin API port
+            - name: admin-api
+              containerPort: {{ .Values.admin.port }}
+              protocol: TCP
+            # WhatsApp instance ports (3001-3010)
+            - name: whatsapp-3001
+              containerPort: 3001
+              protocol: TCP
+            - name: whatsapp-3002
+              containerPort: 3002
+              protocol: TCP
+            - name: whatsapp-3003
+              containerPort: 3003
+              protocol: TCP
+            - name: whatsapp-3004
+              containerPort: 3004
+              protocol: TCP
+            - name: whatsapp-3005
+              containerPort: 3005
+              protocol: TCP
+            - name: whatsapp-3006
+              containerPort: 3006
+              protocol: TCP
+            - name: whatsapp-3007
+              containerPort: 3007
+              protocol: TCP
+            - name: whatsapp-3008
+              containerPort: 3008
+              protocol: TCP
+            - name: whatsapp-3009
+              containerPort: 3009
+              protocol: TCP
+            - name: whatsapp-3010
+              containerPort: 3010
               protocol: TCP
           {{- with .Values.livenessProbe }}
           livenessProbe:
@@ -50,6 +150,10 @@ spec:
           {{- end }}
           {{- with .Values.readinessProbe }}
           readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- with .Values.resources }}
@@ -60,9 +164,62 @@ spec:
           volumeMounts:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-      {{- with .Values.volumes }}
+        
+        # Supervisord sidecar container
+        - name: supervisord
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh"]
+          args: 
+            - "-c"
+            - |
+              echo "Starting supervisord container..."
+              echo "Checking supervisord binary..."
+              which supervisord || echo "supervisord not found in PATH"
+              /usr/bin/supervisord --version || echo "supervisord version check failed"
+              
+              echo "Checking configuration file..."
+              cat /etc/supervisor/supervisord.conf
+              
+              echo "Starting supervisord with debug..."
+              exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
+          ports:
+            - name: supervisor-rpc
+              containerPort: 9001
+              protocol: TCP
+          volumeMounts:
+            - name: supervisor-config
+              mountPath: "/etc/supervisor/supervisord.conf"
+              subPath: "supervisord.conf"
+              readOnly: true
+            - name: supervisor-conf-dir
+              mountPath: "/etc/supervisor/conf.d"
+            - name: instances-data
+              mountPath: "/app/instances"
+            - name: supervisor-logs
+              mountPath: "/var/log/supervisor"
+            - name: supervisor-run
+              mountPath: "/var/run"
+      {{- if .Values.volumes }}
       volumes:
-        {{- toYaml . | nindent 8 }}
+        - name: supervisor-config
+          configMap:
+            name: {{ include "gowa.fullname" . }}-supervisor-config
+        - name: supervisor-conf-dir
+          emptyDir: {}
+        - name: instances-data
+          persistentVolumeClaim:
+            claimName: {{ include "gowa.fullname" . }}-instances-pvc
+        - name: supervisor-logs
+          emptyDir: {}
+        - name: supervisor-run
+          emptyDir: {}
+        - name: app-statics
+          emptyDir: {}
+        - name: app-storages
+          emptyDir: {}
+        - name: app-temp
+          emptyDir: {}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

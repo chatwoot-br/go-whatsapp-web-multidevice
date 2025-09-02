@@ -180,6 +180,10 @@ For the best development experience with Admin API support:
 3. run `cd src`
 4. run `go run . rest` (for REST API mode)
 5. Open `http://localhost:3000`
+ 
+## Helm chart for Admin API
+
+This repository includes a Helm chart that deploys the Admin API and a supervisord sidecar used to manage WhatsApp instances. See `charts/README.md` for consolidated configuration, deployment and debugging instructions.
 
 ### Docker (you don't need to install in required)
 

@@ -21,3 +21,10 @@
 .idea/
 *.tmproj
 .vscode/
+# Helm files
+*.tgz
+.helmignore
+# Chart development files
+README.md
+install.sh
+values-production.yaml

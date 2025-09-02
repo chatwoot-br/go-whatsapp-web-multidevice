@@ -1,4 +1,4 @@
-# Default values for charts.
+# Default values for go-whatsapp-admin-api.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
@@ -7,11 +7,11 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: nginx
+  repository: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: "latest"
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -38,23 +38,82 @@ podAnnotations: {}
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
 
-podSecurityContext: {}
-  # fsGroup: 2000
+podSecurityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
+  fsGroup: 0
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+    add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+  readOnlyRootFilesystem: false
+  runAsNonRoot: false
+  runAsUser: 0
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
   # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
   type: ClusterIP
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
-  port: 80
+  ports:
+    # Admin API port
+    - name: admin-api
+      port: 8088
+      targetPort: 8088
+      protocol: TCP
+    # Supervisord RPC port
+    - name: supervisor-rpc
+      port: 9001
+      targetPort: 9001
+      protocol: TCP
+    # WhatsApp instance ports (3001-3010)
+    - name: whatsapp-3001
+      port: 3001
+      targetPort: 3001
+      protocol: TCP
+    - name: whatsapp-3002
+      port: 3002
+      targetPort: 3002
+      protocol: TCP
+    - name: whatsapp-3003
+      port: 3003
+      targetPort: 3003
+      protocol: TCP
+    - name: whatsapp-3004
+      port: 3004
+      targetPort: 3004
+      protocol: TCP
+    - name: whatsapp-3005
+      port: 3005
+      targetPort: 3005
+      protocol: TCP
+    - name: whatsapp-3006
+      port: 3006
+      targetPort: 3006
+      protocol: TCP
+    - name: whatsapp-3007
+      port: 3007
+      targetPort: 3007
+      protocol: TCP
+    - name: whatsapp-3008
+      port: 3008
+      targetPort: 3008
+      protocol: TCP
+    - name: whatsapp-3009
+      port: 3009
+      targetPort: 3009
+      protocol: TCP
+    - name: whatsapp-3010
+      port: 3010
+      targetPort: 3010
+      protocol: TCP
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -63,15 +122,17 @@ ingress:
   annotations: {}
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
+    # nginx.ingress.kubernetes.io/auth-type: basic
+    # nginx.ingress.kubernetes.io/auth-secret: admin-auth
   hosts:
-    - host: chart-example.local
+    - host: admin-api.example.local
       paths:
         - path: /
           pathType: ImplementationSpecific
   tls: []
-  #  - secretName: chart-example-tls
+  #  - secretName: admin-api-tls
   #    hosts:
-  #      - chart-example.local
+  #      - admin-api.example.local
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -88,12 +149,28 @@ resources: {}
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   httpGet:
-    path: /
-    port: http
+    path: /healthz
+    port: admin-api
+  initialDelaySeconds: 40
+  periodSeconds: 10
+  timeoutSeconds: 5
+  
 readinessProbe:
   httpGet:
-    path: /
-    port: http
+    path: /readyz
+    port: admin-api
+  initialDelaySeconds: 35
+  periodSeconds: 5
+  timeoutSeconds: 3
+
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: admin-api
+  initialDelaySeconds: 30
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 12
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
@@ -104,20 +181,120 @@ autoscaling:
   # targetMemoryUtilizationPercentage: 80
 
 # Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
+volumes: 
+  - name: supervisor-config
+    configMap:
+      name: "supervisor-config"
+      defaultMode: 0755
+  - name: supervisor-conf-dir
+    emptyDir: {}
+  - name: instances-data
+    persistentVolumeClaim:
+      claimName: "instances-pvc"
+  - name: supervisor-logs
+    emptyDir: {}
+  - name: supervisor-run
+    emptyDir: {}
+  - name: app-statics
+    emptyDir: {}
+  - name: app-storages
+    emptyDir: {}
+  - name: app-temp
+    emptyDir: {}
 
 # Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
+volumeMounts:
+  - name: supervisor-config
+    mountPath: "/etc/supervisor/supervisord.conf"
+    subPath: "supervisord.conf"
+    readOnly: true
+  - name: supervisor-conf-dir
+    mountPath: "/etc/supervisor/conf.d"
+  - name: instances-data
+    mountPath: "/app/instances"
+  - name: supervisor-logs
+    mountPath: "/var/log/supervisor"
+  - name: supervisor-run
+    mountPath: "/var/run"
+  - name: app-statics
+    mountPath: "/app/statics"
+  - name: app-storages
+    mountPath: "/app/storages"
+  - name: app-temp
+    mountPath: "/tmp"
 
 nodeSelector: {}
 
 tolerations: []
 
 affinity: {}
+
+# Admin API specific configuration
+admin:
+  # Port for the admin API server
+  port: 8088
+  
+  # Admin token for API authentication (should be set via secret in production)
+  # If token is set, it will create a secret. Otherwise, use existingSecret
+  token: ""
+  # existingSecret: "admin-secret"
+  # existingSecretKey: "admin-token"
+  
+  # Supervisor configuration
+  supervisor:
+    # URL for supervisor XML-RPC
+    url: "http://localhost:9001/RPC2"
+    # Supervisor username
+    username: "supervisor"
+    # Supervisor password
+    password: "supervisor"
+  
+  # Directory configuration
+  directories:
+    # Supervisor configuration directory
+    supervisorConfDir: "/etc/supervisor/conf.d"
+    # Instances data directory
+    instancesDir: "/app/instances"
+    # Supervisor log directory
+    supervisorLogDir: "/var/log/supervisor"
+    # Lock files directory
+    lockDir: "/tmp"
+
+# Environment variables for the admin API
+env:
+  # Supervisor configuration
+  - name: SUPERVISOR_URL
+    value: "http://127.0.0.1:9001/RPC2"
+  - name: SUPERVISOR_USER
+    value: "admin"
+  - name: SUPERVISOR_PASS
+    value: "admin123"
+  - name: SUPERVISOR_CONF_DIR
+    value: "/etc/supervisor/conf.d"
+  - name: INSTANCES_DIR
+    value: "/app/instances"
+  - name: SUPERVISOR_LOG_DIR
+    value: "/var/log/supervisor"
+  - name: LOCK_DIR
+    value: "/tmp"
+  # Database configuration
+  - name: DB_URI
+    value: "file:/app/storages/whatsapp.db?_foreign_keys=on"
+  # App configuration  
+  - name: APP_DEBUG
+    value: "true"
+  - name: WHATSAPP_CHAT_STORAGE
+    value: "true"
+  # Admin API configuration
+  - name: ADMIN_PORT
+    value: "8088"
+  - name: ADMIN_DEBUG
+    value: "true"
+
+# Persistence configuration for instances data
+persistence:
+  enabled: true
+  # storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  # existingClaim: ""
