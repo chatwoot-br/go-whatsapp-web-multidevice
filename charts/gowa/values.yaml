@@ -290,6 +290,10 @@ env:
     value: "8088"
   - name: ADMIN_DEBUG
     value: "true"
+  - name: WHATSAPP_SETTING_MAX_AUDIO_SIZE
+    value: "16777216"
+  - name: WHATSAPP_SETTING_AUTO_CONVERT_AUDIO
+    value: "true"
 
 # Persistence configuration for instances data
 persistence:

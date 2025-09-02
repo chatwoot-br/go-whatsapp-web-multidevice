@@ -45,7 +45,7 @@ func TestProcessAudioForWhatsApp(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, audioBytes, processedBytes)
 		assert.Equal(t, "audio/aac", finalMimeType)
-		
+
 		// Clean up any created temp files
 		for _, item := range deletedItems {
 			os.Remove(item)
