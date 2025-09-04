@@ -187,12 +187,14 @@ volumes:
       name: "supervisor-config"
       defaultMode: 0755
   - name: supervisor-conf-dir
-    emptyDir: {}
+    persistentVolumeClaim:
+      claimName: "supervisor-conf-pvc"
   - name: instances-data
     persistentVolumeClaim:
       claimName: "instances-pvc"
   - name: supervisor-logs
-    emptyDir: {}
+    persistentVolumeClaim:
+      claimName: "supervisor-logs-pvc"
   - name: supervisor-run
     emptyDir: {}
   - name: app-statics
@@ -208,18 +210,23 @@ volumeMounts:
     mountPath: "/etc/supervisor/supervisord.conf"
     subPath: "supervisord.conf"
     readOnly: true
-  - name: supervisor-conf-dir
+  - name: shared-data
     mountPath: "/etc/supervisor/conf.d"
-  - name: instances-data
+    subPath: "supervisor/conf.d"
+  - name: shared-data
     mountPath: "/app/instances"
-  - name: supervisor-logs
+    subPath: "instances"
+  - name: shared-data
     mountPath: "/var/log/supervisor"
+    subPath: "supervisor/logs"
   - name: supervisor-run
     mountPath: "/var/run"
-  - name: app-statics
+  - name: shared-data
     mountPath: "/app/statics"
-  - name: app-storages
+    subPath: "statics"
+  - name: shared-data
     mountPath: "/app/storages"
+    subPath: "storages"
   - name: app-temp
     mountPath: "/tmp"
 
@@ -295,10 +302,10 @@ env:
   - name: WHATSAPP_SETTING_AUTO_CONVERT_AUDIO
     value: "true"
 
-# Persistence configuration for instances data
+# Persistence configuration for all application data
 persistence:
   enabled: true
   # storageClass: ""
   accessMode: ReadWriteOnce
-  size: 10Gi
+  size: 10Gi  # Increased size to accommodate all data (instances + supervisor configs + logs + statics)
   # existingClaim: ""

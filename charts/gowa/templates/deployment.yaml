@@ -8,6 +8,8 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "gowa.selectorLabels" . | nindent 6 }}
@@ -39,22 +41,26 @@ spec:
           args:
             - |
               set -e
-              echo "Creating necessary directories..."
-              mkdir -p /app/statics/media /app/statics/qrcode /app/statics/senditems
-              mkdir -p /app/storages
-              mkdir -p /app/instances
-              mkdir -p /var/log/supervisor
-              mkdir -p /etc/supervisor/conf.d
+              echo "Creating shared volume directory structure..."
+              mkdir -p /shared-data/instances
+              mkdir -p /shared-data/statics/media 
+              mkdir -p /shared-data/statics/qrcode 
+              mkdir -p /shared-data/statics/senditems
+              mkdir -p /shared-data/storages
+              mkdir -p /shared-data/supervisor/conf.d
+              mkdir -p /shared-data/supervisor/logs
               mkdir -p /tmp
               echo "Setting permissions..."
-              chmod -R 755 /app
-              chmod -R 755 /var/log/supervisor
+              chmod -R 755 /shared-data
               chmod -R 755 /tmp
-              echo "Directories created successfully"
+              echo "Shared volume structure created successfully"
+              echo "Directory structure:"
+              find /shared-data -type d | sort
           volumeMounts:
-            {{- with .Values.volumeMounts }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+            - name: shared-data
+              mountPath: "/shared-data"
+            - name: app-temp
+              mountPath: "/tmp"
       containers:
         # Admin API container
         - name: {{ .Chart.Name }}
@@ -192,12 +198,15 @@ spec:
               mountPath: "/etc/supervisor/supervisord.conf"
               subPath: "supervisord.conf"
               readOnly: true
-            - name: supervisor-conf-dir
+            - name: shared-data
               mountPath: "/etc/supervisor/conf.d"
-            - name: instances-data
+              subPath: "supervisor/conf.d"
+            - name: shared-data
               mountPath: "/app/instances"
-            - name: supervisor-logs
+              subPath: "instances"
+            - name: shared-data
               mountPath: "/var/log/supervisor"
+              subPath: "supervisor/logs"
             - name: supervisor-run
               mountPath: "/var/run"
       {{- if .Values.volumes }}
@@ -205,18 +214,14 @@ spec:
         - name: supervisor-config
           configMap:
             name: {{ include "gowa.fullname" . }}-supervisor-config
-        - name: supervisor-conf-dir
-          emptyDir: {}
-        - name: instances-data
+        - name: shared-data
+          {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "gowa.fullname" . }}-instances-pvc
-        - name: supervisor-logs
+            claimName: {{ include "gowa.fullname" . }}-data-pvc
+          {{- else }}
           emptyDir: {}
+          {{- end }}
         - name: supervisor-run
-          emptyDir: {}
-        - name: app-statics
-          emptyDir: {}
-        - name: app-storages
           emptyDir: {}
         - name: app-temp
           emptyDir: {}

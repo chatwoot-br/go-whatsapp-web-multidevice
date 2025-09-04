@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "gowa.fullname" . }}-instances-pvc
+  name: {{ include "gowa.fullname" . }}-data-pvc
   labels:
     {{- include "gowa.labels" . | nindent 4 }}
 spec:
