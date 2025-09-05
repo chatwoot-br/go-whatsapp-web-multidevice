@@ -44,6 +44,7 @@ Download:
 ## Feature
 
 - Send WhatsApp message via http API, [docs/openapi.yml](./docs/openapi.yaml) for more details
+- **Interactive API Documentation with Swagger UI** - Built-in Swagger UI for Admin API accessible at `/swagger` endpoint
 - **MCP (Model Context Protocol) Server Support** - Integrate with AI agents and tools using standardized protocol
 - Mention someone
   - `@phoneNumber`
@@ -506,6 +507,37 @@ You can fork or edit this source code !
 
 - Please do this if you have an error (invalid flag in pkg-config --cflags: -Xpreprocessor)
   `export CGO_CFLAGS_ALLOW="-Xpreprocessor"`
+
+### Admin API & Swagger UI
+
+The application includes an Admin API for managing multiple GOWA instances with built-in Swagger UI documentation.
+
+#### Admin API Features
+- Create, list, update, and delete GOWA instances
+- Health and readiness endpoints
+- Supervisor-based instance management
+- Authentication via bearer token
+
+#### Swagger UI Integration
+- Interactive API documentation at `/swagger` endpoint
+- Real-time testing of Admin API endpoints
+- Automatic OpenAPI specification serving
+- CORS-enabled for browser access
+
+#### Kubernetes/Helm Deployment
+```bash
+# Deploy with Swagger UI enabled
+helm install my-release charts/gowa --set swaggerUI.enabled=true
+
+# Access Swagger UI (after port forwarding)
+kubectl port-forward svc/my-release-gowa 8080:8080
+open http://localhost:8080/swagger
+```
+
+For more details, see:
+- [Admin API Documentation](./docs/admin-api.md)
+- [Admin API OpenAPI Spec](./docs/admin-api-openapi.yaml)
+- [Swagger UI Integration Guide](./docs/SWAGGER-UI-INTEGRATION-COMPLETE.md)
 
 ## Important
 

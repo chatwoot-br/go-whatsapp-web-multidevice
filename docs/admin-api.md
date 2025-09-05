@@ -2,6 +2,16 @@
 
 This document provides examples and documentation for the Admin API implementation that orchestrates multi-instance GOWA with Supervisord.
 
+## OpenAPI Specification
+
+📋 **Complete API specification available at**: [`docs/admin-api-openapi.yaml`](admin-api-openapi.yaml)
+
+The OpenAPI specification includes:
+- Complete endpoint documentation with request/response schemas
+- Authentication details
+- Example requests and responses
+- Error handling documentation
+
 ## Overview
 
 The Admin API allows you to dynamically create, manage, and delete GOWA instances through HTTP REST endpoints. Each instance runs on a different port and is managed by Supervisord for robust process supervision.

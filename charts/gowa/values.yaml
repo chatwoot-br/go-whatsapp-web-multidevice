@@ -68,6 +68,11 @@ service:
       port: 8088
       targetPort: 8088
       protocol: TCP
+    # Swagger UI port
+    - name: swagger-ui
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
     # Supervisord RPC port
     - name: supervisor-rpc
       port: 9001
@@ -301,6 +306,33 @@ env:
     value: "16777216"
   - name: WHATSAPP_SETTING_AUTO_CONVERT_AUDIO
     value: "true"
+
+# Swagger UI sidecar configuration
+swaggerUI:
+  enabled: true
+  image:
+    repository: swaggerapi/swagger-ui
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  port: 8080
+  # Base URL used inside the OpenAPI "servers" section; can be overridden per deployment
+  serverUrl: "http://localhost:8088"
+  config:
+    # Swagger UI configuration options
+    deepLinking: true
+    displayOperationId: false
+    defaultModelsExpandDepth: 1
+    defaultModelExpandDepth: 1
+    defaultModelRendering: "example"
+    displayRequestDuration: false
+    docExpansion: "list"
+    filter: false
+    maxDisplayedTags: -1
+    operationsSorter: null
+    showExtensions: false
+    showCommonExtensions: false
+    tagsSorter: "alpha"
+    validatorUrl: null
 
 # Persistence configuration for all application data
 persistence:

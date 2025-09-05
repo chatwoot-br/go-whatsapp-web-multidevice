@@ -209,11 +209,47 @@ spec:
               subPath: "supervisor/logs"
             - name: supervisor-run
               mountPath: "/var/run"
+        
+        {{- if .Values.swaggerUI.enabled }}
+        # Swagger UI sidecar container
+        - name: swagger-ui
+          image: "{{ .Values.swaggerUI.image.repository }}:{{ .Values.swaggerUI.image.tag }}"
+          imagePullPolicy: {{ .Values.swaggerUI.image.pullPolicy }}
+          ports:
+            - name: swagger-ui
+              containerPort: {{ .Values.swaggerUI.port }}
+              protocol: TCP
+          env:
+            - name: SWAGGER_JSON
+              value: "/etc/swagger/admin-api-openapi.yaml"
+            - name: BASE_URL
+              value: "/swagger"
+            {{- range $key, $value := .Values.swaggerUI.config }}
+            - name: {{ $key | upper }}
+              value: "{{ $value }}"
+            {{- end }}
+          volumeMounts:
+            - name: swagger-config
+              mountPath: "/etc/swagger"
+              readOnly: true
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+        {{- end }}
       {{- if .Values.volumes }}
       volumes:
         - name: supervisor-config
           configMap:
             name: {{ include "gowa.fullname" . }}-supervisor-config
+        {{- if .Values.swaggerUI.enabled }}
+        - name: swagger-config
+          configMap:
+            name: {{ include "gowa.fullname" . }}-swagger-config
+        {{- end }}
         - name: shared-data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:

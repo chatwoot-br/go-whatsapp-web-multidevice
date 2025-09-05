@@ -1,10 +1,20 @@
-openapi: "3.0.0"
+openapi: "3.1.0"
 info:
   title: WhatsApp API MultiDevice
   version: 6.10.0
-  description: This API is used for sending whatsapp via API
+  description: |
+    This API is used for sending WhatsApp messages via API with multi-device support.
+    
+    The main WhatsApp API provides endpoints for sending messages, managing groups, and handling WhatsApp functionality.
+    
+    ### Authentication
+    Uses Basic Authentication for all endpoints.
+    
+    ### Admin API
+    For managing multiple WhatsApp instances, see the separate Admin API specification at `docs/admin-api-openapi.yaml`.
 servers:
   - url: http://localhost:3000
+    description: WhatsApp API Server (default instance)
 tags:
   - name: app
     description: Initial Connection to Whatsapp server

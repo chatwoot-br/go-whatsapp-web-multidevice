@@ -43,7 +43,26 @@ The following table lists the configurable parameters and their default values.
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `service.type` | Kubernetes service type | `ClusterIP` |
-| `service.port` | Service port | `8088` |
+| `service.ports` | List of service ports | See below |
+
+**Service Ports:**
+- **8088**: Admin API (HTTP REST API)
+- **8080**: Swagger UI (Interactive API documentation)
+- **9001**: Supervisord RPC (Internal management)
+- **3001-3010**: WhatsApp instance ports
+
+**Internal Service Access:**
+```bash
+# Admin API
+curl http://<release-name>:8088/admin/instances
+
+# Swagger UI
+curl http://<release-name>:8080
+
+# From within the cluster
+kubectl exec -it <pod-name> -- curl http://<service-name>:8088/healthz
+kubectl exec -it <pod-name> -- curl http://<service-name>:8080
+```
 
 ### Ingress Configuration
 
@@ -51,6 +70,38 @@ The following table lists the configurable parameters and their default values.
 |-----------|-------------|---------|
 | `ingress.enabled` | Enable ingress | `false` |
 | `ingress.className` | Ingress class name | `""` |
+
+### Swagger UI Configuration
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `swaggerUI.enabled` | Enable Swagger UI sidecar | `true` |
+| `swaggerUI.image.repository` | Swagger UI image repository | `swaggerapi/swagger-ui` |
+| `swaggerUI.image.tag` | Swagger UI image tag | `latest` |
+| `swaggerUI.port` | Swagger UI port | `8080` |
+
+The Swagger UI provides a web interface for exploring the Admin API. When enabled, it's accessible on port 8080 and through the `/swagger` path in ingress. See [SWAGGER-UI.md](./SWAGGER-UI.md) for detailed configuration options.
+
+## Quick Start
+
+```bash
+# Deploy with default settings
+helm install whatsapp-admin ./charts/gowa
+
+# Access services internally:
+# Admin API: http://whatsapp-admin:8088
+# Swagger UI: http://whatsapp-admin:8080
+
+# Access externally via port-forward:
+kubectl port-forward svc/whatsapp-admin 8088:8088 8080:8080
+```
+
+## Documentation
+
+- **[SWAGGER-UI.md](./SWAGGER-UI.md)**: Swagger UI configuration and usage
+- **[INTERNAL-ACCESS.md](./INTERNAL-ACCESS.md)**: Internal cluster service access examples  
+- **[DEPLOY-GUIDE.md](./DEPLOY-GUIDE.md)**: Complete deployment and testing guide
+- **[validate-swagger-ui.sh](./validate-swagger-ui.sh)**: Validation script for configuration
 # Go WhatsApp Web Multidevice — Admin API Helm Chart
 
 This consolidated guide documents configuration, deployment, debugging and authentication guidance for the Admin API Helm chart used to manage multiple WhatsApp instances via Supervisord.
