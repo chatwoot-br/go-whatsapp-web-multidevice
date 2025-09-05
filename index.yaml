@@ -3,6 +3,16 @@ entries:
   gowa:
   - apiVersion: v2
     appVersion: v7.5.0
+    created: "2025-09-05T14:26:17.729326872Z"
+    description: A Helm chart for Go WhatsApp Web Multidevice Admin API
+    digest: 7af644cbda956c30b1e325b8259f2db0e80e19851da2b30232b1afab1cd2a51f
+    name: gowa
+    type: application
+    urls:
+    - https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases/download/gowa-7.5.2/gowa-7.5.2.tgz
+    version: 7.5.2
+  - apiVersion: v2
+    appVersion: v7.5.0
     created: "2025-09-02T19:35:08.665246116Z"
     description: A Helm chart for Go WhatsApp Web Multidevice Admin API
     digest: 605971d14819d5be9155bba7f125f2e9032395a82674a265ae30f4700dd4a963
@@ -21,4 +31,4 @@ entries:
     urls:
     - https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases/download/gowa-7.5.0/gowa-7.5.0.tgz
     version: 7.5.0
-generated: "2025-09-02T19:35:08.665253299Z"
+generated: "2025-09-05T14:26:17.729339626Z"
