@@ -130,6 +130,7 @@ This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Mod
 ## Documentation
 
 ### API Documentation
+- **Deployment Guide**: `docs/deployment-guide.md` - Complete deployment and usage guide
 - **OpenAPI Spec**: `docs/openapi.yaml` - Complete REST API specification (v3.0.0)
 - **API Guide for AI Agents**: `docs/openapi.md` - Comprehensive guide for AI agents
 - **Webhook Documentation**: `docs/webhook-payload.md` - Webhook payload schemas and integration guide
