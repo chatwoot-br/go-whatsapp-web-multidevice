@@ -44,6 +44,7 @@ Download:
 ## Feature
 
 - Send WhatsApp message via http API, [docs/openapi.yml](./docs/openapi.yaml) for more details
+- **Interactive API Documentation with Swagger UI** - Built-in Swagger UI for Admin API accessible at `/swagger` endpoint
 - **MCP (Model Context Protocol) Server Support** - Integrate with AI agents and tools using standardized protocol
 - Mention someone
   - `@phoneNumber`
@@ -123,6 +124,8 @@ To use environment variables:
 | `WHATSAPP_ACCOUNT_VALIDATION` | Enable account validation                   | `true`                                       | `WHATSAPP_ACCOUNT_VALIDATION=false`         |
 | `WHATSAPP_CHAT_STORAGE`       | Enable chat storage                         | `true`                                       | `WHATSAPP_CHAT_STORAGE=false`               |
 
+> For the Admin API implementation details and complete environment variable mappings for per-instance configuration, see `docs/features/ADR-001/IMPLEMENTATION_SUMMARY.md`.
+
 Note: Command-line flags will override any values set in environment variables or `.env` file.
 
 - For more command `./whatsapp --help`
@@ -154,6 +157,27 @@ Note: Command-line flags will override any values set in environment variables o
 
 ## How to use
 
+### Development Environment (Recommended)
+
+For the best development experience with Admin API support:
+
+1. **VS Code Dev Container** (Includes everything pre-configured):
+   - Clone this repo: `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
+   - Open in VS Code
+   - When prompted, click "Reopen in Container"
+   - Wait for the container to build and setup automatically
+   - Use `./.devcontainer/dev.sh help` for available commands
+   - See `.devcontainer/README.md` for detailed development guide
+
+2. **Features included in Dev Container**:
+   - ✅ Go 1.24+ with all tools
+   - ✅ FFmpeg pre-installed
+   - ✅ Supervisord configured and running
+   - ✅ Admin API ready to use
+   - ✅ Development helper scripts
+   - ✅ Port forwarding configured
+   - ✅ Environment variables pre-set
+
 ### Basic
 
 1. Clone this repo: `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
@@ -161,6 +185,10 @@ Note: Command-line flags will override any values set in environment variables o
 3. run `cd src`
 4. run `go run . rest` (for REST API mode)
 5. Open `http://localhost:3000`
+ 
+## Helm chart for Admin API
+
+This repository includes a Helm chart that deploys the Admin API and a supervisord sidecar used to manage WhatsApp instances. See `charts/README.md` for consolidated configuration, deployment and debugging instructions.
 
 ### Docker (you don't need to install in required)
 
@@ -183,6 +211,24 @@ Note: Command-line flags will override any values set in environment variables o
     2. Windows: `.\whatsapp.exe rest` (for REST API mode)
         1. run `.\whatsapp.exe --help` for more detail flags
 6. open `http://localhost:3000` in browser
+
+### Admin API (Multi-Instance Management)
+
+For managing multiple WhatsApp instances:
+
+1. **Using Dev Container** (easiest):
+   ```bash
+   ./.devcontainer/dev.sh start-admin
+   ./.devcontainer/dev.sh create 3001
+   ```
+
+2. **Manual setup**:
+   - Install and configure supervisord
+   - Set required environment variables (see `.src/.env.dev`)
+   - Run: `go run . admin --port 8088`
+   - See [docs/admin-api.md](./docs/admin-api.md) for details
+
+**Note**: The Admin API supports all environment variables listed above. Use `GOWA_*` prefixed versions to configure defaults for instances (e.g., `GOWA_DEBUG=true`, `GOWA_WEBHOOK=https://webhook.site/xxx`). All instances created through the Admin API will inherit these settings and support the full feature set of standalone GOWA instances.
 
 ### MCP Server (Model Context Protocol)
 
@@ -508,6 +554,37 @@ You can fork or edit this source code !
 
 - Please do this if you have an error (invalid flag in pkg-config --cflags: -Xpreprocessor)
   `export CGO_CFLAGS_ALLOW="-Xpreprocessor"`
+
+### Admin API & Swagger UI
+
+The application includes an Admin API for managing multiple GOWA instances with built-in Swagger UI documentation.
+
+#### Admin API Features
+- Create, list, update, and delete GOWA instances
+- Health and readiness endpoints
+- Supervisor-based instance management
+- Authentication via bearer token
+
+#### Swagger UI Integration
+- Interactive API documentation at `/swagger` endpoint
+- Real-time testing of Admin API endpoints
+- Automatic OpenAPI specification serving
+- CORS-enabled for browser access
+
+#### Kubernetes/Helm Deployment
+```bash
+# Deploy with Swagger UI enabled
+helm install my-release charts/gowa --set swaggerUI.enabled=true
+
+# Access Swagger UI (after port forwarding)
+kubectl port-forward svc/my-release-gowa 8080:8080
+open http://localhost:8080/swagger
+```
+
+For more details, see:
+- [Admin API Documentation](./docs/admin-api.md)
+- [Admin API OpenAPI Spec](./docs/admin-api-openapi.yaml)
+- [Swagger UI Integration Guide](./docs/SWAGGER-UI-INTEGRATION-COMPLETE.md)
 
 ## Important
 

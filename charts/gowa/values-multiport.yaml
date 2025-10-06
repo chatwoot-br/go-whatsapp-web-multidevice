@@ -1,0 +1,117 @@
+# Example values for exposing multiple ports
+# This file demonstrates how the service is configured to expose all required ports
+
+# Use ClusterIP service to expose multiple ports internally
+service:
+  type: ClusterIP
+  ports:
+    # Admin API port
+    - name: admin-api
+      port: 8088
+      targetPort: 8088
+      protocol: TCP
+    # Supervisord RPC port
+    - name: supervisor-rpc
+      port: 9001
+      targetPort: 9001
+      protocol: TCP
+    # WhatsApp instance ports (3001-3010)
+    - name: whatsapp-3001
+      port: 3001
+      targetPort: 3001
+      protocol: TCP
+    - name: whatsapp-3002
+      port: 3002
+      targetPort: 3002
+      protocol: TCP
+    - name: whatsapp-3003
+      port: 3003
+      targetPort: 3003
+      protocol: TCP
+    - name: whatsapp-3004
+      port: 3004
+      targetPort: 3004
+      protocol: TCP
+    - name: whatsapp-3005
+      port: 3005
+      targetPort: 3005
+      protocol: TCP
+    - name: whatsapp-3006
+      port: 3006
+      targetPort: 3006
+      protocol: TCP
+    - name: whatsapp-3007
+      port: 3007
+      targetPort: 3007
+      protocol: TCP
+    - name: whatsapp-3008
+      port: 3008
+      targetPort: 3008
+      protocol: TCP
+    - name: whatsapp-3009
+      port: 3009
+      targetPort: 3009
+      protocol: TCP
+    - name: whatsapp-3010
+      port: 3010
+      targetPort: 3010
+      protocol: TCP
+
+# Admin configuration with TCP supervisor
+admin:
+  port: 8088
+  token: "your-admin-token"
+  supervisor:
+    url: "http://localhost:9001/RPC2"
+    username: "supervisor"
+    password: "supervisor"
+
+# Environment variables for TCP supervisor
+env:
+  - name: SUPERVISOR_URL
+    value: "http://localhost:9001/RPC2"
+  - name: SUPERVISOR_USERNAME
+    value: "supervisor"
+  - name: SUPERVISOR_PASSWORD
+    value: "supervisor"
+  - name: SUPERVISOR_CONF_DIR
+    value: "/etc/supervisor/conf.d"
+  - name: INSTANCES_DIR
+    value: "/app/instances"
+  - name: SUPERVISOR_LOG_DIR
+    value: "/var/log/supervisor"
+  - name: LOCK_DIR
+    value: "/tmp"
+
+# Example: How to access from external LoadBalancer
+# Uncomment the following to expose via LoadBalancer
+# service:
+#   type: LoadBalancer
+#   ports: # same ports as above
+#   loadBalancerIP: "your-static-ip" # optional
+
+# Example: How to expose via Ingress for specific ports
+# ingress:
+#   enabled: true
+#   className: "nginx"
+#   annotations:
+#     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+#   hosts:
+#     - host: admin.example.com
+#       paths:
+#         - path: /
+#           pathType: ImplementationSpecific
+#           backend:
+#             service:
+#               name: whatsapp-admin
+#               port:
+#                 name: admin-api
+#     - host: supervisor.example.com
+#       paths:
+#         - path: /
+#           pathType: ImplementationSpecific
+#           backend:
+#             service:
+#               name: whatsapp-admin
+#               port:
+#                 name: supervisor-rpc

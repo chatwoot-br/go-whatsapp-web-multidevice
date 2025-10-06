@@ -1,0 +1,167 @@
+# Production values for go-whatsapp-admin-api
+# This file contains production-ready configuration examples
+
+# Number of replicas for high availability
+replicaCount: 1
+
+image:
+  repository: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Use existing secret for admin token (recommended for production)
+admin:
+  port: 8088
+  existingSecret: "whatsapp-admin-secret"
+  existingSecretKey: "token"
+
+# Service configuration
+service:
+  type: ClusterIP
+  ports:
+    # Admin API port
+    - name: admin-api
+      port: 8088
+      targetPort: 8088
+      protocol: TCP
+    # Supervisord RPC port
+    - name: supervisor-rpc
+      port: 9001
+      targetPort: 9001
+      protocol: TCP
+    # WhatsApp instance ports (3001-3010)
+    - name: whatsapp-3001
+      port: 3001
+      targetPort: 3001
+      protocol: TCP
+    - name: whatsapp-3002
+      port: 3002
+      targetPort: 3002
+      protocol: TCP
+    - name: whatsapp-3003
+      port: 3003
+      targetPort: 3003
+      protocol: TCP
+    - name: whatsapp-3004
+      port: 3004
+      targetPort: 3004
+      protocol: TCP
+    - name: whatsapp-3005
+      port: 3005
+      targetPort: 3005
+      protocol: TCP
+    - name: whatsapp-3006
+      port: 3006
+      targetPort: 3006
+      protocol: TCP
+    - name: whatsapp-3007
+      port: 3007
+      targetPort: 3007
+      protocol: TCP
+    - name: whatsapp-3008
+      port: 3008
+      targetPort: 3008
+      protocol: TCP
+    - name: whatsapp-3009
+      port: 3009
+      targetPort: 3009
+      protocol: TCP
+    - name: whatsapp-3010
+      port: 3010
+      targetPort: 3010
+      protocol: TCP
+
+# Ingress with TLS
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "10"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: whatsapp-admin.yourdomain.com
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls:
+    - secretName: whatsapp-admin-tls
+      hosts:
+        - whatsapp-admin.yourdomain.com
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# Persistence with specific storage class
+persistence:
+  enabled: true
+  storageClass: "hcloud-volumes"
+  accessMode: ReadWriteOnce
+  size: "10Gi"
+
+# Health check configuration
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: admin-api
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: admin-api
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Security context
+podSecurityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
+  fsGroup: 0
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+    add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+  readOnlyRootFilesystem: false
+  runAsNonRoot: false
+  runAsUser: 0
+
+# Node selection
+nodeSelector:
+  kubernetes.io/os: linux
+
+# Tolerations for dedicated nodes
+tolerations: []
+
+# Affinity rules for pod distribution
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - go-whatsapp-admin-api
+        topologyKey: kubernetes.io/hostname

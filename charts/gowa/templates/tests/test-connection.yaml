@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "gowa.fullname" . }}-test-connection"
+  labels:
+    {{- include "gowa.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['{{ include "gowa.fullname" . }}:8088']
+  restartPolicy: Never
