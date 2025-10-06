@@ -13,17 +13,17 @@
 Your support helps ensure the library stays maintained and receives regular updates!
 ___
 
-![release version](https://img.shields.io/github/v/release/aldinokemal/go-whatsapp-web-multidevice)
-![Build Image](https://github.com/aldinokemal/go-whatsapp-web-multidevice/actions/workflows/build-docker-image.yaml/badge.svg)
-![Binary Release](https://github.com/aldinokemal/go-whatsapp-web-multidevice/actions/workflows/release.yml/badge.svg)
+![release version](https://img.shields.io/github/v/release/chatwoot-br/go-whatsapp-web-multidevice)
+![Build Image](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/actions/workflows/build-docker-image.yaml/badge.svg)
+![Binary Release](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/actions/workflows/release.yml/badge.svg)
 
 ## Support for `ARM` & `AMD` Architecture along with `MCP` Support
 
 Download:
 
-- [Release](https://github.com/aldinokemal/go-whatsapp-web-multidevice/releases/latest)
-- [Docker Hub](https://hub.docker.com/r/aldinokemal2104/go-whatsapp-web-multidevice/tags)
-- [GitHub Container Registry](https://github.com/aldinokemal/go-whatsapp-web-multidevice/pkgs/container/go-whatsapp-web-multidevice)
+- [Release](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases/latest)
+- [Docker Hub](https://ghcr.io/chatwoot-br/go-whatsapp-web-multidevice/tags)
+- [GitHub Container Registry](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/pkgs/container/go-whatsapp-web-multidevice)
 
 ## Support n8n package (n8n.io)
 
@@ -39,7 +39,7 @@ Download:
     - for example: `./whatsapp mcp`
 - `v7`
   - Starting version 7.x we are using goreleaser to build the binary, so you can download the binary
-      from [release](https://github.com/aldinokemal/go-whatsapp-web-multidevice/releases/latest)
+      from [release](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases/latest)
 
 ## Feature
 
@@ -162,7 +162,7 @@ Note: Command-line flags will override any values set in environment variables o
 For the best development experience with Admin API support:
 
 1. **VS Code Dev Container** (Includes everything pre-configured):
-   - Clone this repo: `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
+   - Clone this repo: `git clone https://github.com/chatwoot-br/go-whatsapp-web-multidevice`
    - Open in VS Code
    - When prompted, click "Reopen in Container"
    - Wait for the container to build and setup automatically
@@ -180,7 +180,7 @@ For the best development experience with Admin API support:
 
 ### Basic
 
-1. Clone this repo: `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
+1. Clone this repo: `git clone https://github.com/chatwoot-br/go-whatsapp-web-multidevice`
 2. Open the folder that was cloned via cmd/terminal.
 3. run `cd src`
 4. run `go run . rest` (for REST API mode)
@@ -192,14 +192,14 @@ This repository includes a Helm chart that deploys the Admin API and a superviso
 
 ### Docker (you don't need to install in required)
 
-1. Clone this repo: `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
+1. Clone this repo: `git clone https://github.com/chatwoot-br/go-whatsapp-web-multidevice`
 2. Open the folder that was cloned via cmd/terminal.
 3. run `docker-compose up -d --build`
 4. open `http://localhost:3000`
 
 ### Build your own binary
 
-1. Clone this repo `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
+1. Clone this repo `git clone https://github.com/chatwoot-br/go-whatsapp-web-multidevice`
 2. Open the folder that was cloned via cmd/terminal.
 3. run `cd src`
 4. run
@@ -235,7 +235,7 @@ For managing multiple WhatsApp instances:
 This application can also run as an MCP server, allowing AI agents and tools to interact with WhatsApp through a
 standardized protocol.
 
-1. Clone this repo `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
+1. Clone this repo `git clone https://github.com/chatwoot-br/go-whatsapp-web-multidevice`
 2. Open the folder that was cloned via cmd/terminal.
 3. run `cd src`
 4. run `go run . mcp` or build the binary and run `./whatsapp mcp`
@@ -316,13 +316,13 @@ For AI tools that support MCP with SSE (like Cursor), add this configuration:
 Using Docker Hub:
 
 ```bash
-docker run --detach --publish=3000:3000 --name=whatsapp --restart=always --volume=$(docker volume create --name=whatsapp):/app/storages aldinokemal2104/go-whatsapp-web-multidevice rest --autoreply="Dont't reply this message please"
+docker run --detach --publish=3000:3000 --name=whatsapp --restart=always --volume=$(docker volume create --name=whatsapp):/app/storages ghcr.io/chatwoot-br/go-whatsapp-web-multidevice rest --autoreply="Dont't reply this message please"
 ```
 
 Using GitHub Container Registry:
 
 ```bash
-docker run --detach --publish=3000:3000 --name=whatsapp --restart=always --volume=$(docker volume create --name=whatsapp):/app/storages ghcr.io/aldinokemal/go-whatsapp-web-multidevice rest --autoreply="Dont't reply this message please"
+docker run --detach --publish=3000:3000 --name=whatsapp --restart=always --volume=$(docker volume create --name=whatsapp):/app/storages ghcr.io/chatwoot-br/go-whatsapp-web-multidevice rest --autoreply="Dont't reply this message please"
 ```
 
 ### Production Mode REST (docker compose)
@@ -334,7 +334,7 @@ Using Docker Hub:
 ```yml
 services:
   whatsapp:
-    image: aldinokemal2104/go-whatsapp-web-multidevice
+    image: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
     container_name: whatsapp
     restart: always
     ports:
@@ -358,7 +358,7 @@ Using GitHub Container Registry:
 ```yml
 services:
   whatsapp:
-    image: ghcr.io/aldinokemal/go-whatsapp-web-multidevice
+    image: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
     container_name: whatsapp
     restart: always
     ports:
@@ -382,7 +382,7 @@ or with env file (Docker Hub):
 ```yml
 services:
   whatsapp:
-    image: aldinokemal2104/go-whatsapp-web-multidevice
+    image: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
     container_name: whatsapp
     restart: always
     ports:
@@ -405,7 +405,7 @@ or with env file (GitHub Container Registry):
 ```yml
 services:
   whatsapp:
-    image: ghcr.io/aldinokemal/go-whatsapp-web-multidevice
+    image: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
     container_name: whatsapp
     restart: always
     ports:
@@ -425,7 +425,7 @@ volumes:
 
 ### Production Mode (binary)
 
-- download binary from [release](https://github.com/aldinokemal/go-whatsapp-web-multidevice/releases)
+- download binary from [release](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases)
 
 You can fork or edit this source code !
 
