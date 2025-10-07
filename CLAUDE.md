@@ -23,6 +23,49 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Get dependencies**: `cd src && go mod tidy`
 - **Check for issues**: `cd src && go vet ./...`
 
+### Releasing a New Version
+
+When you need to release a new version (e.g., after fixing bugs or adding features):
+
+1. **Determine version number** (following [Semantic Versioning](https://semver.org/)):
+   - **PATCH** (v7.7.1): Bug fixes, backward compatible
+   - **MINOR** (v7.8.0): New features, backward compatible
+   - **MAJOR** (v8.0.0): Breaking changes
+
+2. **Update version in three files**:
+   ```bash
+   # 1. Update src/config/settings.go line 8
+   # Change: AppVersion = "v7.7.1"
+
+   # 2. Update charts/gowa/Chart.yaml line 18
+   # Change: version: 7.7.1
+
+   # 3. Update charts/gowa/Chart.yaml line 24
+   # Change: appVersion: "v7.7.1"
+
+   # 4. Update CHANGELOG.md
+   # Add new version section at the top
+   ```
+
+3. **Commit and tag**:
+   ```bash
+   git add src/config/settings.go charts/gowa/Chart.yaml CHANGELOG.md
+   git commit -m "chore: bump version to v7.7.1"
+   git tag -a v7.7.1 -m "Release v7.7.1"
+   git push origin main
+   git push origin v7.7.1
+   ```
+
+4. **Automated builds**: After pushing the tag, GitHub Actions will automatically:
+   - Build Docker images for AMD64 and ARM64
+   - Push to GitHub Container Registry
+   - Create Helm chart release
+   - Create GitHub release
+
+5. **Verify release**: Check that all GitHub Actions workflows completed successfully
+
+For detailed release instructions, see [Release Process Documentation](docs/RELEASE-PROCESS.md).
+
 ## Project Architecture
 
 This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Model Context Protocol) modes.
@@ -158,6 +201,13 @@ This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Mod
 
 ## Recent Features & Updates
 
+### v7.7.1 (Latest)
+- **Critical Bug Fix**: Fixed service panic on profile picture fetch
+  - Updated whatsmeow library to support PrivacyToken in profile picture requests
+  - Prevents service crashes and message loss in downstream systems
+  - See: `docs/issues/ISSUE-001-PROFILE-PICTURE-PANIC.md`
+- **Documentation**: Added release process guide and CHANGELOG
+
 ### v7.7.0
 - **Sticker Support**: Automatic conversion of images to WebP format (supports JPG, JPEG, PNG, WebP, GIF)
 - **Trusted Proxy**: Support for proxy deployments
@@ -183,8 +233,9 @@ This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Mod
 - Media files are stored in `src/statics/media/` and `src/storages/`
 - HTML templates and assets are embedded in the binary using Go's embed feature
 - FFmpeg is required for media processing (installation varies by platform)
-- Version format: `v7.x.x` (using goreleaser for binary builds)
-- GitHub Container Registry and Docker Hub support available
+- Version format: `v7.x.x` following [Semantic Versioning](https://semver.org/)
+- Release process: See [docs/RELEASE-PROCESS.md](docs/RELEASE-PROCESS.md) for creating new releases
+- GitHub Container Registry support available
 
 ## Common Troubleshooting
 
