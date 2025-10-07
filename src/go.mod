@@ -21,8 +21,8 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/valyala/fasthttp v1.66.0
-	go.mau.fi/libsignal v0.2.0
-	go.mau.fi/whatsmeow v0.0.0-20251003111114-4479f300784e
+	go.mau.fi/libsignal v0.2.1-0.20251004173110-6e0a3f2435ed
+	go.mau.fi/whatsmeow v0.0.0-20251005083110-4fe97da162dc
 	golang.org/x/image v0.31.0
 	google.golang.org/protobuf v1.36.10
 )
