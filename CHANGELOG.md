@@ -7,9 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v7.8.0] - 2025-10-23
+
+### Added
+- **Admin API**: Multi-instance management with Supervisor integration
+  - Create and manage multiple WhatsApp instances dynamically
+  - REST API for instance lifecycle management (start, stop, restart, delete)
+  - Health check and status monitoring endpoints
+  - Swagger UI documentation at `/admin/docs`
+  - Supervisor integration for process management
+  - Lock file management to prevent duplicate instances
+  - Configurable instance directories and configuration
+  - Support for per-instance settings (auth, webhooks, debug mode)
+
+### Fixed
+- **Webhook Forwarding**: Hardened webhook forwarding against partial failures (#434)
+  - Improved error handling when multiple webhook URLs are configured
+  - Better retry logic for individual webhook failures
+
 ### Changed
 - Updated whatsmeow library to latest version
-- Improved documentation for release process
+- Improved documentation across the project
+  - Enhanced release process guide
+  - Complete deployment guide with Docker, Kubernetes, and bare metal instructions
+  - Comprehensive webhook payload documentation with integration examples
+  - Updated CLAUDE.md with better versioning and development instructions
+  - Added OpenAPI documentation for better API understanding
+- Updated dependencies for improved stability and security
 
 ## [v7.7.1] - 2025-10-07
 
