@@ -1,0 +1,276 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gowa.fullname" . }}
+  labels:
+    {{- include "gowa.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "gowa.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "gowa.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "gowa.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: init-directories
+          image: busybox:1.35
+          command: ['sh', '-c']
+          args:
+            - |
+              set -e
+              echo "Creating shared volume directory structure..."
+              mkdir -p /shared-data/instances
+              mkdir -p /shared-data/statics/media 
+              mkdir -p /shared-data/statics/qrcode 
+              mkdir -p /shared-data/statics/senditems
+              mkdir -p /shared-data/storages
+              mkdir -p /shared-data/supervisor/conf.d
+              mkdir -p /shared-data/supervisor/logs
+              mkdir -p /tmp
+              echo "Setting permissions..."
+              chmod -R 755 /shared-data
+              chmod -R 755 /tmp
+              echo "Shared volume structure created successfully"
+              echo "Directory structure:"
+              find /shared-data -type d | sort
+          volumeMounts:
+            - name: shared-data
+              mountPath: "/shared-data"
+            - name: app-temp
+              mountPath: "/tmp"
+      containers:
+        # Admin API container
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh"]
+          args: 
+            - "-c"
+            - |
+              echo "Starting gowa container..."
+              echo "Waiting for supervisord to be fully ready..."
+              sleep 25
+              
+              echo "Testing supervisord connection..."
+              echo "URL: $SUPERVISOR_URL"
+              echo "Username: $SUPERVISOR_USER"
+              
+              echo "Starting Admin API on port {{ .Values.admin.port }}..."
+              exec /usr/local/bin/whatsapp admin --port {{ .Values.admin.port }}
+          {{- if .Values.env }}
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+            {{- if or .Values.admin.token .Values.admin.existingSecret }}
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.admin.token }}
+                  name: {{ include "gowa.fullname" . }}-admin-secret
+                  key: admin-token
+                  {{- else }}
+                  name: {{ .Values.admin.existingSecret }}
+                  key: {{ .Values.admin.existingSecretKey | default "admin-token" }}
+                  {{- end }}
+            {{- end }}
+          {{- else }}
+          {{- if or .Values.admin.token .Values.admin.existingSecret }}
+          env:
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.admin.token }}
+                  name: {{ include "gowa.fullname" . }}-admin-secret
+                  key: admin-token
+                  {{- else }}
+                  name: {{ .Values.admin.existingSecret }}
+                  key: {{ .Values.admin.existingSecretKey | default "admin-token" }}
+                  {{- end }}
+          {{- end }}
+          {{- end }}
+          ports:
+            # Admin API port
+            - name: admin-api
+              containerPort: {{ .Values.admin.port }}
+              protocol: TCP
+            # WhatsApp instance ports (3001-3010)
+            - name: whatsapp-3001
+              containerPort: 3001
+              protocol: TCP
+            - name: whatsapp-3002
+              containerPort: 3002
+              protocol: TCP
+            - name: whatsapp-3003
+              containerPort: 3003
+              protocol: TCP
+            - name: whatsapp-3004
+              containerPort: 3004
+              protocol: TCP
+            - name: whatsapp-3005
+              containerPort: 3005
+              protocol: TCP
+            - name: whatsapp-3006
+              containerPort: 3006
+              protocol: TCP
+            - name: whatsapp-3007
+              containerPort: 3007
+              protocol: TCP
+            - name: whatsapp-3008
+              containerPort: 3008
+              protocol: TCP
+            - name: whatsapp-3009
+              containerPort: 3009
+              protocol: TCP
+            - name: whatsapp-3010
+              containerPort: 3010
+              protocol: TCP
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        
+        # Supervisord sidecar container
+        - name: supervisord
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh"]
+          args: 
+            - "-c"
+            - |
+              echo "Starting supervisord container..."
+              echo "Checking supervisord binary..."
+              which supervisord || echo "supervisord not found in PATH"
+              /usr/bin/supervisord --version || echo "supervisord version check failed"
+              
+              echo "Checking configuration file..."
+              cat /etc/supervisor/supervisord.conf
+              
+              echo "Starting supervisord with debug..."
+              exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
+          ports:
+            - name: supervisor-rpc
+              containerPort: 9001
+              protocol: TCP
+          volumeMounts:
+            - name: supervisor-config
+              mountPath: "/etc/supervisor/supervisord.conf"
+              subPath: "supervisord.conf"
+              readOnly: true
+            - name: shared-data
+              mountPath: "/etc/supervisor/conf.d"
+              subPath: "supervisor/conf.d"
+            - name: shared-data
+              mountPath: "/app/instances"
+              subPath: "instances"
+            - name: shared-data
+              mountPath: "/var/log/supervisor"
+              subPath: "supervisor/logs"
+            - name: supervisor-run
+              mountPath: "/var/run"
+        
+        {{- if .Values.swaggerUI.enabled }}
+        # Swagger UI sidecar container
+        - name: swagger-ui
+          image: "{{ .Values.swaggerUI.image.repository }}:{{ .Values.swaggerUI.image.tag }}"
+          imagePullPolicy: {{ .Values.swaggerUI.image.pullPolicy }}
+          ports:
+            - name: swagger-ui
+              containerPort: {{ .Values.swaggerUI.port }}
+              protocol: TCP
+          env:
+            - name: SWAGGER_JSON
+              value: "/etc/swagger/admin-api-openapi.yaml"
+            - name: BASE_URL
+              value: "/swagger"
+            {{- range $key, $value := .Values.swaggerUI.config }}
+            - name: {{ $key | upper }}
+              value: "{{ $value }}"
+            {{- end }}
+          volumeMounts:
+            - name: swagger-config
+              mountPath: "/etc/swagger"
+              readOnly: true
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+        {{- end }}
+      {{- if .Values.volumes }}
+      volumes:
+        - name: supervisor-config
+          configMap:
+            name: {{ include "gowa.fullname" . }}-supervisor-config
+        {{- if .Values.swaggerUI.enabled }}
+        - name: swagger-config
+          configMap:
+            name: {{ include "gowa.fullname" . }}-swagger-config
+        {{- end }}
+        - name: shared-data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "gowa.fullname" . }}-data-pvc
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: supervisor-run
+          emptyDir: {}
+        - name: app-temp
+          emptyDir: {}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
