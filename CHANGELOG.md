@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v7.8.2] - 2025-10-30
+
+### Fixed
+- **Audio**: Fixed audio URL validation failure due to invalid hostname
+- **Reconnect**: Prevented panic in auto-reconnect goroutine
+- **Dependencies**: Updated whatsmeow library to fix multi-device encryption issues
+- **Media**: Fixed MIME type parameters being included in filenames
+
+## [v7.8.1] - 2025-10-25
+
+### Fixed
+- **PostgreSQL Logout**: Fixed database cleanup on logout to prevent foreign key constraint errors (#443)
+  - Enhanced CleanupDatabase() to properly detect and handle PostgreSQL vs SQLite databases
+  - For PostgreSQL: Delete all devices using Container.DeleteDevice() which cascades to related records
+  - For SQLite: Keep the existing file removal approach
+  - Prevents "foreign key constraint violation" errors when re-logging in with PostgreSQL
+  - Fixes #440
+
+### Changed
+- Updated dependencies for improved stability
+
 ## [v7.8.0] - 2025-10-23
 
 ### Added
