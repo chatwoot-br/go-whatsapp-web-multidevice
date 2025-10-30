@@ -15,7 +15,9 @@ RUN go build -a -ldflags="-w -s" -o /app/whatsapp
 ## STEP 2 build a smaller image
 #############################
 FROM alpine:3.20
-RUN apk add --no-cache ffmpeg supervisor curl python3 py3-pip net-tools
+# Install runtime dependencies including mailcap for MIME types database (/etc/mime.types)
+# mailcap provides proper MIME type -> file extension mapping for media files
+RUN apk add --no-cache ffmpeg supervisor curl python3 py3-pip net-tools mailcap
 WORKDIR /app
 # Copy compiled from builder.
 COPY --from=builder /app/whatsapp /app/whatsapp
