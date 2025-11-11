@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v7.8.3] - 2025-11-11
+
+### Fixed
+- **Connection**: Fixed disconnect issue to improve connection stability
+
+### Changed
+- Updated dependencies to latest versions for improved stability and security
+  - Updated whatsmeow library
+  - Updated other Go module dependencies
+
 ## [v7.8.2] - 2025-10-30
 
 ### Fixed
