@@ -59,13 +59,14 @@ def verify_webhook_signature(payload, signature, secret):
 
 All webhook payloads share these common fields:
 
-| **Field**   | **Type** | **Description**                                                   |
-|-------------|----------|-------------------------------------------------------------------|
-| `sender_id` | string   | User part of sender JID (phone number, without `@s.whatsapp.net`) |
-| `chat_id`   | string   | User part of chat JID                                             |
-| `from`      | string   | Full JID of the sender (e.g., `628123456789@s.whatsapp.net`)      |
-| `timestamp` | string   | RFC3339 formatted timestamp (e.g., `2023-10-15T10:30:00Z`)        |
-| `pushname`  | string   | Display name of the sender                                        |
+| **Field**   | **Type** | **Description**                                                                                     |
+|-------------|----------|-----------------------------------------------------------------------------------------------------|
+| `sender_id` | string   | User part of sender JID (phone number, without `@s.whatsapp.net`)                                   |
+| `chat_id`   | string   | User part of chat JID                                                                               |
+| `from`      | string   | Full JID of the sender (e.g., `628123456789@s.whatsapp.net`)                                        |
+| `from_lid`  | string   | (Optional) LID (Lidded ID) of sender when using identity-hidden accounts (e.g., `20036609675500@lid`) |
+| `timestamp` | string   | RFC3339 formatted timestamp (e.g., `2023-10-15T10:30:00Z`)                                          |
+| `pushname`  | string   | Display name of the sender                                                                          |
 
 ## Message Events
 
@@ -176,16 +177,26 @@ Triggered when a message is read by the recipient (they opened the chat and saw 
 
 ### Receipt Event Fields
 
-| **Field**                          | **Type** | **Description**                                           |
-|------------------------------------|----------|-----------------------------------------------------------|
-| `event`                            | string   | Always `"message.ack"` for receipt events                 |
-| `payload.chat_id`                  | string   | Chat identifier (group or individual chat)                |
-| `payload.from`                     | string   | Sender information with chat context                      |
-| `payload.ids`                      | array    | Array of message IDs that received the acknowledgment     |
-| `payload.receipt_type`             | string   | Type of receipt: `"delivered"`, `"read"`, etc.            |
-| `payload.receipt_type_description` | string   | Human-readable description of the receipt type            |
-| `payload.sender_id`                | string   | JID of the message sender                                 |
-| `timestamp`                        | string   | RFC3339 formatted timestamp when the receipt was received |
+| **Field**                          | **Type** | **Description**                                                   |
+|------------------------------------|----------|-------------------------------------------------------------------|
+| `event`                            | string   | Always `"message.ack"` for receipt events                         |
+| `payload.chat_id`                  | string   | Chat identifier (group or individual chat)                        |
+| `payload.from`                     | string   | Sender information with chat context                              |
+| `payload.ids`                      | array    | Array of message IDs that received the acknowledgment             |
+| `payload.receipt_type`             | string   | Type of receipt: `"delivered"`, `"read"`, `"sender"`, `"retry"`, `"played"`, `"played_self"`, `"read_self"` |
+| `payload.receipt_type_description` | string   | Human-readable description of the receipt type                    |
+| `payload.sender_id`                | string   | JID of the message sender                                         |
+| `timestamp`                        | string   | RFC3339 formatted timestamp when the receipt was received         |
+
+### Receipt Types Explained
+
+- **`delivered`**: Message was delivered to the device (but the user might not have noticed)
+- **`read`**: User opened the chat and saw the message
+- **`sender`**: Sent by your other devices when a message you sent is delivered to them
+- **`retry`**: Message was delivered to the device, but decrypting the message failed
+- **`read_self`**: Current user read a message from a different device, and has read receipts disabled in privacy settings
+- **`played`**: View-once media was opened (by recipient or by you on another device)
+- **`played_self`**: Current user opened a view-once media message from a different device, and has read receipts disabled
 
 ## Group Events
 
@@ -450,6 +461,8 @@ Triggered when users are demoted from admin.
 
 ### Live Location Message
 
+**Note**: Live location messages contain the raw WhatsApp protocol structure, sent as-is from the WhatsApp protocol.
+
 ```json
 {
   "chat_id": "6289XXXXXXXXX",
@@ -480,7 +493,95 @@ Triggered when users are demoted from admin.
 }
 ```
 
+### List Message
+
+List messages contain interactive lists that users can choose from. The WhatsApp list message structure is sent as-is from the WhatsApp protocol.
+
+```json
+{
+  "sender_id": "628123456789",
+  "chat_id": "628987654321",
+  "from": "628123456789@s.whatsapp.net",
+  "timestamp": "2023-10-15T11:20:00Z",
+  "pushname": "John Doe",
+  "message": {
+    "text": "",
+    "id": "3EB0C127D7BACC83D6AA",
+    "replied_id": "",
+    "quoted_message": ""
+  },
+  "list": {
+    "title": "Choose an option",
+    "description": "Please select from the following options",
+    "buttonText": "View Options",
+    "listType": 1,
+    "sections": [
+      {
+        "title": "Section 1",
+        "rows": [
+          {
+            "title": "Option 1",
+            "description": "Description for option 1",
+            "rowId": "option_1"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Order Message
+
+Order messages contain e-commerce order information. The WhatsApp order message structure is sent as-is from the WhatsApp protocol.
+
+```json
+{
+  "sender_id": "628123456789",
+  "chat_id": "628987654321",
+  "from": "628123456789@s.whatsapp.net",
+  "timestamp": "2023-10-15T11:25:00Z",
+  "pushname": "John Doe",
+  "message": {
+    "text": "",
+    "id": "3EB0C127D7BACC83D6AB",
+    "replied_id": "",
+    "quoted_message": ""
+  },
+  "order": {
+    "orderTitle": "Order #12345",
+    "itemCount": 2,
+    "message": "Thank you for your order!",
+    "orderSurface": "CATALOG",
+    "sellerJid": "628987654321@s.whatsapp.net"
+  }
+}
+```
+
 ## Protocol Messages
+
+### Delete For Me
+
+Triggered when a message is deleted by the sender for themselves only.
+
+```json
+{
+  "action": "event.delete_for_me",
+  "deleted_message_id": "3EB0C127D7BACC83D6A8",
+  "sender_id": "6289685XXXXXX",
+  "from": "6289685XXXXXX@s.whatsapp.net",
+  "chat_id": "6289685XXXXXX@s.whatsapp.net",
+  "original_content": "Original message text",
+  "original_sender": "6289685XXXXXX@s.whatsapp.net",
+  "original_timestamp": "2025-07-13T10:00:00Z",
+  "was_from_me": true,
+  "original_media_type": "image",
+  "original_filename": "photo.jpg",
+  "timestamp": "2025-07-13T11:13:30Z"
+}
+```
+
+**Note**: Fields `original_*` and `was_from_me` are only present if the message was found in the local database.
 
 ### Message Revoked
 
@@ -650,7 +751,7 @@ app.post('/webhook', (req, res) => {
                 // Handle admin removal
                 break;
         }
-    } else if (data.action === 'message_deleted_for_me') {
+    } else if (data.action === 'event.delete_for_me') {
         console.log('Message deleted:', data.deleted_message_id);
     } else if (data.action === 'message_revoked') {
         console.log('Message revoked:', data.revoked_message_id);
@@ -765,3 +866,48 @@ Enable debug mode to see webhook logs:
 ```
 
 This will show detailed logs of webhook delivery attempts and errors.
+
+## Webhook Event Types Summary
+
+The following table summarizes all webhook event types sent by the system:
+
+| **Category** | **Event/Action** | **Description** | **Key Fields** |
+|--------------|------------------|-----------------|----------------|
+| **Messages** | (regular) | Text, media, contact, location messages | `message`, `sender_id`, `chat_id`, `from` |
+| **Messages** | `live_location` | Live location updates | `live_location` (raw protocol) |
+| **Messages** | `list` | Interactive list messages | `list` (raw protocol) |
+| **Messages** | `order` | E-commerce order messages | `order` (raw protocol) |
+| **Messages** | `reaction` | Message reactions (emoji) | `reaction.message`, `reaction.id` |
+| **Messages** | `view_once=true` | View-once media messages | `view_once`, `image`/`video` |
+| **Messages** | `forwarded=true` | Forwarded messages | `forwarded` |
+| **Receipts** | `event: message.ack` | Message acknowledgments | `payload.receipt_type`, `payload.ids` |
+| **Receipts** | `receipt_type: delivered` | Message delivered to device | `payload.ids` |
+| **Receipts** | `receipt_type: read` | Message read by user | `payload.ids` |
+| **Receipts** | `receipt_type: sender` | Delivered to sender's other devices | `payload.ids` |
+| **Receipts** | `receipt_type: retry` | Decryption failed, retry needed | `payload.ids` |
+| **Receipts** | `receipt_type: played` | View-once media opened | `payload.ids` |
+| **Receipts** | `receipt_type: played_self` | Media opened on another device | `payload.ids` |
+| **Receipts** | `receipt_type: read_self` | Read on another device (receipts off) | `payload.ids` |
+| **Groups** | `event: group.participants` | Group membership changes | `payload.type`, `payload.jids` |
+| **Groups** | `type: join` | Users joined group | `payload.jids`, `payload.chat_id` |
+| **Groups** | `type: leave` | Users left group | `payload.jids`, `payload.chat_id` |
+| **Groups** | `type: promote` | Users promoted to admin | `payload.jids`, `payload.chat_id` |
+| **Groups** | `type: demote` | Users demoted from admin | `payload.jids`, `payload.chat_id` |
+| **Protocol** | `action: event.delete_for_me` | Message deleted by sender | `deleted_message_id`, `original_*` |
+| **Protocol** | `action: message_revoked` | Message deleted for everyone | `revoked_message_id`, `revoked_from_me` |
+| **Protocol** | `action: message_edited` | Message edited by sender | `edited_text`, `message.id` |
+
+### Message Media Types
+
+The following media types are supported in webhook payloads:
+
+- **`image`**: Image messages with optional caption
+- **`video`**: Video messages with optional caption
+- **`audio`**: Audio messages (including voice notes)
+- **`document`**: Document/file messages with optional caption
+- **`sticker`**: Sticker messages (static or animated)
+
+Each media type includes:
+- `media_path`: Local file path where media is stored
+- `mime_type`: MIME type of the media file
+- `caption`: Optional caption text (empty string if not present)

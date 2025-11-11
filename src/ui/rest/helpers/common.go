@@ -6,7 +6,7 @@ import (
 	"time"
 
 	domainApp "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/app"
-	"go.mau.fi/whatsmeow"
+	"github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp"
 )
 
 func SetAutoConnectAfterBooting(service domainApp.IAppUsecase) {
@@ -14,13 +14,16 @@ func SetAutoConnectAfterBooting(service domainApp.IAppUsecase) {
 	_ = service.Reconnect(context.Background())
 }
 
-func SetAutoReconnectChecking(cli *whatsmeow.Client) {
+func SetAutoReconnectChecking() {
 	// Run every 5 minutes to check if the connection is still alive, if not, reconnect
+	// Always use the current global client to avoid stale references after reconnection
 	go func() {
 		for {
 			time.Sleep(5 * time.Minute)
-			if !cli.IsConnected() {
-				_ = cli.Connect()
+			currentCli := whatsapp.GetClient()
+			// Add nil checks to prevent panic if client or Store is nil
+			if currentCli != nil && currentCli.Store != nil && !currentCli.IsConnected() {
+				_ = currentCli.Connect()
 			}
 		}
 	}()
