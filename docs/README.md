@@ -52,6 +52,7 @@ Developer resources:
 
 - **[Architecture Overview](developer/architecture.md)** - System design and patterns
 - **[Contributing Guide](developer/contributing.md)** - How to contribute
+- **[Documentation Guide](developer/documentation-guide.md)** - Maintaining documentation
 - **[Testing Guide](developer/testing.md)** - Writing and running tests
 - **[Release Process](developer/release-process.md)** - Creating new releases
 - **[ADR-0001: Admin API](developer/adr/0001-admin-api.md)** - Architecture decisions

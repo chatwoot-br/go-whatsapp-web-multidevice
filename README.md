@@ -625,6 +625,7 @@ Complete documentation is available in the [docs/](./docs/) directory. Here's wh
 - **[Developer Documentation](./docs/developer/)**
   - [Architecture Overview](./docs/developer/architecture.md)
   - [Contributing Guide](./docs/developer/contributing.md)
+  - [Documentation Guide](./docs/developer/documentation-guide.md)
   - [Testing Guide](./docs/developer/testing.md)
   - [Release Process](./docs/developer/release-process.md)
 

@@ -6,6 +6,7 @@ Resources for contributors and developers working on this project.
 
 - **[Architecture Overview](architecture.md)** - System architecture and design patterns
 - **[Contributing Guide](contributing.md)** - How to contribute to the project
+- **[Documentation Guide](documentation-guide.md)** - How to maintain documentation
 - **[Testing Guide](testing.md)** - Running and writing tests
 
 ## Release Management
