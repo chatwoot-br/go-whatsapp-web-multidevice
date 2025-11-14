@@ -86,6 +86,63 @@ docker run -d \
 
 ## Docker Compose Setup
 
+### End-to-End Sample: Chatwoot + Admin API
+
+For an end-to-end "prod-like" sample environment that runs Chatwoot together with the GOWA Admin API managing multiple WhatsApp instances, this repository ships a ready-made compose file:
+
+- Chatwoot (Rails + Sidekiq) using `ghcr.io/chatwoot-br/chatwoot:v4.7.1`
+- Postgres + Redis + Mailhog for Chatwoot
+- GOWA Admin API using `ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.8.3`
+- Supervisord inside the `gowa-admin` container, managing instances on ports `3002-3010`
+
+From the repository root:
+
+```bash
+docker compose -f docker-compose.prod.yaml up -d
+```
+
+Key endpoints in this stack:
+
+- Chatwoot UI: `http://localhost:3001`
+- Admin API health: `http://localhost:8088/healthz`
+- GOWA: `http://host.docker.internal:3002/552140400001`
+
+Create a new WhatsApp instance (example using port `3002`):
+
+```bash
+export ADMIN_TOKEN="change-this-to-a-secure-token"
+export PHONE_NUMBER="552140400001"
+
+curl -X POST "http://localhost:8088/admin/instances" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "port": 3002,
+    "basic_auth": "admin:password123",
+    "debug": true,
+    "base_path": "/'$PHONE_NUMBER'",
+    "webhook": "http://host.docker.internal:3001/webhooks/whatsapp_web/'$PHONE_NUMBER'",
+    "webhook_secret": "my-webhook-secret"
+  }'
+
+curl -X PATCH "http://localhost:8088/admin/instances/3002" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "basic_auth": "admin:password123",
+    "debug": true,
+    "base_path": "/'$PHONE_NUMBER'",
+    "webhook": "http://host.docker.internal:3001/webhooks/whatsapp_web/'$PHONE_NUMBER'",
+    "webhook_secret": "my-webhook-secret"
+  }'
+```
+
+In real production, you should:
+
+- Replace all placeholder passwords and `ADMIN_TOKEN` with strong secrets (prefer `.env` or a secrets manager)
+- Avoid exposing the Admin API and Supervisord directly to the public internet (put behind a reverse proxy and/or bind to localhost)
+- Configure `GOWA_WEBHOOK` and `GOWA_WEBHOOK_SECRET` in `gowa-admin` so instances send events into a Chatwoot webhook endpoint.
+
 ### Basic Docker Compose
 
 Create `docker-compose.yml`:

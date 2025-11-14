@@ -1,0 +1,216 @@
+version: "3.9"
+
+services:
+  # PostgreSQL Database (shared between Chatwoot and Eva Woot integrations)
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: evawoot-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_prod_password
+      POSTGRES_DB: chatwoot_prod
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - evawoot-prod
+
+  # Redis Cache (shared)
+  redis:
+    image: redis:8-alpine
+    container_name: evawoot-redis
+    command: redis-server --appendonly yes --requirepass redis_prod_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_prod_password", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - evawoot-prod
+
+  # Mailhog (Email testing for Chatwoot)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: chatwoot-mailhog
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI
+    networks:
+      - evawoot-prod
+
+  # Chatwoot Rails Application (frontend + API)
+  chatwoot-rails:
+    image: ghcr.io/chatwoot-br/chatwoot:v4.7.1
+    container_name: chatwoot-rails
+    ports:
+      - "3001:3000"
+    environment:
+      RAILS_ENV: production
+      NODE_ENV: production
+      SECRET_KEY_BASE: change_me_in_real_production_use_env
+      FRONTEND_URL: http://localhost:3001
+      ACTIVE_STORAGE_BASE_URL: http://localhost:3001
+      MAILER_INBOUND_EMAIL_DOMAIN: localhost
+      REDIS_URL: redis://:redis_prod_password@redis:6379
+      REDIS_PASSWORD: redis_prod_password
+      POSTGRES_HOST: postgres
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: postgres_prod_password
+      POSTGRES_DATABASE: chatwoot_prod
+      MAILER_SENDER_EMAIL: noreply@chatwoot.local
+      SMTP_ADDRESS: mailhog
+      SMTP_PORT: 1025
+      SMTP_AUTHENTICATION: plain
+      SMTP_ENABLE_STARTTLS_AUTO: "false"
+      ACTIVE_STORAGE_SERVICE: local
+      RAILS_LOG_TO_STDOUT: "true"
+      RAILS_LOG_LEVEL: info
+      INSTALLATION_NAME: eva-woot-prod
+      ENABLE_ACCOUNT_SIGNUP: "false"
+      ENABLE_ACCOUNT_SEEDING: "true"
+      ENABLE_RACK_ATTACK_WIDGET_API: "false"
+      ENABLE_RACK_ATTACK: "false"
+    volumes:
+      - chatwoot_storage:/app/storage
+      # Webhook integration with Eva Woot Admin-managed instances
+      # Example: point Chatwoot automation/webhook to a specific GOWA instance
+      # EVA_WOOT_WEBHOOK_URL: "http://gowa-instance-3001:3001/webhook"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    networks:
+      - evawoot-prod
+    entrypoint: >
+      sh -c "
+        bundle exec rails db:prepare &&
+        bundle exec rails server -b 0.0.0.0 -p 3000
+      "
+
+  # Chatwoot Sidekiq (background jobs)
+  chatwoot-sidekiq:
+    image: ghcr.io/chatwoot-br/chatwoot:v4.7.1
+    container_name: chatwoot-sidekiq
+    environment:
+      RAILS_ENV: production
+      NODE_ENV: production
+      SECRET_KEY_BASE: change_me_in_real_production_use_env
+      FRONTEND_URL: http://localhost:3001
+      ACTIVE_STORAGE_BASE_URL: http://localhost:3001
+      MAILER_INBOUND_EMAIL_DOMAIN: localhost
+      REDIS_URL: redis://:redis_prod_password@redis:6379
+      REDIS_PASSWORD: redis_prod_password
+      POSTGRES_HOST: postgres
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: postgres_prod_password
+      POSTGRES_DATABASE: chatwoot_prod
+      MAILER_SENDER_EMAIL: noreply@chatwoot.local
+      SMTP_ADDRESS: mailhog
+      SMTP_PORT: 1025
+      SMTP_AUTHENTICATION: plain
+      SMTP_ENABLE_STARTTLS_AUTO: "false"
+      ACTIVE_STORAGE_SERVICE: local
+      RAILS_LOG_TO_STDOUT: "true"
+      RAILS_LOG_LEVEL: info
+      INSTALLATION_NAME: eva-woot-prod
+      ENABLE_ACCOUNT_SIGNUP: "false"
+      ENABLE_RACK_ATTACK_WIDGET_API: "false"
+      ENABLE_RACK_ATTACK: "false"
+    volumes:
+      - chatwoot_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+      chatwoot-rails:
+        condition: service_started
+    networks:
+      - evawoot-prod
+    command: bundle exec sidekiq -C config/sidekiq.yml
+
+  # Eva Woot Admin API + Supervisord (manages WhatsApp instances)
+  gowa-admin:
+    image: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.8.3
+    container_name: gowa-admin
+    ports:
+      - "8088:8088"      # Admin API (use behind reverse proxy in real prod)
+      - "9001:9001"      # Supervisord web / XML-RPC (keep internal only)
+      - "3002-3010:3002-3010"  # Range for managed GOWA instances
+    environment:
+      # Admin API configuration (use secrets in real production)
+      ADMIN_TOKEN: "change-this-to-a-secure-token"
+      ADMIN_DEBUG: "false"
+
+      # Supervisor integration
+      SUPERVISOR_URL: "http://127.0.0.1:9001/RPC2"
+      SUPERVISOR_USER: "admin"
+      SUPERVISOR_PASS: "change-me-now"
+      SUPERVISOR_CONF_DIR: "/etc/supervisor/conf.d"
+      INSTANCES_DIR: "/app/instances"
+      SUPERVISOR_LOG_DIR: "/var/log/supervisor"
+      LOCK_DIR: "/run"
+
+      # Default GOWA instance config (inherit for each created instance)
+      GOWA_BIN: "/usr/local/bin/whatsapp"
+      GOWA_BASIC_AUTH: "admin:admin"
+      GOWA_DEBUG: "false"
+      GOWA_OS: "Chrome"
+      GOWA_ACCOUNT_VALIDATION: "false"
+      GOWA_CHAT_STORAGE: "true"
+      # Example webhook: route WhatsApp events into Chatwoot webhooks
+      # Replace with your Chatwoot installation URL and webhook path
+      # GOWA_WEBHOOK: "http://chatwoot-rails:3000/webhooks/whatsapp"
+      # GOWA_WEBHOOK_SECRET: "change-this-webhook-secret"
+
+    volumes:
+      - instances_data:/app/instances
+      - supervisor_conf:/etc/supervisor/conf.d
+      - supervisor_logs:/var/log/supervisor
+      - supervisor_run:/run
+    entrypoint: ["/app/start-admin.sh"]
+    command: []
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - evawoot-prod
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  instances_data:
+    driver: local
+  supervisor_conf:
+    driver: local
+  supervisor_logs:
+    driver: local
+  supervisor_run:
+    driver: local
+  chatwoot_storage:
+    driver: local
+
+networks:
+  evawoot-prod:
+    driver: bridge
