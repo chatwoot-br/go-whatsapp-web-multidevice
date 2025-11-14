@@ -1633,20 +1633,30 @@ Priority list for adding tests:
 
 - [Contributing Guide](contributing.md) - How to contribute
 - [Architecture Overview](architecture.md) - System design
-- [CI/CD Documentation](../../.github/workflows/) - Pipeline details (TODO)
+- [CI/CD Workflows](../../.github/workflows/) - GitHub Actions pipelines
+  - `build-docker-image.yaml` - Builds and pushes Docker images for AMD64/ARM64 on version tags
+  - `chart-releaser.yaml` - Releases Helm charts on version tags
 
-## Contributing
+## Contributing to Tests
 
-This testing guide is incomplete. Contributions needed:
+While this testing guide is comprehensive, the actual test coverage needs improvement. Contributions welcome:
 
-- Add example tests for each layer
-- Implement mocking patterns
-- Create integration test suite
-- Add E2E test framework
-- Document CI/CD pipeline
-- Add performance testing guide
+- **High Priority**:
+  - Add tests for domain services (`domains/*/service_impl.go`)
+  - Add tests for REST API handlers (`ui/rest/`)
+  - Add tests for MCP tools (`ui/mcp/`)
 
-See [Contributing Guide](contributing.md) for details.
+- **Medium Priority**:
+  - Improve coverage in `usecase/` layer
+  - Add integration tests for infrastructure layer
+  - Create E2E test suite with testcontainers
+
+- **Nice to Have**:
+  - Performance/load testing suite
+  - Contract testing for APIs
+  - Chaos/resilience testing
+
+See [Contributing Guide](contributing.md) for how to contribute.
 
 ## Resources
 

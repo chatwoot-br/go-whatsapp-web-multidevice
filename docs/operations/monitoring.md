@@ -82,9 +82,21 @@ livenessProbe:
 
 ## Metrics
 
-> **TODO**: Implement Prometheus metrics export
+> **Note**: Prometheus metrics export is not yet implemented.
+> This is a planned feature for future releases.
 
-### Planned Metrics
+**Current Monitoring Options**:
+1. Health check endpoints (`/app/devices`)
+2. Application logs (see [Logging](#logging) section)
+3. System-level metrics (CPU, memory via `top`, `htop`, `ps`)
+4. Docker stats (`docker stats` for containers)
+5. Kubernetes metrics (if deployed on k8s)
+
+**Workaround**: Use external monitoring to periodically call `/app/devices` endpoint and track response times.
+
+### Planned Prometheus Metrics
+
+When implemented, these metrics will be available:
 
 #### Application Metrics
 - `whatsapp_connection_status` - Connection state (1=connected, 0=disconnected)
@@ -108,14 +120,20 @@ livenessProbe:
 
 ### Example Prometheus Configuration
 
+Once metrics are implemented, use this configuration:
+
 ```yaml
 scrape_configs:
   - job_name: 'whatsapp'
     static_configs:
       - targets: ['localhost:3000']
-    metrics_path: '/metrics'  # TODO: Implement
+    metrics_path: '/metrics'
     scrape_interval: 15s
 ```
+
+**Contribution Welcome**: Implementing Prometheus metrics export would be a valuable contribution. See:
+- [Prometheus Go Client](https://github.com/prometheus/client_golang)
+- [Fiber Prometheus Middleware](https://github.com/gofiber/contrib/tree/main/prometheus)
 
 ## Logging
 
@@ -198,9 +216,57 @@ services:
 
 ## Alerting
 
-> **TODO**: Set up alerting examples
+> **Note**: Application-level alerting requires Prometheus metrics (not yet implemented).
+> In the meantime, use external monitoring services or custom scripts.
 
-### Critical Alerts
+### Monitoring Solutions (Current Options)
+
+1. **UptimeRobot / Pingdom** - External HTTP monitoring
+   - Monitor `/app/devices` endpoint
+   - Alert on downtime or slow responses
+
+2. **Custom Health Check Script**:
+   ```bash
+   #!/bin/bash
+   # healthcheck.sh
+
+   RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+     -u admin:secret \
+     http://localhost:3000/app/devices)
+
+   if [ "$RESPONSE" != "200" ]; then
+     echo "Health check failed: HTTP $RESPONSE"
+     # Send alert (email, Slack, PagerDuty, etc.)
+     exit 1
+   fi
+
+   echo "Health check passed"
+   ```
+
+3. **Docker Health Checks** (if using Docker):
+   ```yaml
+   healthcheck:
+     test: ["CMD", "curl", "-f", "http://localhost:3000/app/devices"]
+     interval: 30s
+     timeout: 10s
+     retries: 3
+   ```
+
+4. **Kubernetes Probes** (if using k8s):
+   ```yaml
+   livenessProbe:
+     httpGet:
+       path: /app/devices
+       port: 3000
+     initialDelaySeconds: 30
+     periodSeconds: 30
+   ```
+
+### Planned Alert Rules (Future)
+
+When Prometheus metrics are implemented, use these alert rules:
+
+#### Critical Alerts
 
 1. **Service Down**
    - Condition: Health check fails for 3 consecutive checks
@@ -234,8 +300,9 @@ services:
 
 ### Example AlertManager Configuration
 
+Once Prometheus metrics are implemented:
+
 ```yaml
-# TODO: Implement Prometheus metrics first
 route:
   group_by: ['alertname', 'instance']
   group_wait: 10s
@@ -248,7 +315,11 @@ receivers:
     slack_configs:
       - api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
         channel: '#whatsapp-alerts'
+    pagerduty_configs:
+      - service_key: 'YOUR_PAGERDUTY_KEY'
 ```
+
+**Current Alternative**: Set up alerts using your monitoring service (UptimeRobot, Pingdom, etc.) or custom scripts with notification integrations.
 
 ## Troubleshooting
 
@@ -300,9 +371,17 @@ receivers:
 
 ## Dashboards
 
-> **TODO**: Create example Grafana dashboards
+> **Note**: Grafana dashboards require Prometheus metrics (not yet implemented).
 
-### Planned Dashboard Panels
+**Current Options**:
+1. **System Monitoring**: Use tools like `htop`, `glances`, or system monitoring dashboards
+2. **Docker Stats Dashboard**: If using Docker, visualize `docker stats` output
+3. **Kubernetes Dashboard**: If on k8s, use built-in dashboard or Lens
+4. **Application Logs**: Use log aggregation tools (ELK, Loki+Grafana)
+
+### Planned Grafana Dashboard Panels
+
+When Prometheus metrics are available:
 
 1. **Overview**
    - Connection status indicator

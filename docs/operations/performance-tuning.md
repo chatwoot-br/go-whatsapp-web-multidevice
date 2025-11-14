@@ -119,15 +119,24 @@ effective_io_concurrency = 200  # For SSD
 
 ### Connection Pooling
 
-> **TODO**: Implement configurable connection pool settings
+> **Note**: Connection pool settings are currently hardcoded in the application.
+> Planned feature: Configurable connection pool settings via environment variables.
 
-Recommended settings (when implemented):
+Recommended settings (for future implementation):
 
 ```bash
-DB_MAX_OPEN_CONNS=25
-DB_MAX_IDLE_CONNS=5
-DB_CONN_MAX_LIFETIME=5m
+# Planned configuration options
+DB_MAX_OPEN_CONNS=25         # Maximum open connections
+DB_MAX_IDLE_CONNS=5          # Maximum idle connections
+DB_CONN_MAX_LIFETIME=5m      # Connection lifetime
 ```
+
+**Current Defaults** (in code):
+- Max open connections: Default Go SQL driver (unlimited)
+- Max idle connections: 2
+- Connection lifetime: Unlimited
+
+To optimize now, modify the code in `src/cmd/root.go` where the database is initialized.
 
 ### Chat Storage
 
@@ -232,7 +241,13 @@ find src/statics/media -type d -empty -delete
 
 For trusted sources or pre-compressed media:
 
-> **TODO**: Add configuration option to disable compression
+> **Note**: Media compression is currently always enabled.
+> Planned feature: Configuration option to disable compression for specific media types.
+
+**Workaround**: If you need to skip compression, you can:
+1. Pre-compress media before sending
+2. Modify the media processing code in `src/pkg/whatsapp/`
+3. Use smaller file sizes that don't trigger compression thresholds
 
 ## Concurrency and Scaling
 
@@ -269,20 +284,28 @@ WEBHOOK_TIMEOUT=30s
 
 ### Rate Limiting
 
-> **TODO**: Implement rate limiting
+> **Note**: Application-level rate limiting is not currently implemented.
+> You must respect WhatsApp's rate limits to avoid account blocks.
 
-WhatsApp has rate limits. Respect them to avoid blocks:
-
+**WhatsApp Rate Limits**:
 - Messages: ~50-100 per minute per number
 - Media: Lower limits due to upload time
 - Group operations: Conservative limits
 
-Planned rate limiting:
+**Best Practices**:
+1. Implement rate limiting in your application (client-side)
+2. Add delays between bulk operations
+3. Monitor for rate limit errors from WhatsApp
+4. Use message queues to control sending rate
 
+**Planned Feature**:
 ```bash
+# Future configuration options
 RATE_LIMIT_REQUESTS_PER_MINUTE=60
 RATE_LIMIT_BURST=10
 ```
+
+**Current Workaround**: Implement rate limiting in your webhook handler or client application.
 
 ### Horizontal Scaling
 
@@ -311,9 +334,14 @@ RATE_LIMIT_BURST=10
 
 **HTTP Client**:
 
-> **TODO**: Make HTTP client settings configurable
+> **Note**: HTTP client settings are currently hardcoded in the application.
 
-Recommended settings:
+**Current Settings** (in `infrastructure/whatsapp/`):
+- Timeout: 30 seconds (for webhook delivery)
+- Max idle connections: Go defaults
+- Keep-alive: Enabled
+
+**Recommended Settings** (for future configuration):
 
 ```go
 http.Client{
@@ -325,6 +353,8 @@ http.Client{
     },
 }
 ```
+
+To customize now, modify the HTTP client initialization in `src/infrastructure/whatsapp/webhook.go`.
 
 ### Webhook Optimization
 
@@ -353,59 +383,183 @@ sudo systemctl start nscd
 
 ### Application Benchmarks
 
-> **TODO**: Create benchmark suite
-
-Planned benchmarks:
+**Creating Benchmarks**:
 
 ```go
+// Example benchmark in usecase/send_benchmark_test.go
 func BenchmarkSendTextMessage(b *testing.B) {
+    // Setup
+    ctx := context.Background()
+    phone := "6281234567890"
+    message := "Hello"
+
+    b.ResetTimer() // Start timing after setup
     for i := 0; i < b.N; i++ {
-        SendTextMessage(ctx, "6281234567890", "Hello")
+        SendTextMessage(ctx, phone, message)
     }
 }
 
 func BenchmarkMediaCompression(b *testing.B) {
+    // Load test image once
+    data, _ := os.ReadFile("testdata/test.jpg")
+
+    b.ResetTimer()
     for i := 0; i < b.N; i++ {
-        CompressImage("test.jpg")
+        CompressImage(data)
     }
 }
 ```
 
-Run benchmarks:
+**Run Benchmarks**:
 
 ```bash
+# Run all benchmarks
 cd src && go test -bench=. -benchmem ./...
+
+# Run specific benchmark
+cd src && go test -bench=BenchmarkSendText -benchmem ./usecase
+
+# Run benchmarks with CPU profiling
+cd src && go test -bench=. -cpuprofile=cpu.prof ./...
+go tool pprof cpu.prof
+
+# Compare benchmarks before/after changes
+go test -bench=. -benchmem ./... > old.txt
+# Make changes
+go test -bench=. -benchmem ./... > new.txt
+benchcmp old.txt new.txt  # Requires golang.org/x/tools/cmd/benchcmp
 ```
+
+**Contribution Welcome**: Add benchmark tests to critical code paths.
 
 ### Load Testing
 
-> **TODO**: Add load testing examples
-
-Tools:
-- **k6**: Modern load testing
-- **Apache Bench**: Simple HTTP testing
+**Recommended Tools**:
+- **k6**: Modern, Go-based load testing
+- **Apache Bench (ab)**: Simple HTTP testing
 - **Locust**: Python-based load testing
+- **Artillery**: Node.js-based load testing
 
-Example with k6:
+#### Example 1: k6 Load Test
 
+Install k6:
+```bash
+# macOS
+brew install k6
+
+# Linux
+sudo apt-get install k6
+
+# Or download from https://k6.io/
+```
+
+Create `loadtest.js`:
 ```javascript
 import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export let options = {
+  stages: [
+    { duration: '30s', target: 20 },  // Ramp up to 20 users
+    { duration: '1m', target: 20 },   // Stay at 20 users
+    { duration: '30s', target: 0 },   // Ramp down to 0
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<500'], // 95% of requests should be below 500ms
+    http_req_failed: ['rate<0.01'],   // Less than 1% errors
+  },
+};
 
 export default function() {
-  http.post('http://localhost:3000/send/text', JSON.stringify({
+  const url = 'http://localhost:3000/send/text';
+  const payload = JSON.stringify({
     phone: '6281234567890',
     message: 'Load test message'
-  }), {
-    headers: { 'Content-Type': 'application/json' },
   });
+
+  const params = {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Basic ' + encoding.b64encode('admin:secret'),
+    },
+  };
+
+  let response = http.post(url, payload, params);
+
+  check(response, {
+    'status is 200': (r) => r.status === 200,
+    'response time < 500ms': (r) => r.timings.duration < 500,
+  });
+
+  sleep(1); // Wait 1 second between requests
 }
 ```
 
-Run:
-
+Run load test:
 ```bash
 k6 run --vus 10 --duration 30s loadtest.js
+
+# With output to InfluxDB (for graphing)
+k6 run --out influxdb=http://localhost:8086/k6 loadtest.js
 ```
+
+#### Example 2: Apache Bench
+
+Simple quick test:
+```bash
+# 1000 requests, 10 concurrent
+ab -n 1000 -c 10 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Basic YWRtaW46c2VjcmV0" \
+  -p payload.json \
+  http://localhost:3000/send/text
+```
+
+#### Example 3: Locust
+
+Create `locustfile.py`:
+```python
+from locust import HttpUser, task, between
+
+class WhatsAppUser(HttpUser):
+    wait_time = between(1, 3)
+
+    @task
+    def send_message(self):
+        self.client.post("/send/text", json={
+            "phone": "6281234567890",
+            "message": "Load test message"
+        }, auth=("admin", "secret"))
+
+    @task(2)  # Run twice as often
+    def check_status(self):
+        self.client.get("/app/devices", auth=("admin", "secret"))
+```
+
+Run:
+```bash
+locust -f locustfile.py --host=http://localhost:3000
+# Then open http://localhost:8089 to configure and start test
+```
+
+#### Load Testing Best Practices
+
+1. **Start Small**: Begin with low load and gradually increase
+2. **Monitor Resources**: Watch CPU, memory, database connections
+3. **Test Realistic Scenarios**: Mix different endpoint calls
+4. **Respect Rate Limits**: Don't exceed WhatsApp rate limits
+5. **Use Test Accounts**: Never load test with production data
+6. **Measure Baselines**: Establish baseline performance first
+7. **Test Incrementally**: Test after each optimization
+
+#### Metrics to Monitor During Load Tests
+
+- **Response Time**: P50, P95, P99 latencies
+- **Throughput**: Requests per second
+- **Error Rate**: Failed requests percentage
+- **Resource Usage**: CPU, memory, disk I/O
+- **Database Performance**: Query times, connection pool usage
+- **Network**: Bandwidth, packet loss
 
 ### Profiling
 
