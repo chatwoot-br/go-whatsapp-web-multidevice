@@ -64,7 +64,7 @@ When you need to release a new version (e.g., after fixing bugs or adding featur
 
 5. **Verify release**: Check that all GitHub Actions workflows completed successfully
 
-For detailed release instructions, see [Release Process Documentation](docs/RELEASE-PROCESS.md).
+For detailed release instructions, see [Release Process Documentation](docs/developer/release-process.md).
 
 ## Project Architecture
 
@@ -172,11 +172,16 @@ This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Mod
 
 ## Documentation
 
-### API Documentation
-- **Deployment Guide**: `docs/deployment-guide.md` - Complete deployment and usage guide
-- **OpenAPI Spec**: `docs/openapi.yaml` - Complete REST API specification (v3.0.0)
-- **API Guide for AI Agents**: `docs/openapi.md` - Comprehensive guide for AI agents
-- **Webhook Documentation**: `docs/webhook-payload.md` - Webhook payload schemas and integration guide
+### Documentation
+- **Documentation Hub**: `docs/README.md` - Comprehensive navigation and persona-based guides
+- **Getting Started**: `docs/getting-started/` - Quick start, installation, first message, configuration
+- **Deployment Guides**: `docs/guides/deployment/` - Docker, Kubernetes, binary, production checklist
+- **API Reference**: `docs/reference/api/` - OpenAPI specs and API documentation
+  - REST API: `docs/reference/api/openapi.yaml`
+  - Admin API: `docs/reference/api/admin-api-openapi.yaml`
+- **Webhook Documentation**: `docs/guides/webhooks/` and `docs/reference/webhooks/` - Setup, security, examples, event schemas
+- **Developer Guides**: `docs/developer/` - Architecture, contributing, testing, release process
+- **Operations**: `docs/operations/` - Monitoring, performance, security, audio optimization
 
 ### Key Documentation Sections
 1. **REST API**:
@@ -205,7 +210,7 @@ This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Mod
 - **Critical Bug Fix**: Fixed service panic on profile picture fetch
   - Updated whatsmeow library to support PrivacyToken in profile picture requests
   - Prevents service crashes and message loss in downstream systems
-  - See: `docs/issues/ISSUE-001-PROFILE-PICTURE-PANIC.md`
+  - See: `docs/postmortems/001-profile-picture-panic.md`
 - **Documentation**: Added release process guide and CHANGELOG
 
 ### v7.7.0
@@ -234,7 +239,7 @@ This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Mod
 - HTML templates and assets are embedded in the binary using Go's embed feature
 - FFmpeg is required for media processing (installation varies by platform)
 - Version format: `v7.x.x` following [Semantic Versioning](https://semver.org/)
-- Release process: See [docs/RELEASE-PROCESS.md](docs/RELEASE-PROCESS.md) for creating new releases
+- Release process: See [docs/developer/release-process.md](docs/developer/release-process.md) for creating new releases
 - GitHub Container Registry support available
 
 ## Common Troubleshooting

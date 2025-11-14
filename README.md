@@ -43,7 +43,7 @@ Download:
 
 ## Feature
 
-- Send WhatsApp message via http API, [docs/openapi.yml](./docs/openapi.yaml) for more details
+- Send WhatsApp message via http API, [docs/reference/api/openapi.yaml](./docs/reference/api/openapi.yaml) for more details
 - **Interactive API Documentation with Swagger UI** - Built-in Swagger UI for Admin API accessible at `/swagger` endpoint
 - **MCP (Model Context Protocol) Server Support** - Integrate with AI agents and tools using standardized protocol
 - Mention someone
@@ -73,15 +73,15 @@ Download:
 - Webhook for received message
   - `--webhook="http://yourwebhook.site/handler"`, or you can simplify
   - `-w="http://yourwebhook.site/handler"`
-  - for more detail, see [Webhook Payload Documentation](./docs/webhook-payload.md)
+  - for more detail, see [Webhook Documentation](./docs/guides/webhooks/)
 - Webhook Secret
   Our webhook will be sent to you with an HMAC header and a sha256 default key `secret`.
 
   You may modify this by using the option below:
   - `--webhook-secret="secret"`
-- **Webhook Payload Documentation**
+- **Webhook Documentation**
   For detailed webhook payload schemas, security implementation, and integration examples,
-  see [Webhook Payload Documentation](./docs/webhook-payload.md)
+  see [Webhook Guides](./docs/guides/webhooks/) and [Webhook Reference](./docs/reference/webhooks/)
 
 ## Configuration
 
@@ -124,7 +124,7 @@ To use environment variables:
 | `WHATSAPP_ACCOUNT_VALIDATION` | Enable account validation                   | `true`                                       | `WHATSAPP_ACCOUNT_VALIDATION=false`         |
 | `WHATSAPP_CHAT_STORAGE`       | Enable chat storage                         | `true`                                       | `WHATSAPP_CHAT_STORAGE=false`               |
 
-> For the Admin API implementation details and complete environment variable mappings for per-instance configuration, see `docs/features/ADR-001/IMPLEMENTATION_SUMMARY.md`.
+> For the Admin API implementation details and complete environment variable mappings for per-instance configuration, see [Admin API Guide](./docs/guides/admin-api.md).
 
 Note: Command-line flags will override any values set in environment variables or `.env` file.
 
@@ -226,7 +226,7 @@ For managing multiple WhatsApp instances:
    - Install and configure supervisord
    - Set required environment variables (see `.src/.env.dev`)
    - Run: `go run . admin --port 8088`
-   - See [docs/admin-api.md](./docs/admin-api.md) for details
+   - See [Admin API Guide](./docs/guides/admin-api.md) for details
 
 **Note**: The Admin API supports all environment variables listed above. Use `GOWA_*` prefixed versions to configure defaults for instances (e.g., `GOWA_DEBUG=true`, `GOWA_WEBHOOK=https://webhook.site/xxx`). All instances created through the Admin API will inherit these settings and support the full feature set of standalone GOWA instances.
 
@@ -441,7 +441,7 @@ You can fork or edit this source code !
 ### HTTP REST API
 
 - [API Specification Document](https://bump.sh/aldinokemal/doc/go-whatsapp-web-multidevice).
-- Check [docs/openapi.yml](./docs/openapi.yaml) for detailed API specifications.
+- Check [docs/reference/api/openapi.yaml](./docs/reference/api/openapi.yaml) for detailed API specifications.
 - Use [SwaggerEditor](https://editor.swagger.io) to visualize the API.
 - Generate HTTP clients using [openapi-generator](https://openapi-generator.tech/#try).
 
@@ -582,9 +582,63 @@ open http://localhost:8080/swagger
 ```
 
 For more details, see:
-- [Admin API Documentation](./docs/admin-api.md)
-- [Admin API OpenAPI Spec](./docs/admin-api-openapi.yaml)
-- [Swagger UI Integration Guide](./docs/SWAGGER-UI-INTEGRATION-COMPLETE.md)
+- [Admin API Documentation](./docs/guides/admin-api.md)
+- [Admin API OpenAPI Spec](./docs/reference/api/admin-api-openapi.yaml)
+
+## 📚 Documentation
+
+Complete documentation is available in the [docs/](./docs/) directory. Here's where to find what you need:
+
+### Quick Start
+- **[Getting Started](./docs/getting-started/)** - Tutorials for new users
+  - [Quick Start Guide](./docs/getting-started/quick-start.md) - Get running in 5 minutes
+  - [Installation Guide](./docs/getting-started/installation.md) - Complete installation instructions
+  - [First Message Guide](./docs/getting-started/first-message.md) - Send your first WhatsApp message
+  - [Configuration Basics](./docs/getting-started/configuration-basics.md) - Essential configuration
+
+### How-To Guides
+- **[Deployment Guides](./docs/guides/deployment/)** - Production deployment
+  - [Docker Deployment](./docs/guides/deployment/docker.md)
+  - [Kubernetes Deployment](./docs/guides/deployment/kubernetes.md)
+  - [Binary Deployment](./docs/guides/deployment/binary.md)
+  - [Production Checklist](./docs/guides/deployment/production-checklist.md)
+- **[Webhook Guides](./docs/guides/webhooks/)** - Real-time event integration
+  - [Setup Guide](./docs/guides/webhooks/setup.md)
+  - [Security & HMAC](./docs/guides/webhooks/security.md)
+  - [Integration Examples](./docs/guides/webhooks/examples.md)
+- **[MCP Integration](./docs/guides/mcp-integration.md)** - AI agent integration
+- **[Admin API](./docs/guides/admin-api.md)** - Multi-instance management
+- **[Media Handling](./docs/guides/media-handling.md)** - Send and process media files
+
+### API Reference
+- **[API Documentation](./docs/reference/api/)**
+  - [OpenAPI Specification](./docs/reference/api/openapi.yaml)
+  - [API Guide](./docs/reference/api/openapi.md)
+  - [Admin API Spec](./docs/reference/api/admin-api-openapi.yaml)
+- **[Webhook Reference](./docs/reference/webhooks/)**
+  - [Event Types](./docs/reference/webhooks/event-types.md)
+  - [Payload Schemas](./docs/reference/webhooks/payload-schemas.md)
+- **[Configuration Reference](./docs/reference/configuration.md)** - All environment variables
+- **[Troubleshooting Guide](./docs/reference/troubleshooting.md)** - Common issues
+
+### For Developers
+- **[Developer Documentation](./docs/developer/)**
+  - [Architecture Overview](./docs/developer/architecture.md)
+  - [Contributing Guide](./docs/developer/contributing.md)
+  - [Testing Guide](./docs/developer/testing.md)
+  - [Release Process](./docs/developer/release-process.md)
+
+### Operations
+- **[Operations Guides](./docs/operations/)**
+  - [Monitoring](./docs/operations/monitoring.md)
+  - [Performance Tuning](./docs/operations/performance-tuning.md)
+  - [Security Best Practices](./docs/operations/security-best-practices.md)
+  - [Audio Optimization](./docs/operations/audio-optimization.md)
+
+### Postmortems
+- **[Postmortems](./docs/postmortems/)** - Lessons learned from production issues
+
+**Start here**: [docs/README.md](./docs/README.md) - Comprehensive documentation index with persona-based navigation
 
 ## Important
 
