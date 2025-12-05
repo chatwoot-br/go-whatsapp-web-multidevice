@@ -23,6 +23,49 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Get dependencies**: `cd src && go mod tidy`
 - **Check for issues**: `cd src && go vet ./...`
 
+### Releasing a New Version
+
+When you need to release a new version (e.g., after fixing bugs or adding features):
+
+1. **Determine version number** (following [Semantic Versioning](https://semver.org/)):
+   - **PATCH** (v7.7.1): Bug fixes, backward compatible
+   - **MINOR** (v7.8.0): New features, backward compatible
+   - **MAJOR** (v8.0.0): Breaking changes
+
+2. **Update version in three files**:
+   ```bash
+   # 1. Update src/config/settings.go line 8
+   # Change: AppVersion = "v7.7.1"
+
+   # 2. Update charts/gowa/Chart.yaml line 18
+   # Change: version: 7.7.1
+
+   # 3. Update charts/gowa/Chart.yaml line 24
+   # Change: appVersion: "v7.7.1"
+
+   # 4. Update CHANGELOG.md
+   # Add new version section at the top
+   ```
+
+3. **Commit and tag**:
+   ```bash
+   git add src/config/settings.go charts/gowa/Chart.yaml CHANGELOG.md
+   git commit -m "chore: bump version to v7.7.1"
+   git tag -a v7.7.1 -m "Release v7.7.1"
+   git push origin main
+   git push origin v7.7.1
+   ```
+
+4. **Automated builds**: After pushing the tag, GitHub Actions will automatically:
+   - Build Docker images for AMD64 and ARM64
+   - Push to GitHub Container Registry
+   - Create Helm chart release
+   - Create GitHub release
+
+5. **Verify release**: Check that all GitHub Actions workflows completed successfully
+
+For detailed release instructions, see [Release Process Documentation](docs/developer/release-process.md).
+
 ## Project Architecture
 
 This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Model Context Protocol) modes.
@@ -46,9 +89,27 @@ This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Mod
 
 ### Configuration
 
-- **Environment Variables**: See `.env.example` for all available options
+- **Environment Variables**: See `src/.env.example` for all available options
 - **Command Line Flags**: All env vars can be overridden with CLI flags
 - **Config Priority**: CLI flags > Environment variables > `.env` file
+
+#### Key Configuration Options
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `APP_PORT` | 3000 | HTTP server port for REST mode |
+| `APP_DEBUG` | false | Enable debug logging |
+| `APP_OS` | Chrome | Device name shown in WhatsApp |
+| `APP_BASIC_AUTH` | - | Basic auth credentials (format: `user1:pass1,user2:pass2`) |
+| `APP_BASE_PATH` | - | Base path for subpath deployments |
+| `DB_URI` | file:storages/whatsapp.db | Main database connection string |
+| `DB_KEYS_URI` | file::memory: | Keys database (in-memory by default) |
+| `WHATSAPP_AUTO_REPLY` | - | Auto-reply message text |
+| `WHATSAPP_AUTO_MARK_READ` | false | Auto-mark incoming messages as read |
+| `WHATSAPP_WEBHOOK` | - | Webhook URLs (comma-separated for multiple) |
+| `WHATSAPP_WEBHOOK_SECRET` | secret | HMAC secret for webhook verification |
+| `WHATSAPP_ACCOUNT_VALIDATION` | true | Validate WhatsApp account exists before sending |
+| `WHATSAPP_CHAT_STORAGE` | true | Enable chat history storage |
 
 ### Database
 
@@ -58,8 +119,32 @@ This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Mod
 
 ### Mode-Specific Architecture
 
-- **REST Mode**: Fiber web server with HTML templates, WebSocket support, middleware stack
-- **MCP Mode**: Model Context Protocol server with SSE transport for AI agent integration
+#### REST Mode
+- **Framework**: Fiber web server (v2.52.9)
+- **Features**:
+  - HTML templates with embedded assets
+  - WebSocket support for real-time updates
+  - Basic authentication middleware
+  - Subpath deployment support
+  - Auto-reconnection monitoring
+- **Default Port**: 3000 (configurable via `--port` or `APP_PORT`)
+
+#### MCP Mode (Model Context Protocol)
+- **Framework**: MCP-Go server (v0.41.1) with SSE transport
+- **Features**:
+  - AI agent integration via standardized protocol
+  - Tool capabilities for WhatsApp operations
+  - Resource capabilities for data access
+  - Server-Sent Events (SSE) transport
+- **Endpoints**:
+  - SSE: `http://localhost:8080/sse`
+  - Message: `http://localhost:8080/message`
+- **Default Port**: 8080 (configurable via `--port` or `--host`)
+- **Tool Categories**:
+  - **Send Tools**: Send messages, media, contacts, locations
+  - **Query Tools**: Chat history, user info, message queries
+  - **App Tools**: Login, logout, reconnect, device management
+  - **Group Tools**: Create groups, manage participants, settings
 
 ### Key Dependencies
 
@@ -71,10 +156,81 @@ This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Mod
 
 ### WhatsApp Integration
 
-- Uses whatsmeow library for WhatsApp Web protocol
-- Supports multi-device WhatsApp accounts
-- Auto-reconnection and connection monitoring
-- Media compression and webhook support
+- **Protocol**: whatsmeow library for WhatsApp Web multi-device protocol
+- **Features**:
+  - Multi-device WhatsApp account support
+  - Auto-reconnection and connection monitoring
+  - Media compression (images, videos)
+  - Webhook support with HMAC signature verification
+  - Account validation before sending
+  - Auto-reply and auto-mark-read capabilities
+  - Sticker support with automatic WebP conversion
+  - Chat history storage (SQLite)
+  - Pairing code and QR code login methods
+  - Group management and participant operations
+  - Newsletter support
+
+## Documentation
+
+### Documentation
+- **Documentation Hub**: `docs/README.md` - Comprehensive navigation and persona-based guides
+- **Documentation Guide**: `docs/developer/documentation-guide.md` - How to maintain and update documentation
+- **Getting Started**: `docs/getting-started/` - Quick start, installation, first message, configuration
+- **Deployment Guides**: `docs/guides/deployment/` - Docker, Kubernetes, binary, production checklist
+- **API Reference**: `docs/reference/api/` - OpenAPI specs and API documentation
+  - REST API: `docs/reference/api/openapi.yaml`
+  - Admin API: `docs/reference/api/admin-api-openapi.yaml`
+- **Webhook Documentation**: `docs/guides/webhooks/` and `docs/reference/webhooks/` - Setup, security, examples, event schemas
+- **Developer Guides**: `docs/developer/` - Architecture, contributing, documentation, testing, release process
+- **Operations**: `docs/operations/` - Monitoring, performance, security, audio optimization
+
+### Key Documentation Sections
+1. **REST API**:
+   - All endpoints documented in OpenAPI format
+   - Authentication (Basic Auth)
+   - Phone number format (JID)
+   - Message types and media handling
+   - Group operations
+   - Chat and message queries
+
+2. **Webhooks**:
+   - Event types (messages, receipts, groups, protocol events)
+   - HMAC SHA256 signature verification
+   - Payload structures for all event types
+   - Integration examples (Node.js, Python)
+   - Retry logic and error handling
+
+3. **MCP Integration**:
+   - Tool capabilities for AI agents
+   - SSE transport configuration
+   - Available tools and operations
+
+## Recent Features & Updates
+
+### v7.7.1 (Latest)
+- **Critical Bug Fix**: Fixed service panic on profile picture fetch
+  - Updated whatsmeow library to support PrivacyToken in profile picture requests
+  - Prevents service crashes and message loss in downstream systems
+  - See: `docs/postmortems/001-profile-picture-panic.md`
+- **Documentation**: Added release process guide and CHANGELOG
+
+### v7.7.0
+- **Sticker Support**: Automatic conversion of images to WebP format (supports JPG, JPEG, PNG, WebP, GIF)
+- **Trusted Proxy**: Support for proxy deployments
+- **Document MIME Detection**: Improved document type detection and extension preservation
+- **Reconnect Error Handling**: Better session guard and error handling for LoginWithCode
+
+### v7.5.x
+- **Group Participants**: List and CSV export functionality
+- **Media Download API**: On-demand media download with UI support
+- **Group Invite Links**: API endpoint for generating/resetting invite links
+- **Memory Optimization**: Improved memory allocation in group operations
+
+### MCP Integration (v7.x+)
+- Model Context Protocol server support
+- SSE (Server-Sent Events) transport
+- Comprehensive tool suite for AI agents
+- Resource capabilities for data access
 
 ## Important Notes
 
@@ -83,3 +239,31 @@ This is a Go-based WhatsApp Web API server supporting both REST API and MCP (Mod
 - Media files are stored in `src/statics/media/` and `src/storages/`
 - HTML templates and assets are embedded in the binary using Go's embed feature
 - FFmpeg is required for media processing (installation varies by platform)
+- Version format: `v7.x.x` following [Semantic Versioning](https://semver.org/)
+- Release process: See [docs/developer/release-process.md](docs/developer/release-process.md) for creating new releases
+- GitHub Container Registry support available
+
+## Common Troubleshooting
+
+### Media Processing
+- Ensure FFmpeg is installed for video/image compression
+- Check file size limits: Images (20MB), Files (50MB), Videos (100MB), Downloads (500MB)
+- Verify media storage path permissions: `src/statics/media/`
+
+### Database Issues
+- Default database: `storages/whatsapp.db` (SQLite)
+- Chat storage: `storages/chatstorage.db` (SQLite)
+- PostgreSQL supported via `DB_URI` environment variable
+- Keys can be stored in-memory (default) or persistent database
+
+### Connection Issues
+- Auto-reconnection is enabled by default
+- Check WhatsApp session validity with `/app/devices` endpoint
+- Use `/app/reconnect` to manually trigger reconnection
+- Remote logout clears all session data automatically
+
+### Webhook Issues
+- Verify webhook URL is accessible
+- Check HMAC signature verification with correct secret
+- Review webhook retry logic (5 attempts, exponential backoff)
+- Enable debug mode to see detailed webhook logs: `--debug=true`

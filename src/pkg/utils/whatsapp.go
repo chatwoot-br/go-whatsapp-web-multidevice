@@ -73,15 +73,21 @@ func determineMediaExtension(originalFilename, mimeType string) string {
 		}
 	}
 
-	if ext, ok := resolveKnownDocumentExtension(mimeType); ok {
+	// Strip MIME type parameters (e.g., "; codecs=opus" from "audio/ogg; codecs=opus")
+	// This prevents parameters from being included in the file extension
+	// RFC 2045 Section 5.1: parameters follow the type/subtype, separated by semicolon
+	baseType := strings.Split(mimeType, ";")[0]
+	baseType = strings.TrimSpace(baseType)
+
+	if ext, ok := resolveKnownDocumentExtension(baseType); ok {
 		return ext
 	}
 
-	if ext, err := mime.ExtensionsByType(mimeType); err == nil && len(ext) > 0 {
+	if ext, err := mime.ExtensionsByType(baseType); err == nil && len(ext) > 0 {
 		return ext[0]
 	}
 
-	if parts := strings.Split(mimeType, "/"); len(parts) > 1 {
+	if parts := strings.Split(baseType, "/"); len(parts) > 1 {
 		return "." + parts[len(parts)-1]
 	}
 

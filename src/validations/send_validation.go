@@ -352,8 +352,13 @@ func ValidateSendAudio(ctx context.Context, request domainSend.AudioRequest) err
 		return pkgError.ValidationError("either Audio or AudioURL must be provided")
 	}
 
-	// If Audio file is provided, validate file MIME
+	// If Audio file is provided, validate file MIME and size
 	if request.Audio != nil {
+		// Validate file size
+		if request.Audio.Size > config.WhatsappSettingMaxAudioSize {
+			return pkgError.ValidationError(fmt.Sprintf("audio file size exceeds maximum limit of %d bytes", config.WhatsappSettingMaxAudioSize))
+		}
+
 		availableMimes := map[string]bool{
 			"audio/aac":      true,
 			"audio/amr":      true,

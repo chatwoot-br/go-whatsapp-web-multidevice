@@ -1,0 +1,12 @@
+{{- if .Values.swaggerUI.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gowa.fullname" . }}-swagger-config
+  labels:
+    {{- include "gowa.labels" . | nindent 4 }}
+data:
+  admin-api-openapi.yaml: |
+{{ tpl (.Files.Get "docs/admin-api-openapi.yaml") . | indent 4 }}
+{{- end }}
