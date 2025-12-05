@@ -568,7 +568,7 @@ WHATSAPP_WEBHOOK=https://api.yourapp.com/webhooks/whatsapp,https://backup-webhoo
 - Should respond within 5 seconds
 - Should verify HMAC signature
 
-**See:** [Webhook Payload Documentation](../webhook-payload.md) for complete event reference.
+**See:** [Webhook Payload Documentation](webhooks/payload-schemas.md) for complete event reference.
 
 ---
 
@@ -1131,5 +1131,5 @@ DB_URI="file:storages/whatsapp.db?_foreign_keys=on"
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-11-14
+**Version**: Compatible with v7.10.1+
+**Last Updated**: 2025-12-05

@@ -322,7 +322,7 @@ WHATSAPP_WEBHOOK=https://your-webhook.site/handler,https://webhook2.com/handler
 }
 ```
 
-See [Webhook Documentation](../webhook-payload.md) for complete details.
+See [Webhook Documentation](../guides/webhooks/setup.md) for complete details.
 
 ### Webhook Secret
 
@@ -809,9 +809,9 @@ Now that you understand configuration:
 
 1. **[Quick Start Guide](quick-start.md)** - Get started quickly
 2. **[First Message Guide](first-message.md)** - Send your first message
-3. **[Webhook Documentation](../webhook-payload.md)** - Setup webhook integration
+3. **[Webhook Documentation](../guides/webhooks/setup.md)** - Setup webhook integration
 4. **[Deployment Guide](../guides/deployment/)** - Production deployment
-5. **[API Documentation](../reference/openapi.yaml)** - Complete API reference
+5. **[API Documentation](../reference/api/openapi.yaml)** - Complete API reference
 
 ## Quick Reference
 
@@ -856,5 +856,5 @@ Now that you understand configuration:
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-11-14
+**Version**: Compatible with v7.10.0+
+**Last Updated**: 2025-12-05

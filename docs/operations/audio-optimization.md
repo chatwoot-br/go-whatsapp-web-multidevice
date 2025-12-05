@@ -187,3 +187,8 @@ ls -la input.wav output.m4a
 ## Conclusion
 
 The automatic audio format optimization feature significantly improves WhatsApp audio message delivery by converting files to the most compatible format while maintaining high quality and reducing file sizes. The implementation is backward-compatible and gracefully handles edge cases where conversion is not possible.
+
+---
+
+**Version**: Compatible with v7.10.1+
+**Last Updated**: 2025-12-05

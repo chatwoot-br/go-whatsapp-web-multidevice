@@ -498,7 +498,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 
 #### PostgreSQL Configuration
 
-Edit `/etc/postgresql/14/main/postgresql.conf`:
+Edit PostgreSQL configuration file (e.g., `/etc/postgresql/16/main/postgresql.conf`):
 
 ```conf
 # Listen only on localhost (if app is on same server)
@@ -506,8 +506,8 @@ listen_addresses = 'localhost'
 
 # Enable SSL
 ssl = on
-ssl_cert_file = '/etc/postgresql/14/main/server.crt'
-ssl_key_file = '/etc/postgresql/14/main/server.key'
+ssl_cert_file = '/etc/postgresql/16/main/server.crt'
+ssl_key_file = '/etc/postgresql/16/main/server.key'
 
 # Password encryption
 password_encryption = scram-sha-256
@@ -1207,5 +1207,5 @@ sudo grep ' 401 ' /var/log/nginx/whatsapp_access.log | tail -n 100
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-11-14
+**Version**: Compatible with v7.10.1+
+**Last Updated**: 2025-12-05

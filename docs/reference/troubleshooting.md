@@ -1514,7 +1514,7 @@ panic: unsupported payload type: *store.PrivacyToken
 **Solution:**
 ```bash
 # Update to latest version
-# Check current version
+# Check current version (should be v7.10.1 or later)
 ./whatsapp --version
 
 # Download latest release
@@ -1958,7 +1958,7 @@ Brief description of the problem
 ## Environment
 - OS: Ubuntu 22.04
 - Installation Method: Docker / Binary / Source
-- Application Version: v7.7.1
+- Application Version: v7.10.1
 - Go Version (if applicable): 1.24.0
 - Docker Version (if applicable): 24.0.0
 
@@ -2006,5 +2006,5 @@ Any other relevant information
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-11-14
+**Version**: Compatible with v7.10.1+
+**Last Updated**: 2025-12-05

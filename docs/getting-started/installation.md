@@ -449,7 +449,7 @@ GOOS=windows GOARCH=amd64 go build -o whatsapp-windows-amd64.exe
 #### Build with Version Information
 
 ```bash
-VERSION=v7.8.3
+VERSION=v7.10.1
 BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 GIT_COMMIT=$(git rev-parse --short HEAD)
 
@@ -844,9 +844,9 @@ After successful installation:
 
 - **[GitHub Releases](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases)** - Download binaries
 - **[Docker Hub](https://ghcr.io/chatwoot-br/go-whatsapp-web-multidevice)** - Docker images
-- **[API Documentation](../reference/openapi.yaml)** - REST API reference
+- **[API Documentation](../reference/api/openapi.yaml)** - REST API reference
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-11-14
+**Version**: Compatible with v7.10.0+
+**Last Updated**: 2025-12-05

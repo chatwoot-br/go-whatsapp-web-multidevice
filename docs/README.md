@@ -73,6 +73,8 @@ Troubleshooting and lessons learned:
 - **[Troubleshooting Guide](reference/troubleshooting.md)** - Common issues and solutions
 - **[Postmortem: Profile Picture Panic](postmortems/001-profile-picture-panic.md)** - Service crash analysis
 - **[Postmortem: Encryption Failure](postmortems/002-multidevice-encryption.md)** - Multi-device issues
+- **[Postmortem: Auto-Reconnect Panic](postmortems/003-auto-reconnect-panic.md)** - Reconnection crash
+- **[Postmortem: Media Filename Issue](postmortems/004-media-filename-mime-pollution.md)** - MIME type pollution
 
 ---
 
@@ -128,9 +130,15 @@ docs/
 │   ├── security-best-practices.md
 │   └── audio-optimization.md
 │
-└── postmortems/         📝 Lessons learned
-    ├── 001-profile-picture-panic.md
-    └── 002-multidevice-encryption.md
+├── postmortems/         📝 Lessons learned
+│   ├── 001-profile-picture-panic.md
+│   ├── 002-multidevice-encryption.md
+│   ├── 003-auto-reconnect-panic.md
+│   ├── 004-media-filename-mime-pollution.md
+│   └── lessons-learned.md
+│
+└── plans/               📋 Implementation plans
+    └── 0001-fix-code-review-issues.md
 ```
 
 ## Common Tasks
@@ -299,7 +307,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Version
 
-Current version: v7.8.3
+Current version: v7.10.1
 
 See [CHANGELOG](../CHANGELOG.md) for version history.
 

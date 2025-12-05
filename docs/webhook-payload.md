@@ -338,9 +338,9 @@ Triggered when users are demoted from admin.
     "quoted_message": ""
   },
   "audio": {
-    "media_path": "statics/media/1752404905-b9393cd1-8546-4df9-8a60-ee3276036aba.m4v",
+    "media_path": "statics/media/1752404905-b9393cd1-8546-4df9-8a60-ee3276036aba.ogg",
     "mime_type": "audio/ogg",
-    "caption": "okk"
+    "caption": ""
   }
 }
 ```
@@ -361,9 +361,9 @@ Triggered when users are demoted from admin.
     "quoted_message": ""
   },
   "document": {
-    "media_path": "statics/media/1752404965-b9393cd1-8546-4df9-8a60-ee3276036aba.m4v",
+    "media_path": "statics/media/1752404965-b9393cd1-8546-4df9-8a60-ee3276036aba.pdf",
     "mime_type": "application/pdf",
-    "caption": "okk"
+    "caption": "Monthly report"
   }
 }
 ```
@@ -430,7 +430,7 @@ Triggered when users are demoted from admin.
 {
   "sender_id": "628123456789",
   "chat_id": "628987654321",
-  "from": "John Doe",
+  "from": "628123456789@s.whatsapp.net",
   "timestamp": "2023-10-15T11:15:00Z",
   "pushname": "John Doe",
   "message": {
@@ -540,7 +540,7 @@ When a message is edited, the webhook includes the original message ID to track 
 {
   "sender_id": "628123456789",
   "chat_id": "628987654321",
-  "from": "John Doe",
+  "from": "628123456789@s.whatsapp.net",
   "timestamp": "2023-10-15T11:40:00Z",
   "pushname": "John Doe",
   "message": {
@@ -550,9 +550,9 @@ When a message is edited, the webhook includes the original message ID to track 
     "quoted_message": ""
   },
   "image": {
-    "media_path": "statics/media/1752405060-b9393cd1-8546-4df9-8a60-ee3276036aba.m4v",
+    "media_path": "statics/media/1752405060-b9393cd1-8546-4df9-8a60-ee3276036aba.jpg",
     "mime_type": "image/jpeg",
-    "caption": "okk"
+    "caption": "View once image"
   },
   "view_once": true
 }
@@ -564,7 +564,7 @@ When a message is edited, the webhook includes the original message ID to track 
 {
   "sender_id": "628123456789",
   "chat_id": "628987654321",
-  "from": "John Doe",
+  "from": "628123456789@s.whatsapp.net",
   "timestamp": "2023-10-15T11:45:00Z",
   "pushname": "John Doe",
   "message": {

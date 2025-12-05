@@ -287,6 +287,7 @@ docker run --rm -v $(pwd):/app -w /app golang:1.24-alpine3.20 \
 
 ---
 
-**Last Updated**: 2025-10-30
+**Last Updated**: 2025-12-05
 **Purpose**: Capture learnings from issues that don't warrant full postmortems
 **Audience**: Developers, operators, integrators
+**Current Version**: v7.10.1

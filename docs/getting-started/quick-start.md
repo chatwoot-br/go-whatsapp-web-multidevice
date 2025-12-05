@@ -259,8 +259,8 @@ Now that you have the basic setup working, explore these guides:
 1. **[Configuration Basics](configuration-basics.md)** - Learn essential configuration options
 2. **[First Message Guide](first-message.md)** - Detailed guide for sending different message types
 3. **[Installation Guide](installation.md)** - Complete installation options and deployment
-4. **[API Documentation](../reference/openapi.yaml)** - Full REST API reference
-5. **[Webhook Integration](../webhook-payload.md)** - Receive WhatsApp events
+4. **[API Documentation](../reference/api/openapi.yaml)** - Full REST API reference
+5. **[Webhook Integration](../guides/webhooks/setup.md)** - Receive WhatsApp events
 
 ## Basic Configuration
 
@@ -443,10 +443,10 @@ docker exec -it whatsapp /bin/sh
 
 - **GitHub Repository**: [go-whatsapp-web-multidevice](https://github.com/chatwoot-br/go-whatsapp-web-multidevice)
 - **Issues**: [GitHub Issues](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/issues)
-- **API Documentation**: [OpenAPI Specification](../reference/openapi.yaml)
-- **Webhook Guide**: [Webhook Payload Documentation](../webhook-payload.md)
+- **API Documentation**: [OpenAPI Specification](../reference/api/openapi.yaml)
+- **Webhook Guide**: [Webhook Documentation](../guides/webhooks/setup.md)
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-11-14
+**Version**: Compatible with v7.10.0+
+**Last Updated**: 2025-12-05

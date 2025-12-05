@@ -1082,5 +1082,5 @@ See `charts/gowa/README.md` for complete Helm chart documentation.
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-11-14
+**Version**: Compatible with v7.10.1+
+**Last Updated**: 2025-12-05

@@ -41,3 +41,8 @@ Resources for deploying, monitoring, and maintaining production systems.
 - **[Deployment Guides](../guides/deployment/)** - Deployment methods
 - **[Configuration Reference](../reference/configuration.md)** - All configuration options
 - **[Troubleshooting](../reference/troubleshooting.md)** - Common issues
+
+---
+
+**Version**: Compatible with v7.10.1+
+**Last Updated**: 2025-12-05

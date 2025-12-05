@@ -535,7 +535,7 @@ Use webhooks to receive message status updates:
 }
 ```
 
-See [Webhook Documentation](../webhook-payload.md) for complete details.
+See [Webhook Documentation](../guides/webhooks/setup.md) for complete details.
 
 ### Query Message History
 
@@ -766,8 +766,8 @@ curl http://localhost:3000/user/my/groups
 Now that you can send messages, explore:
 
 1. **[Configuration Basics](configuration-basics.md)** - Advanced configuration options
-2. **[Webhook Integration](../webhook-payload.md)** - Receive WhatsApp events
-3. **[API Documentation](../reference/openapi.yaml)** - Complete API reference
+2. **[Webhook Integration](../guides/webhooks/setup.md)** - Receive WhatsApp events
+3. **[API Documentation](../reference/api/openapi.yaml)** - Complete API reference
 4. **[Group Management](../guides/)** - Create and manage groups
 5. **[Chat History](../guides/)** - Query chat messages and history
 
@@ -823,5 +823,5 @@ Where:
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-11-14
+**Version**: Compatible with v7.10.0+
+**Last Updated**: 2025-12-05

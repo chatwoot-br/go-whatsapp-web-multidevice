@@ -9,7 +9,7 @@ Lessons learned from critical issues and their resolutions.
 1. **[Profile Picture Panic](001-profile-picture-panic.md)** - Service crash on profile picture fetch
    - **Date**: 2025-10-07
    - **Severity**: Critical
-   - **Status**: Resolved (library update)
+   - **Status**: Resolved (v7.7.1+)
    - **Impact**: Complete service crash, potential message loss
    - **Root Cause**: Unsupported `*store.PrivacyToken` payload in whatsmeow library
    - **Resolution**: Updated whatsmeow to v0.0.0-20251005083110-4fe97da162dc
@@ -17,7 +17,7 @@ Lessons learned from critical issues and their resolutions.
 2. **[Auto-Reconnect Panic](003-auto-reconnect-panic.md)** - Nil pointer dereference in auto-reconnect goroutine
    - **Date**: 2025-10-30
    - **Severity**: Critical
-   - **Status**: Resolved (architecture fix)
+   - **Status**: Resolved (v7.8.0+)
    - **Impact**: Predictable crash 5 minutes after startup
    - **Root Cause**: Goroutine held stale client reference with nil Store
    - **Resolution**: Changed to use global client pattern with nil checks
@@ -27,17 +27,17 @@ Lessons learned from critical issues and their resolutions.
 3. **[Multi-Device Encryption Failure](002-multidevice-encryption.md)** - Messages not reaching recipient's main phone
    - **Date**: 2025-10-30
    - **Severity**: Medium-High
-   - **Status**: Fix Available (library update required)
+   - **Status**: Resolved (v7.8.0+)
    - **Impact**: Messages only reached linked devices, not main phone (Device 0)
    - **Root Cause**: Device cache not invalidated on participant hash mismatch, LID migration complexity
-   - **Resolution**: Update to whatsmeow with Oct 28, 2025 fix
+   - **Resolution**: Updated whatsmeow library with Oct 28, 2025 fix
 
 ### Media Handling Issues
 
 4. **[Media Filename MIME Pollution](004-media-filename-mime-pollution.md)** - Media files inaccessible due to MIME parameters in filenames
    - **Date**: 2025-10-30
    - **Severity**: High
-   - **Status**: Resolved (code fix + Alpine enhancement)
+   - **Status**: Resolved (v7.8.0+)
    - **Impact**: Audio files saved with semicolons in filenames, causing 404 errors
    - **Root Cause**: MIME parameters not stripped, Alpine lacks MIME database
    - **Resolution**: Strip parameters before processing + added mailcap to Alpine
@@ -122,6 +122,7 @@ Original issue documents have been archived from `docs/issues/` after conversion
 
 ---
 
-**Last Updated**: 2025-11-14
+**Last Updated**: 2025-12-05
 **Maintained By**: Development Team
 **Purpose**: Document production issues and learnings
+**Current Version**: v7.10.1

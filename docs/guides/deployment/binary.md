@@ -26,7 +26,7 @@ This guide covers deploying the WhatsApp Web API Multidevice application using p
 - **FFmpeg**: Required for media compression (video/image processing)
 - **PostgreSQL**: For production database (SQLite is default)
 - **Reverse Proxy**: For HTTPS and production deployment (nginx, Caddy, Traefik)
-- **Go**: Version 1.21 or higher (only for building from source)
+- **Go**: Version 1.22 or higher (only for building from source)
 
 ### Installing FFmpeg
 
@@ -95,7 +95,7 @@ mv whatsapp-darwin-arm64 whatsapp
 ### Method 2: Build from Source
 
 **Prerequisites for building:**
-- Go 1.21 or higher
+- Go 1.22 or higher
 - Git
 
 **Build steps:**
@@ -127,7 +127,7 @@ GOOS=windows GOARCH=amd64 go build -o whatsapp.exe
 
 ```bash
 # Build with version info and optimizations
-go build -ldflags="-s -w -X main.Version=v7.8.3" -o whatsapp
+go build -ldflags="-s -w -X main.Version=v7.10.1" -o whatsapp
 ```
 
 ## Initial Setup
@@ -878,5 +878,5 @@ sudo systemctl start whatsapp
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-10-05
+**Version**: Compatible with v7.10.1+
+**Last Updated**: 2025-12-05

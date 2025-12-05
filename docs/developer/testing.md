@@ -1041,7 +1041,7 @@ The project uses GitHub Actions for CI/CD. Current workflows:
 #### 1. Docker Image Build (.github/workflows/build-docker-image.yaml)
 
 Triggered on:
-- Git tags matching `v[0-9]+.[0-9]+.[0-9]+` (e.g., v7.8.3)
+- Git tags matching `v[0-9]+.[0-9]+.[0-9]+` (e.g., v7.10.1)
 - Manual workflow dispatch
 
 What it does:

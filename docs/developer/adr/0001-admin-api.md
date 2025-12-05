@@ -177,10 +177,32 @@ Add subcommand `whatsapp admin` (or embed in main), default bind `:8088`.
    - `conf.go` (atomic writer/remover of `.conf`; directory bootstrap)
    - `api.go` (HTTP handlers `POST/GET/DELETE`, bearer auth, JSON errors)
    - `lifecycle.go` (Create/Delete orchestrations calling Supervisor, prefer `Update()`)
+   - `security.go` (credential validation, security warnings)
+   - `metrics.go` (Prometheus metrics for instances and API requests)
+   - `audit.go` (JSON audit logging for create/delete operations)
 3. Add subcommand `whatsapp admin` (bind `:8088`).
 4. Enforce `ADMIN_TOKEN` in prod; refuse to start unless explicitly allowed in dev.
 5. Tests: unit (mocks), integration (container with Supervisord), idempotency & concurrency.
 6. Docs: README examples (curl), sample `supervisord.conf`, container notes.
+
+## Implementation Status
+
+**Status**: Implemented in v7.10.0+
+
+The Admin API has been fully implemented with the following components:
+- `src/internal/admin/client.go` - Supervisor client with Unix socket and HTTP support
+- `src/internal/admin/conf.go` - Configuration writer with atomic writes and directory management
+- `src/internal/admin/api.go` - HTTP handlers with bearer token authentication
+- `src/internal/admin/lifecycle.go` - Instance lifecycle management (create, start, stop, delete)
+- `src/internal/admin/security.go` - Credential validation and security warnings
+- `src/internal/admin/metrics.go` - Prometheus metrics collection
+- `src/internal/admin/audit.go` - JSON audit logging
+- `src/cmd/admin.go` - CLI subcommand registration
+
+Test coverage includes:
+- `*_test.go` - Unit tests with mocks
+- `integration_test.go` - Integration tests with real file system
+- `e2e_api_test.go` - End-to-end API tests
 
 ---
 

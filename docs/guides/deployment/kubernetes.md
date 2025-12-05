@@ -358,7 +358,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
-  tag: "v7.8.3"
+  tag: "v7.10.1"
   pullPolicy: IfNotPresent
 
 service:
@@ -865,5 +865,5 @@ kubectl rollout restart deployment/whatsapp-api -n whatsapp
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-10-05
+**Version**: Compatible with v7.10.1+
+**Last Updated**: 2025-12-05

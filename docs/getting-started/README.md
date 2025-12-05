@@ -43,7 +43,7 @@ Essential configuration options including security, webhooks, and database setup
 ### For Developers
 1. [Quick Start](quick-start.md) - Basic setup
 2. [First Message](first-message.md) - API usage
-3. [API Documentation](../openapi.yaml) - Complete API reference
+3. [API Documentation](../reference/api/openapi.yaml) - Complete API reference
 
 ## Prerequisites
 
@@ -75,8 +75,8 @@ Essential configuration options including security, webhooks, and database setup
 
 After completing these guides:
 
-1. [API Documentation](../openapi.yaml) - Complete API reference
-2. [Webhook Integration](../webhook-payload.md) - Receive WhatsApp events
+1. [API Documentation](../reference/api/openapi.yaml) - Complete API reference
+2. [Webhook Integration](../guides/webhooks/setup.md) - Receive WhatsApp events
 3. [Deployment Guide](../guides/deployment/) - Production deployment options
 4. [Advanced Features](../guides/) - Group management, advanced usage
 
@@ -88,5 +88,5 @@ After completing these guides:
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-11-14
+**Version**: Compatible with v7.10.0+
+**Last Updated**: 2025-12-05

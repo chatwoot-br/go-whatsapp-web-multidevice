@@ -332,8 +332,8 @@ Links to related docs...
 
 ---
 
-**Last Updated**: 2025-01-14
-**Version Compatibility**: v7.8.0+
+**Last Updated**: 2025-12-05
+**Version Compatibility**: v7.10.0+
 ```
 
 ### Writing Style
@@ -573,7 +573,7 @@ In `docs/reference/configuration.md`:
 
 1. **Mark as deprecated** in documentation
    ```markdown
-   > **Deprecated**: This feature is deprecated as of v7.9.0.
+   > **Deprecated**: This feature is deprecated as of v7.10.0.
    > Use [new-feature](new-feature.md) instead.
    ```
 
@@ -867,6 +867,6 @@ Please open a PR to update `docs/developer/documentation-guide.md`.
 
 ---
 
-**Last Updated**: 2025-01-14
+**Last Updated**: 2025-12-05
 **Maintained By**: Development Team
-**Version**: 1.0.0
+**Version**: 1.1.0

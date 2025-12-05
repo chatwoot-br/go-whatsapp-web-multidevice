@@ -161,7 +161,7 @@ APP_DEBUG=true ./whatsapp rest
 Application uses structured logging with logrus:
 
 ```
-INFO[2025-01-14T10:30:00Z] Message sent successfully  phone=6281234567890 type=text
+INFO[2025-12-05T10:30:00Z] Message sent successfully  phone=6281234567890 type=text
 ```
 
 ### Collecting Logs
@@ -196,7 +196,7 @@ services:
         max-file: "3"
 
   filebeat:
-    image: docker.elastic.co/beats/filebeat:8.0.0
+    image: docker.elastic.co/beats/filebeat:8.15.0
     volumes:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
@@ -435,3 +435,8 @@ This document is incomplete. Contributions are welcome:
 - Share production monitoring experience
 
 See [Contributing Guide](../developer/contributing.md) for details.
+
+---
+
+**Version**: Compatible with v7.10.1+
+**Last Updated**: 2025-12-05

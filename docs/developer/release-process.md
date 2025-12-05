@@ -29,7 +29,7 @@ When releasing a new version, you must update these files:
 
 ```go
 var (
-    AppVersion = "v7.7.1"  // Update this line
+    AppVersion = "v7.10.2"  // Update this line
     // ... rest of config
 )
 ```
@@ -40,10 +40,10 @@ var (
 
 ```yaml
 # Increment chart version (matches app version, without 'v' prefix)
-version: 7.7.1
+version: 7.10.2
 
 # Increment app version (with 'v' prefix)
-appVersion: "v7.7.1"
+appVersion: "v7.10.2"
 ```
 
 **Locations**: Lines 18 and 24
@@ -53,7 +53,7 @@ appVersion: "v7.7.1"
 Add a new section at the top following the format:
 
 ```markdown
-## [v7.7.1] - 2025-10-07
+## [v7.10.2] - 2025-12-05
 
 ### Fixed
 - Brief description of bug fix
@@ -94,11 +94,11 @@ git log $(git describe --tags --abbrev=0)..HEAD --oneline
 
 ```bash
 # Update src/config/settings.go
-# Change line 8: AppVersion = "v7.7.1"
+# Change line 8: AppVersion = "v7.10.2"
 
 # Update charts/gowa/Chart.yaml
-# Change line 18: version: 7.7.1
-# Change line 24: appVersion: "v7.7.1"
+# Change line 18: version: 7.10.2
+# Change line 24: appVersion: "v7.10.2"
 
 # Update CHANGELOG.md
 # Add new version section at the top
@@ -111,18 +111,18 @@ git log $(git describe --tags --abbrev=0)..HEAD --oneline
 git add src/config/settings.go charts/gowa/Chart.yaml CHANGELOG.md
 
 # Commit with conventional commit message
-git commit -m "chore: bump version to v7.7.1"
+git commit -m "chore: bump version to v7.10.2"
 ```
 
 #### 4. Create and Push Git Tag
 
 ```bash
 # Create annotated tag
-git tag -a v7.7.1 -m "Release v7.7.1"
+git tag -a v7.10.2 -m "Release v7.10.2"
 
 # Push commits and tags
 git push origin main
-git push origin v7.7.1
+git push origin v7.10.2
 ```
 
 #### 5. Verify Automated Builds
@@ -132,7 +132,7 @@ After pushing the tag, GitHub Actions will automatically:
 1. **Build Docker Images** (`.github/workflows/build-docker-image.yaml`):
    - Monitor: https://github.com/chatwoot-br/go-whatsapp-web-multidevice/actions
    - Creates AMD64 and ARM64 images
-   - Pushes to `ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.7.1`
+   - Pushes to `ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.10.2`
    - Updates `latest` tag
 
 2. **Release Helm Chart** (`.github/workflows/chart-releaser.yaml`):
@@ -146,10 +146,10 @@ Wait for both workflows to complete successfully (green checkmarks).
 
 ```bash
 # Check Docker image
-docker pull ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.7.1
+docker pull ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.10.2
 
 # Verify version
-docker run --rm ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.7.1 rest --version
+docker run --rm ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.10.2 rest --version
 
 # Check GitHub release
 # Visit: https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases
@@ -171,10 +171,10 @@ Visit the GitHub release page and enhance the auto-generated release notes:
 ```bash
 # One-command release (after updating files)
 git add src/config/settings.go charts/gowa/Chart.yaml CHANGELOG.md && \
-git commit -m "chore: bump version to v7.7.1" && \
-git tag -a v7.7.1 -m "Release v7.7.1" && \
+git commit -m "chore: bump version to v7.10.2" && \
+git tag -a v7.10.2 -m "Release v7.10.2" && \
 git push origin main && \
-git push origin v7.7.1
+git push origin v7.10.2
 ```
 
 ## Automated Release Script
@@ -186,7 +186,7 @@ For convenience, use the release script (if available):
 chmod +x scripts/release.sh
 
 # Run release script
-./scripts/release.sh v7.7.1
+./scripts/release.sh v7.10.2
 ```
 
 ## Troubleshooting
@@ -203,16 +203,16 @@ If GitHub Actions workflows fail:
 3. **Fix and retry**:
    ```bash
    # Delete the tag locally and remotely
-   git tag -d v7.7.1
-   git push origin :refs/tags/v7.7.1
+   git tag -d v7.10.2
+   git push origin :refs/tags/v7.10.2
 
    # Fix the issue
    # Commit the fix
 
    # Recreate the tag
-   git tag -a v7.7.1 -m "Release v7.7.1"
+   git tag -a v7.10.2 -m "Release v7.10.2"
    git push origin main
-   git push origin v7.7.1
+   git push origin v7.10.2
    ```
 
 ### Version Mismatch
@@ -221,7 +221,7 @@ If version numbers don't match across files:
 
 ```bash
 # Search for version references
-grep -r "v7.7.0" src/config/settings.go charts/gowa/Chart.yaml
+grep -r "v7.10.1" src/config/settings.go charts/gowa/Chart.yaml
 
 # Ensure consistency
 # All three locations must have the same version number
@@ -261,8 +261,8 @@ If you need to rollback a release:
 
 ```bash
 # Delete the tag
-git tag -d v7.7.1
-git push origin :refs/tags/v7.7.1
+git tag -d v7.10.2
+git push origin :refs/tags/v7.10.2
 
 # Delete the GitHub release
 # Visit: https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases
@@ -281,20 +281,20 @@ For urgent fixes that need immediate release:
 
 1. **Create hotfix from latest tag**:
    ```bash
-   git checkout -b hotfix/v7.7.1 v7.7.0
+   git checkout -b hotfix/v7.10.2 v7.10.1
    ```
 
 2. **Make the fix and commit**
 
 3. **Follow normal release process**:
-   - Update version to v7.7.1 (patch bump)
+   - Update version to v7.10.2 (patch bump)
    - Update CHANGELOG.md
    - Commit, tag, and push
 
 4. **Merge back to main**:
    ```bash
    git checkout main
-   git merge hotfix/v7.7.1
+   git merge hotfix/v7.10.2
    git push origin main
    ```
 
@@ -315,6 +315,6 @@ Recommended release schedule:
 
 ---
 
-**Last Updated**: 2025-10-07
-**Current Version**: v7.7.0
-**Next Version**: v7.7.1
+**Last Updated**: 2025-12-05
+**Current Version**: v7.10.1
+**Next Version**: v7.10.2

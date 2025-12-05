@@ -213,9 +213,10 @@ ffmpeg -threads 0 -i input.mp4 output.mp4
 Configure appropriate limits:
 
 ```bash
-WHATSAPP_MAX_FILE_SIZE_IMAGE=20971520    # 20MB
-WHATSAPP_MAX_FILE_SIZE_VIDEO=104857600   # 100MB
-WHATSAPP_MAX_FILE_SIZE_DOCUMENT=52428800 # 50MB
+WHATSAPP_SETTING_MAX_IMAGE_SIZE=20971520    # 20MB
+WHATSAPP_SETTING_MAX_FILE_SIZE=52428800     # 50MB
+WHATSAPP_SETTING_MAX_VIDEO_SIZE=104857600   # 100MB
+WHATSAPP_SETTING_MAX_AUDIO_SIZE=16777216    # 16MB (WhatsApp limit)
 ```
 
 ### Media Cleanup
@@ -735,3 +736,8 @@ See [Contributing Guide](../developer/contributing.md) for details.
 - [Go Profiling](https://golang.org/doc/diagnostics.html) - Official profiling docs
 - [FFmpeg Optimization](https://trac.ffmpeg.org/wiki/Encode/HighQualityAudio) - FFmpeg guides
 - [PostgreSQL Performance](https://wiki.postgresql.org/wiki/Performance_Optimization) - PostgreSQL tuning
+
+---
+
+**Version**: Compatible with v7.10.1+
+**Last Updated**: 2025-12-05

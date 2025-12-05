@@ -61,7 +61,7 @@ docker pull ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:latest
 
 Available tags:
 - `latest` - Latest stable release
-- `v7.8.3` - Specific version tag
+- `v7.10.1` - Specific version tag
 - `main` - Latest development build
 
 ### Method 2: Build from Source
@@ -92,7 +92,7 @@ For an end-to-end "prod-like" sample environment that runs Chatwoot together wit
 
 - Chatwoot (Rails + Sidekiq) using `ghcr.io/chatwoot-br/chatwoot:v4.7.1`
 - Postgres + Redis + Mailhog for Chatwoot
-- GOWA Admin API using `ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.8.3`
+- GOWA Admin API using `ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.10.1`
 - Supervisord inside the `gowa-admin` container, managing instances on ports `3002-3010`
 
 From the repository root:
@@ -533,7 +533,7 @@ docker run --rm curlimages/curl:latest \
 echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 
 # Pull specific version
-docker pull ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.8.3
+docker pull ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.10.1
 
 # Check image exists
 docker images | grep whatsapp
@@ -684,5 +684,5 @@ Schedule with cron:
 
 ---
 
-**Version**: Compatible with v7.7.0+
-**Last Updated**: 2025-10-05
+**Version**: Compatible with v7.10.1+
+**Last Updated**: 2025-12-05

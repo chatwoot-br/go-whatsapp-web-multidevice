@@ -43,7 +43,7 @@ The Model Context Protocol (MCP) allows AI agents and tools to interact with Wha
 
 ### Prerequisites
 
-- Go 1.21 or later
+- Go 1.22 or later
 - FFmpeg (for media processing)
 - WhatsApp account with multi-device support
 
@@ -510,7 +510,7 @@ server {
 ### Docker
 
 ```dockerfile
-FROM golang:1.21-alpine
+FROM golang:1.22-alpine
 
 WORKDIR /app
 COPY src/ .
