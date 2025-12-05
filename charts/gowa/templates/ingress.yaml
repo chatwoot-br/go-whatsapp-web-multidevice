@@ -37,7 +37,7 @@ spec:
               service:
                 name: {{ include "gowa.fullname" $ }}
                 port:
-                  number: 8088
+                  name: admin-api
           {{- end }}
           {{- if $.Values.swaggerUI.enabled }}
           - path: /swagger
@@ -46,7 +46,7 @@ spec:
               service:
                 name: {{ include "gowa.fullname" $ }}
                 port:
-                  number: 8080
+                  name: swagger-ui
           {{- end }}
     {{- end }}
 {{- end }}

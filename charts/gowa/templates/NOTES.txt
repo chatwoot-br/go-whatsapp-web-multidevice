@@ -1,4 +1,19 @@
-1. Get the application URL by running these commands:
+🚀 GOWA - Go WhatsApp Admin API has been deployed!
+
+Chart Version: {{ .Chart.Version }}
+App Version: {{ .Chart.AppVersion }}
+
+{{- if not .Values.admin.supervisor.password }}
+
+⚠️  SECURITY WARNING: Supervisor credentials are using defaults!
+    Set secure credentials for production:
+
+    helm upgrade {{ .Release.Name }} ./charts/gowa \
+      --set admin.supervisor.password="your-secure-password"
+
+{{- end }}
+
+1. Get the application URL:
 {{- if .Values.ingress.enabled }}
 {{- range $host := .Values.ingress.hosts }}
   {{- range .paths }}
@@ -8,15 +23,28 @@
 {{- else if contains "NodePort" .Values.service.type }}
   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "gowa.fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
-  echo http://$NODE_IP:$NODE_PORT
+  echo "Admin API: http://$NODE_IP:$NODE_PORT"
 {{- else if contains "LoadBalancer" .Values.service.type }}
-     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-           You can watch its status by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "gowa.fullname" . }}'
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        Watch status: kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "gowa.fullname" . }}
+
   export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "gowa.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
-  echo http://$SERVICE_IP:{{ .Values.service.port }}
+  echo "Admin API: http://$SERVICE_IP:{{ .Values.admin.port }}"
 {{- else if contains "ClusterIP" .Values.service.type }}
-  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "gowa.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
-  export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
-  echo "Visit http://127.0.0.1:8080 to use your application"
-  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "gowa.fullname" . }} {{ .Values.admin.port }}:{{ .Values.admin.port }}
+  echo "Admin API: http://127.0.0.1:{{ .Values.admin.port }}"
+  {{- if .Values.swaggerUI.enabled }}
+  echo "Swagger UI: http://127.0.0.1:{{ .Values.swaggerUI.port }}"
+  {{- end }}
 {{- end }}
+
+2. Verify deployment health:
+  kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  curl http://127.0.0.1:{{ .Values.admin.port }}/healthz
+  curl http://127.0.0.1:{{ .Values.admin.port }}/readyz
+
+3. View logs:
+  kubectl logs -l app.kubernetes.io/instance={{ .Release.Name }} -c {{ .Chart.Name }} -f
+  kubectl logs -l app.kubernetes.io/instance={{ .Release.Name }} -c supervisord -f
+
+📚 Documentation: https://github.com/chatwoot-br/go-whatsapp-web-multidevice/tree/main/docs

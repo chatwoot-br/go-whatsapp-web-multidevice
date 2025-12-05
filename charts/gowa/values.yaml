@@ -38,24 +38,23 @@ podAnnotations: {}
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
 
+# Pod security context - runs as non-root for security
+# Note: The application requires write access to certain directories
 podSecurityContext:
-  runAsNonRoot: false
-  runAsUser: 0
-  runAsGroup: 0
-  fsGroup: 0
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
 
+# Container security context
 securityContext:
   allowPrivilegeEscalation: false
   capabilities:
     drop:
     - ALL
-    add:
-    - CHOWN
-    - DAC_OVERRIDE
-    - FOWNER
   readOnlyRootFilesystem: false
-  runAsNonRoot: false
-  runAsUser: 0
+  runAsNonRoot: true
+  runAsUser: 1000
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
@@ -186,25 +185,16 @@ autoscaling:
   # targetMemoryUtilizationPercentage: 80
 
 # Additional volumes on the output Deployment definition.
-volumes: 
+# Uses a single PVC (shared-data) with subPaths for isolation
+volumes:
   - name: supervisor-config
     configMap:
-      name: "supervisor-config"
-      defaultMode: 0755
-  - name: supervisor-conf-dir
+      name: "{{ .Release.Name }}-supervisor-config"
+      defaultMode: 0644
+  - name: shared-data
     persistentVolumeClaim:
-      claimName: "supervisor-conf-pvc"
-  - name: instances-data
-    persistentVolumeClaim:
-      claimName: "instances-pvc"
-  - name: supervisor-logs
-    persistentVolumeClaim:
-      claimName: "supervisor-logs-pvc"
+      claimName: "{{ .Release.Name }}-data"
   - name: supervisor-run
-    emptyDir: {}
-  - name: app-statics
-    emptyDir: {}
-  - name: app-storages
     emptyDir: {}
   - name: app-temp
     emptyDir: {}
@@ -245,42 +235,36 @@ affinity: {}
 admin:
   # Port for the admin API server
   port: 8088
-  
-  # Admin token for API authentication (should be set via secret in production)
-  # If token is set, it will create a secret. Otherwise, use existingSecret
+
+  # Admin token for API authentication
+  # SECURITY: Never commit actual tokens. Use existingSecret in production.
   token: ""
-  # existingSecret: "admin-secret"
-  # existingSecretKey: "admin-token"
-  
-  # Supervisor configuration
+  existingSecret: ""
+  existingSecretKey: "admin-token"
+
+  # Supervisor credentials
+  # SECURITY: These are stored in a Kubernetes Secret, not in configmap
   supervisor:
-    # URL for supervisor XML-RPC
-    url: "http://localhost:9001/RPC2"
-    # Supervisor username
-    username: "supervisor"
-    # Supervisor password
-    password: "supervisor"
-  
+    url: "http://127.0.0.1:9001/RPC2"
+    # Credentials stored in secret (supervisor-credentials)
+    username: "admin"
+    password: ""  # Set via --set or existingSecret
+    existingSecret: ""
+    existingSecretUsernameKey: "username"
+    existingSecretPasswordKey: "password"
+
   # Directory configuration
   directories:
-    # Supervisor configuration directory
     supervisorConfDir: "/etc/supervisor/conf.d"
-    # Instances data directory
     instancesDir: "/app/instances"
-    # Supervisor log directory
     supervisorLogDir: "/var/log/supervisor"
-    # Lock files directory
     lockDir: "/tmp"
 
 # Environment variables for the admin API
+# Note: Sensitive values (SUPERVISOR_USER, SUPERVISOR_PASS) are injected from secrets
 env:
-  # Supervisor configuration
   - name: SUPERVISOR_URL
     value: "http://127.0.0.1:9001/RPC2"
-  - name: SUPERVISOR_USER
-    value: "admin"
-  - name: SUPERVISOR_PASS
-    value: "admin123"
   - name: SUPERVISOR_CONF_DIR
     value: "/etc/supervisor/conf.d"
   - name: INSTANCES_DIR
@@ -289,15 +273,12 @@ env:
     value: "/var/log/supervisor"
   - name: LOCK_DIR
     value: "/tmp"
-  # Database configuration
   - name: DB_URI
     value: "file:/app/storages/whatsapp.db?_foreign_keys=on"
-  # App configuration  
   - name: APP_DEBUG
     value: "true"
   - name: WHATSAPP_CHAT_STORAGE
     value: "true"
-  # Admin API configuration
   - name: ADMIN_PORT
     value: "8088"
   - name: ADMIN_DEBUG
@@ -306,6 +287,24 @@ env:
     value: "16777216"
   - name: WHATSAPP_SETTING_AUTO_CONVERT_AUDIO
     value: "true"
+
+# Pod Disruption Budget for high availability
+# Ensures minimum availability during voluntary disruptions
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Network Policy for security isolation
+# Restricts network traffic to/from the pods
+networkPolicy:
+  enabled: false
+  # Allow ingress from these namespaces (by label)
+  ingressNamespaceSelector: {}
+  # Allow ingress from these pods (by label)
+  ingressPodSelector: {}
+  # Allow egress to these destinations
+  egressRules: []
 
 # Swagger UI sidecar configuration
 swaggerUI:

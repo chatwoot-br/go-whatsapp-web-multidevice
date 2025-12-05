@@ -6,6 +6,11 @@ metadata:
     {{- include "gowa.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
+  # Session affinity for stateful WhatsApp connections
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours
   ports:
     {{- range .Values.service.ports }}
     - name: {{ .name }}

@@ -5,27 +5,27 @@ metadata:
   labels:
     {{- include "gowa.labels" . | nindent 4 }}
 data:
-  supervisord.conf: |
+  # Template file - credentials are substituted at runtime from secrets
+  supervisord.conf.template: |
     [inet_http_server]
     port=0.0.0.0:9001
-    username=admin
-    password=admin123
+    username=${SUPERVISOR_USER}
+    password=${SUPERVISOR_PASS}
 
     [supervisord]
     logfile=/var/log/supervisor/supervisord.log
     pidfile=/var/run/supervisord.pid
     childlogdir=/var/log/supervisor
     nodaemon=true
-    user=root
-    loglevel=debug
+    loglevel=info
 
     [rpcinterface:supervisor]
     supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
 
     [supervisorctl]
     serverurl=http://127.0.0.1:9001
-    username=admin
-    password=admin123
+    username=${SUPERVISOR_USER}
+    password=${SUPERVISOR_PASS}
 
     [include]
     files = /etc/supervisor/conf.d/*.conf

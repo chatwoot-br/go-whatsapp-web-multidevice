@@ -1,0 +1,84 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "gowa.fullname" . }}
+  labels:
+    {{- include "gowa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "gowa.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: {{ .Values.admin.port }}
+        {{- if .Values.swaggerUI.enabled }}
+        - protocol: TCP
+          port: {{ .Values.swaggerUI.port }}
+        {{- end }}
+    # Allow traffic within the same namespace
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.admin.port }}
+        - protocol: TCP
+          port: 9001
+        {{- range $i := until 10 }}
+        - protocol: TCP
+          port: {{ add 3001 $i }}
+        {{- end }}
+    {{- if .Values.networkPolicy.ingressNamespaceSelector }}
+    # Allow traffic from specified namespaces
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.ingressNamespaceSelector | nindent 12 }}
+          {{- if .Values.networkPolicy.ingressPodSelector }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.ingressPodSelector | nindent 12 }}
+          {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.admin.port }}
+    {{- end }}
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow egress to WhatsApp servers (HTTPS)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 5222
+    # Allow internal cluster traffic
+    - to:
+        - podSelector: {}
+    {{- if .Values.networkPolicy.egressRules }}
+    {{- toYaml .Values.networkPolicy.egressRules | nindent 4 }}
+    {{- end }}
+{{- end }}
