@@ -38,6 +38,13 @@ func TestNewSupervisorClient(t *testing.T) {
 			},
 			expectError: false,
 		},
+		{
+			name: "Unix socket without auth",
+			config: &Config{
+				URL: "unix:///var/run/supervisor.sock",
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {

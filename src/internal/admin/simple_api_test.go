@@ -100,6 +100,68 @@ func TestAdminAPI_UpdateInstance(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
+
+	// Test 4: Update instance - invalid JSON
+	t.Run("update instance with invalid JSON", func(t *testing.T) {
+		app := fiber.New()
+		api.SetupRoutes(app)
+
+		req := httptest.NewRequest("PATCH", "/admin/instances/3001", bytes.NewReader([]byte("invalid json")))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer test-token")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	// Test 5: Update instance - port locked
+	t.Run("update instance with port locked", func(t *testing.T) {
+		mockLifecycle.On("UpdateInstanceConfig", mock.Anything, 3003, mock.Anything).Return(nil, fmt.Errorf("port locked by another operation")).Once()
+
+		app := fiber.New()
+		api.SetupRoutes(app)
+
+		reqBody := UpdateInstanceRequest{
+			Debug: new(bool),
+		}
+		*reqBody.Debug = true
+		bodyBytes, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest("PATCH", "/admin/instances/3003", bytes.NewReader(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer test-token")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusConflict, resp.StatusCode)
+
+		mockLifecycle.AssertExpectations(t)
+	})
+
+	// Test 6: Update instance - supervisor error
+	t.Run("update instance with supervisor error", func(t *testing.T) {
+		mockLifecycle.On("UpdateInstanceConfig", mock.Anything, 3004, mock.Anything).Return(nil, fmt.Errorf("connection refused")).Once()
+
+		app := fiber.New()
+		api.SetupRoutes(app)
+
+		reqBody := UpdateInstanceRequest{
+			Debug: new(bool),
+		}
+		*reqBody.Debug = true
+		bodyBytes, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest("PATCH", "/admin/instances/3004", bytes.NewReader(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer test-token")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+
+		mockLifecycle.AssertExpectations(t)
+	})
 }
 
 // Helper function to create string pointers

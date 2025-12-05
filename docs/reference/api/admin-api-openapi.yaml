@@ -519,84 +519,79 @@ components:
     AdminInstanceResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
+        data:
+          $ref: '#/components/schemas/AdminInstance'
         message:
           type: string
           example: "Instance retrieved successfully"
-        data:
-          $ref: '#/components/schemas/AdminInstance'
         request_id:
           type: string
           description: Unique request identifier
-          example: "req_12345"
+          example: "550e8400-e29b-41d4-a716-446655440000"
         timestamp:
           type: string
           format: date-time
-          description: Response timestamp
+          description: Response timestamp in RFC3339 format
           example: "2025-09-04T10:30:00Z"
 
     AdminInstanceListResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
-        message:
-          type: string
-          example: "Instances retrieved successfully"
         data:
           type: array
           items:
             $ref: '#/components/schemas/AdminInstance'
+        message:
+          type: string
+          example: "Instances retrieved successfully"
         request_id:
           type: string
           description: Unique request identifier
-          example: "req_12345"
+          example: "550e8400-e29b-41d4-a716-446655440000"
         timestamp:
           type: string
           format: date-time
-          description: Response timestamp
+          description: Response timestamp in RFC3339 format
           example: "2025-09-04T10:30:00Z"
 
     AdminSuccessResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
+        data:
+          description: Optional response data (may be null for delete operations)
+          nullable: true
         message:
           type: string
           example: "Operation completed successfully"
         request_id:
           type: string
           description: Unique request identifier
-          example: "req_12345"
+          example: "550e8400-e29b-41d4-a716-446655440000"
         timestamp:
           type: string
           format: date-time
-          description: Response timestamp
+          description: Response timestamp in RFC3339 format
           example: "2025-09-04T10:30:00Z"
 
     AdminErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: false
         error:
           type: string
-          description: Error message
-          example: "Instance not found"
+          description: Error code
+          example: "instance_not_found"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Instance on port 3001 not found"
         request_id:
           type: string
           description: Unique request identifier
-          example: "req_12345"
+          example: "550e8400-e29b-41d4-a716-446655440000"
         timestamp:
           type: string
           format: date-time
-          description: Response timestamp
+          description: Response timestamp in RFC3339 format
           example: "2025-09-04T10:30:00Z"
 
     HealthResponse:
@@ -606,26 +601,17 @@ components:
           type: string
           description: Health status
           example: "healthy"
-          enum: ["healthy", "unhealthy"]
-        message:
-          type: string
-          description: Health check message
-          example: "Service is healthy"
+          enum: ["healthy", "degraded"]
         timestamp:
           type: string
           format: date-time
           description: Check timestamp
           example: "2025-09-04T10:30:00Z"
-        checks:
-          type: object
-          description: Individual health check results
-          properties:
-            supervisor:
-              type: object
-              properties:
-                status:
-                  type: string
-                  example: "healthy"
-                message:
-                  type: string
-                  example: "Supervisor connection OK"
+        supervisor_healthy:
+          type: boolean
+          description: Whether the supervisord connection is healthy
+          example: true
+        version:
+          type: string
+          description: Application version
+          example: "v7.10.1"

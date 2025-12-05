@@ -1,9 +1,11 @@
 package admin
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -224,6 +226,57 @@ func TestConfigWriter_ConfigExists(t *testing.T) {
 	assert.True(t, writer.ConfigExists(3001))
 }
 
+func TestConfigWriter_WriteConfigWithCustom(t *testing.T) {
+	// Create temporary directory for test
+	tempDir, err := os.MkdirTemp("", "admin_test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	config := &InstanceConfig{
+		ConfDir:           filepath.Join(tempDir, "conf"),
+		InstancesDir:      filepath.Join(tempDir, "instances"),
+		LogDir:            filepath.Join(tempDir, "logs"),
+		GowaBin:           "/test/bin/whatsapp",
+		BasicAuth:         "test:test",
+		Debug:             false,
+		OS:                "Chrome",
+		AccountValidation: false,
+	}
+
+	writer, err := NewConfigWriter(config)
+	assert.NoError(t, err)
+
+	// Create a custom config with different values
+	customConfig := &InstanceConfig{
+		ConfDir:           filepath.Join(tempDir, "conf"),
+		InstancesDir:      filepath.Join(tempDir, "instances"),
+		LogDir:            filepath.Join(tempDir, "logs"),
+		GowaBin:           "/test/bin/whatsapp",
+		BasicAuth:         "custom:auth",
+		Debug:             true,
+		OS:                "CustomOS",
+		AccountValidation: true,
+	}
+
+	port := 3002
+	err = writer.WriteConfigWithCustom(port, customConfig)
+	assert.NoError(t, err)
+
+	// Check that config file was created
+	configPath := filepath.Join(config.ConfDir, "gowa-3002.conf")
+	assert.FileExists(t, configPath)
+
+	// Read config file and verify custom content
+	content, err := os.ReadFile(configPath)
+	assert.NoError(t, err)
+
+	configStr := string(content)
+	assert.Contains(t, configStr, "[program:gowa_3002]")
+	assert.Contains(t, configStr, "--basic-auth=custom:auth")
+	assert.Contains(t, configStr, "--debug=true")
+	assert.Contains(t, configStr, "--os=CustomOS")
+}
+
 func TestLockManager(t *testing.T) {
 	// Create temporary directory for test
 	tempDir, err := os.MkdirTemp("", "admin_test")
@@ -259,4 +312,83 @@ func TestLockManager(t *testing.T) {
 	// Release second lock
 	err = lm.ReleaseLock(lockFile3)
 	assert.NoError(t, err)
+}
+
+func TestNewLockManager(t *testing.T) {
+	// Save original environment
+	originalLockDir := os.Getenv("LOCK_DIR")
+	defer func() {
+		if originalLockDir != "" {
+			os.Setenv("LOCK_DIR", originalLockDir)
+		} else {
+			os.Unsetenv("LOCK_DIR")
+		}
+	}()
+
+	t.Run("default lock dir", func(t *testing.T) {
+		os.Unsetenv("LOCK_DIR")
+		lm := NewLockManager()
+		assert.Equal(t, "/tmp", lm.lockDir)
+	})
+
+	t.Run("custom lock dir from environment", func(t *testing.T) {
+		os.Setenv("LOCK_DIR", "/custom/lock")
+		lm := NewLockManager()
+		assert.Equal(t, "/custom/lock", lm.lockDir)
+	})
+}
+
+func TestLockManager_AcquireLockWithContext(t *testing.T) {
+	// Create temporary directory for test
+	tempDir, err := os.MkdirTemp("", "admin_test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	lm := &LockManager{
+		lockDir: tempDir,
+	}
+
+	t.Run("acquires lock with context", func(t *testing.T) {
+		ctx := context.Background()
+		port := 3001
+
+		lockFile, err := lm.AcquireLockWithContext(ctx, port)
+		assert.NoError(t, err)
+		assert.NotNil(t, lockFile)
+
+		// Release lock
+		err = lm.ReleaseLock(lockFile)
+		assert.NoError(t, err)
+	})
+
+	t.Run("fails when context is cancelled", func(t *testing.T) {
+		// First acquire the lock
+		lockFile, err := lm.AcquireLock(3002)
+		assert.NoError(t, err)
+		defer lm.ReleaseLock(lockFile)
+
+		// Try to acquire with cancelled context
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		lockFile2, err := lm.AcquireLockWithContext(ctx, 3002)
+		assert.Error(t, err)
+		assert.Nil(t, lockFile2)
+		assert.Contains(t, err.Error(), "context")
+	})
+
+	t.Run("fails when context times out", func(t *testing.T) {
+		// First acquire the lock
+		lockFile, err := lm.AcquireLock(3003)
+		assert.NoError(t, err)
+		defer lm.ReleaseLock(lockFile)
+
+		// Try to acquire with very short timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		lockFile2, err := lm.AcquireLockWithContext(ctx, 3003)
+		assert.Error(t, err)
+		assert.Nil(t, lockFile2)
+	})
 }
