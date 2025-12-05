@@ -1,0 +1,77 @@
+{{- if .Values.cleanup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "gowa.fullname" . }}-cleanup
+  labels:
+    {{- include "gowa.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cleanup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "gowa.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: cleanup
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "gowa.serviceAccountName" . }}
+          {{- with .Values.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: cleanup
+              image: busybox:1.36
+              {{- with .Values.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              command: ['sh', '-c']
+              args:
+                - |
+                  set -e
+                  echo "Starting cleanup of files older than {{ .Values.cleanup.retentionDays }} days..."
+
+                  {{- range .Values.cleanup.directories }}
+                  echo "Cleaning /shared-data/{{ . }}..."
+                  find /shared-data/{{ . }} -type f -mtime +{{ $.Values.cleanup.retentionDays }} -delete 2>/dev/null || true
+                  find /shared-data/{{ . }} -type d -empty -delete 2>/dev/null || true
+                  {{- end }}
+
+                  echo "Cleanup completed successfully"
+              volumeMounts:
+                - name: shared-data
+                  mountPath: /shared-data
+              resources:
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+                requests:
+                  cpu: 50m
+                  memory: 32Mi
+          volumes:
+            - name: shared-data
+              {{- if .Values.persistence.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ include "gowa.fullname" . }}-data-pvc
+              {{- else }}
+              emptyDir: {}
+              {{- end }}
+          restartPolicy: OnFailure
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

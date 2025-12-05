@@ -91,6 +91,19 @@ kubectl port-forward svc/gowa 8088:8088 8080:8080
 | `persistence.size` | Storage size | `10Gi` |
 | `persistence.accessMode` | Access mode | `ReadWriteOnce` |
 
+### Cleanup CronJob
+
+Automatically deletes old files from temporary directories to prevent disk space exhaustion.
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `cleanup.enabled` | Enable cleanup CronJob | `true` |
+| `cleanup.schedule` | Cron schedule | `"0 2 * * *"` (2 AM daily) |
+| `cleanup.retentionDays` | Delete files older than N days | `7` |
+| `cleanup.directories` | Directories to clean | `[statics/media, statics/qrcode, statics/senditems]` |
+
+**Safe directories** (not cleaned): `instances`, `storages`, `supervisor/conf.d`
+
 ## Architecture
 
 The chart deploys:

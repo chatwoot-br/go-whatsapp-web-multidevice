@@ -340,3 +340,18 @@ persistence:
   accessMode: ReadWriteOnce
   size: 10Gi  # Increased size to accommodate all data (instances + supervisor configs + logs + statics)
   # existingClaim: ""
+
+# Cleanup CronJob configuration
+# Automatically deletes old files from specified directories
+cleanup:
+  enabled: true
+  # Schedule in cron format (default: 2 AM daily)
+  schedule: "0 2 * * *"
+  # Delete files older than this many days
+  retentionDays: 7
+  # Directories to clean (relative to shared-data volume)
+  # NOTE: Do NOT add instances, storages, or supervisor/conf.d - these contain persistent data
+  directories:
+    - statics/media
+    - statics/qrcode
+    - statics/senditems
