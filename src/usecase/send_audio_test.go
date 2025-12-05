@@ -22,6 +22,7 @@ func TestProcessAudioForWhatsApp(t *testing.T) {
 		// Test data
 		originalBytes := []byte("fake audio data")
 		originalMimeType := "audio/wav"
+		ctx := context.Background()
 
 		// Mock FFmpeg not available by temporarily renaming it
 		if _, err := exec.LookPath("ffmpeg"); err == nil {
@@ -29,7 +30,7 @@ func TestProcessAudioForWhatsApp(t *testing.T) {
 			t.Skip("FFmpeg is available, skipping test for missing FFmpeg scenario")
 		}
 
-		processedBytes, finalMimeType, deletedItems, err := service.processAudioForWhatsApp(originalBytes, originalMimeType)
+		processedBytes, finalMimeType, deletedItems, err := service.processAudioForWhatsApp(ctx, originalBytes, originalMimeType)
 
 		assert.NoError(t, err)
 		assert.Equal(t, originalBytes, processedBytes)
@@ -40,7 +41,8 @@ func TestProcessAudioForWhatsApp(t *testing.T) {
 	t.Run("should return original audio for already optimal format", func(t *testing.T) {
 		// Test AAC audio (already optimal format)
 		audioBytes := []byte("fake AAC audio data")
-		processedBytes, finalMimeType, deletedItems, err := service.processAudioForWhatsApp(audioBytes, "audio/aac")
+		ctx := context.Background()
+		processedBytes, finalMimeType, deletedItems, err := service.processAudioForWhatsApp(ctx, audioBytes, "audio/aac")
 
 		assert.NoError(t, err)
 		assert.Equal(t, audioBytes, processedBytes)
@@ -61,8 +63,9 @@ func TestProcessAudioForWhatsApp(t *testing.T) {
 		// Create a minimal valid WAV file for testing
 		wavData := createMinimalWAVData()
 		originalMimeType := "audio/wav"
+		ctx := context.Background()
 
-		processedBytes, finalMimeType, deletedItems, err := service.processAudioForWhatsApp(wavData, originalMimeType)
+		processedBytes, finalMimeType, deletedItems, err := service.processAudioForWhatsApp(ctx, wavData, originalMimeType)
 
 		// Should not error even if conversion fails (it falls back to original)
 		assert.NoError(t, err)

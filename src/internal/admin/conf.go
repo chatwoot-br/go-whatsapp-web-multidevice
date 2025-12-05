@@ -1,12 +1,14 @@
 package admin
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"syscall"
 	"text/template"
+	"time"
 )
 
 // InstanceConfig holds the configuration for a GOWA instance
@@ -250,4 +252,41 @@ func (lm *LockManager) ReleaseLock(lockFile *os.File) error {
 	}
 
 	return nil
+}
+
+// DefaultLockTimeout is the default timeout for lock acquisition
+const DefaultLockTimeout = 30 * time.Second
+
+// AcquireLockWithContext acquires a file lock with context support for timeout and cancellation
+func (lm *LockManager) AcquireLockWithContext(ctx context.Context, port int) (*os.File, error) {
+	lockPath := filepath.Join(lm.lockDir, fmt.Sprintf("gowa.%d.lock", port))
+
+	// Create ticker for retry interval (100ms)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open lock file %s: %w", lockPath, err)
+		}
+
+		// Try to acquire exclusive lock (non-blocking)
+		if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil {
+			return lockFile, nil
+		} else if err != syscall.EWOULDBLOCK {
+			lockFile.Close()
+			return nil, fmt.Errorf("failed to acquire lock for port %d: %w", port, err)
+		}
+
+		// Lock is held by another operation - close and retry
+		lockFile.Close()
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("lock acquisition for port %d cancelled: %w", port, ctx.Err())
+		case <-ticker.C:
+			// Retry
+		}
+	}
 }

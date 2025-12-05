@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -164,13 +165,16 @@ func (api *AdminAPI) createInstanceHandler(c *fiber.Ctx) error {
 		customConfig = api.buildInstanceConfig(req)
 	}
 
+	// Get context from Fiber request with timeout
+	ctx := api.getRequestContext(c)
+
 	var instance *Instance
 	var err error
 
 	if customConfig != nil {
-		instance, err = api.lifecycle.CreateInstanceWithConfig(req.Port, customConfig)
+		instance, err = api.lifecycle.CreateInstanceWithConfig(ctx, req.Port, customConfig)
 	} else {
-		instance, err = api.lifecycle.CreateInstance(req.Port)
+		instance, err = api.lifecycle.CreateInstance(ctx, req.Port)
 	}
 	if err != nil {
 		api.logger.Errorf("Failed to create instance on port %d: %v", req.Port, err)
@@ -185,9 +189,12 @@ func (api *AdminAPI) createInstanceHandler(c *fiber.Ctx) error {
 		} else if strings.Contains(err.Error(), "port") && strings.Contains(err.Error(), "in use") {
 			status = http.StatusConflict
 			errorCode = "port_in_use"
-		} else if strings.Contains(err.Error(), "locked") {
+		} else if strings.Contains(err.Error(), "locked") || strings.Contains(err.Error(), "cancelled") {
 			status = http.StatusConflict
 			errorCode = "port_locked"
+		} else if strings.Contains(err.Error(), "timeout") {
+			status = http.StatusRequestTimeout
+			errorCode = "request_timeout"
 		}
 
 		return api.errorResponse(c, status, errorCode, err.Error())
@@ -198,7 +205,9 @@ func (api *AdminAPI) createInstanceHandler(c *fiber.Ctx) error {
 
 // listInstancesHandler handles GET /admin/instances
 func (api *AdminAPI) listInstancesHandler(c *fiber.Ctx) error {
-	instances, err := api.lifecycle.ListInstances()
+	ctx := api.getRequestContext(c)
+
+	instances, err := api.lifecycle.ListInstances(ctx)
 	if err != nil {
 		api.logger.Errorf("Failed to list instances: %v", err)
 		return api.errorResponse(c, http.StatusInternalServerError, "list_failed", "Failed to retrieve instances")
@@ -215,7 +224,9 @@ func (api *AdminAPI) getInstanceHandler(c *fiber.Ctx) error {
 		return api.errorResponse(c, http.StatusBadRequest, "invalid_port", "Port must be a valid integer")
 	}
 
-	instance, err := api.lifecycle.GetInstance(port)
+	ctx := api.getRequestContext(c)
+
+	instance, err := api.lifecycle.GetInstance(ctx, port)
 	if err != nil {
 		api.logger.Errorf("Failed to get instance on port %d: %v", port, err)
 
@@ -239,12 +250,22 @@ func (api *AdminAPI) deleteInstanceHandler(c *fiber.Ctx) error {
 
 	api.logger.Infof("Deleting instance on port %d", port)
 
-	err = api.lifecycle.DeleteInstance(port)
+	ctx := api.getRequestContext(c)
+
+	err = api.lifecycle.DeleteInstance(ctx, port)
 	if err != nil {
 		api.logger.Errorf("Failed to delete instance on port %d: %v", port, err)
 
 		if strings.Contains(err.Error(), "not found") {
 			return api.errorResponse(c, http.StatusNotFound, "instance_not_found", fmt.Sprintf("Instance on port %d not found", port))
+		}
+
+		if strings.Contains(err.Error(), "locked") || strings.Contains(err.Error(), "cancelled") {
+			return api.errorResponse(c, http.StatusConflict, "port_locked", err.Error())
+		}
+
+		if strings.Contains(err.Error(), "timeout") {
+			return api.errorResponse(c, http.StatusRequestTimeout, "request_timeout", err.Error())
 		}
 
 		return api.errorResponse(c, http.StatusInternalServerError, "deletion_failed", "Failed to delete instance")
@@ -268,10 +289,12 @@ func (api *AdminAPI) updateInstanceHandler(c *fiber.Ctx) error {
 
 	api.logger.Infof("Updating instance on port %d with new configuration", port)
 
+	ctx := api.getRequestContext(c)
+
 	// Build the custom configuration from the update request
 	customConfig := api.buildInstanceConfigFromUpdate(port, req)
 
-	instance, err := api.lifecycle.UpdateInstanceConfig(port, customConfig)
+	instance, err := api.lifecycle.UpdateInstanceConfig(ctx, port, customConfig)
 	if err != nil {
 		api.logger.Errorf("Failed to update instance on port %d: %v", port, err)
 
@@ -282,9 +305,12 @@ func (api *AdminAPI) updateInstanceHandler(c *fiber.Ctx) error {
 		if strings.Contains(err.Error(), "not found") {
 			status = http.StatusNotFound
 			errorCode = "instance_not_found"
-		} else if strings.Contains(err.Error(), "locked") {
+		} else if strings.Contains(err.Error(), "locked") || strings.Contains(err.Error(), "cancelled") {
 			status = http.StatusConflict
 			errorCode = "port_locked"
+		} else if strings.Contains(err.Error(), "timeout") {
+			status = http.StatusRequestTimeout
+			errorCode = "request_timeout"
 		}
 
 		return api.errorResponse(c, status, errorCode, err.Error())
@@ -363,6 +389,17 @@ func (api *AdminAPI) getRequestID(c *fiber.Ctx) string {
 		return requestID
 	}
 	return "unknown"
+}
+
+// getRequestContext returns a context for the request with a default timeout
+func (api *AdminAPI) getRequestContext(c *fiber.Ctx) context.Context {
+	ctx := c.UserContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	// Add a 60-second timeout for API operations
+	ctx, _ = context.WithTimeout(ctx, 60*time.Second)
+	return ctx
 }
 
 // StartServer starts the admin HTTP server

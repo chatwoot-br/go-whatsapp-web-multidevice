@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -39,12 +40,12 @@ type LogFiles struct {
 
 // ILifecycleManager defines the interface for lifecycle management
 type ILifecycleManager interface {
-	CreateInstance(port int) (*Instance, error)
-	CreateInstanceWithConfig(port int, customConfig *InstanceConfig) (*Instance, error)
-	UpdateInstanceConfig(port int, customConfig *InstanceConfig) (*Instance, error)
-	ListInstances() ([]*Instance, error)
-	GetInstance(port int) (*Instance, error)
-	DeleteInstance(port int) error
+	CreateInstance(ctx context.Context, port int) (*Instance, error)
+	CreateInstanceWithConfig(ctx context.Context, port int, customConfig *InstanceConfig) (*Instance, error)
+	UpdateInstanceConfig(ctx context.Context, port int, customConfig *InstanceConfig) (*Instance, error)
+	ListInstances(ctx context.Context) ([]*Instance, error)
+	GetInstance(ctx context.Context, port int) (*Instance, error)
+	DeleteInstance(ctx context.Context, port int) error
 	IsHealthy() bool
 	Ping() error
 }
@@ -68,19 +69,23 @@ func NewLifecycleManager(supervisor *SupervisorClient, configWriter *ConfigWrite
 }
 
 // CreateInstance creates a new GOWA instance on the specified port
-func (lm *LifecycleManager) CreateInstance(port int) (*Instance, error) {
-	return lm.CreateInstanceWithConfig(port, nil)
+func (lm *LifecycleManager) CreateInstance(ctx context.Context, port int) (*Instance, error) {
+	return lm.CreateInstanceWithConfig(ctx, port, nil)
 }
 
 // CreateInstanceWithConfig creates a new GOWA instance with custom configuration
-func (lm *LifecycleManager) CreateInstanceWithConfig(port int, customConfig *InstanceConfig) (*Instance, error) {
+func (lm *LifecycleManager) CreateInstanceWithConfig(ctx context.Context, port int, customConfig *InstanceConfig) (*Instance, error) {
 	// Validate port
 	if err := lm.validatePort(port); err != nil {
 		return nil, fmt.Errorf("port validation failed: %w", err)
 	}
 
-	// Acquire lock for this port
-	lockFile, err := lm.lockManager.AcquireLock(port)
+	// Create lock context with timeout
+	lockCtx, lockCancel := context.WithTimeout(ctx, DefaultLockTimeout)
+	defer lockCancel()
+
+	// Acquire lock for this port with context
+	lockFile, err := lm.lockManager.AcquireLockWithContext(lockCtx, port)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire lock: %w", err)
 	}
@@ -127,7 +132,7 @@ func (lm *LifecycleManager) CreateInstanceWithConfig(port int, customConfig *Ins
 	}
 
 	// Wait for the process to be running with timeout
-	instance, err := lm.waitForInstanceState(port, StateRunning, 30*time.Second)
+	instance, err := lm.waitForInstanceState(ctx, port, StateRunning, 30*time.Second)
 	if err != nil {
 		// Clean up if instance didn't start properly
 		lm.cleanupFailedInstance(programName, port)
@@ -139,9 +144,13 @@ func (lm *LifecycleManager) CreateInstanceWithConfig(port int, customConfig *Ins
 }
 
 // DeleteInstance deletes a GOWA instance on the specified port
-func (lm *LifecycleManager) DeleteInstance(port int) error {
-	// Acquire lock for this port
-	lockFile, err := lm.lockManager.AcquireLock(port)
+func (lm *LifecycleManager) DeleteInstance(ctx context.Context, port int) error {
+	// Create lock context with timeout
+	lockCtx, lockCancel := context.WithTimeout(ctx, DefaultLockTimeout)
+	defer lockCancel()
+
+	// Acquire lock for this port with context
+	lockFile, err := lm.lockManager.AcquireLockWithContext(lockCtx, port)
 	if err != nil {
 		return fmt.Errorf("failed to acquire lock: %w", err)
 	}
@@ -175,9 +184,13 @@ func (lm *LifecycleManager) DeleteInstance(port int) error {
 }
 
 // UpdateInstanceConfig updates a GOWA instance configuration with new settings
-func (lm *LifecycleManager) UpdateInstanceConfig(port int, customConfig *InstanceConfig) (*Instance, error) {
-	// Acquire lock for this port
-	lockFile, err := lm.lockManager.AcquireLock(port)
+func (lm *LifecycleManager) UpdateInstanceConfig(ctx context.Context, port int, customConfig *InstanceConfig) (*Instance, error) {
+	// Create lock context with timeout
+	lockCtx, lockCancel := context.WithTimeout(ctx, DefaultLockTimeout)
+	defer lockCancel()
+
+	// Acquire lock for this port with context
+	lockFile, err := lm.lockManager.AcquireLockWithContext(lockCtx, port)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire lock: %w", err)
 	}
@@ -231,7 +244,7 @@ func (lm *LifecycleManager) UpdateInstanceConfig(port int, customConfig *Instanc
 	}
 
 	// Wait for the instance to be in running state
-	instance, err := lm.waitForInstanceState(port, StateRunning, 30*time.Second)
+	instance, err := lm.waitForInstanceState(ctx, port, StateRunning, 30*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("instance failed to start: %w", err)
 	}
@@ -241,7 +254,9 @@ func (lm *LifecycleManager) UpdateInstanceConfig(port int, customConfig *Instanc
 }
 
 // ListInstances returns a list of all GOWA instances
-func (lm *LifecycleManager) ListInstances() ([]*Instance, error) {
+// Note: This is a read operation and does not acquire locks for consistency
+// Callers may observe intermediate state during concurrent write operations
+func (lm *LifecycleManager) ListInstances(ctx context.Context) ([]*Instance, error) {
 	client := lm.supervisor.GetClient()
 
 	processInfos, err := client.GetAllProcessInfo()
@@ -263,7 +278,9 @@ func (lm *LifecycleManager) ListInstances() ([]*Instance, error) {
 }
 
 // GetInstance returns information about a specific instance
-func (lm *LifecycleManager) GetInstance(port int) (*Instance, error) {
+// Note: This is a read operation and does not acquire locks for consistency
+// Callers may observe intermediate state during concurrent write operations
+func (lm *LifecycleManager) GetInstance(ctx context.Context, port int) (*Instance, error) {
 	programName := fmt.Sprintf("gowa_%d", port)
 
 	client := lm.supervisor.GetClient()
@@ -347,31 +364,37 @@ func (lm *LifecycleManager) processInfoToInstance(info *supervisord.ProcessInfo)
 }
 
 // waitForInstanceState waits for an instance to reach a specific state
-func (lm *LifecycleManager) waitForInstanceState(port int, targetState InstanceState, timeout time.Duration) (*Instance, error) {
+func (lm *LifecycleManager) waitForInstanceState(ctx context.Context, port int, targetState InstanceState, timeout time.Duration) (*Instance, error) {
 	programName := fmt.Sprintf("gowa_%d", port)
 	client := lm.supervisor.GetClient()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		info, err := client.GetProcessInfo(programName)
-		if err != nil {
-			time.Sleep(1 * time.Second)
-			continue
-		}
+	// Create timeout context if parent doesn't have a shorter deadline
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
-		instance := lm.processInfoToInstance(info)
-		if instance != nil && instance.State == targetState {
-			return instance, nil
-		}
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 
-		if instance != nil && instance.State == StateFatal {
-			return nil, fmt.Errorf("instance entered FATAL state")
-		}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("timeout waiting for instance to reach state %s: %w", targetState, ctx.Err())
+		case <-ticker.C:
+			info, err := client.GetProcessInfo(programName)
+			if err != nil {
+				continue
+			}
 
-		time.Sleep(1 * time.Second)
+			instance := lm.processInfoToInstance(info)
+			if instance != nil && instance.State == targetState {
+				return instance, nil
+			}
+
+			if instance != nil && instance.State == StateFatal {
+				return nil, fmt.Errorf("instance entered FATAL state")
+			}
+		}
 	}
-
-	return nil, fmt.Errorf("timeout waiting for instance to reach state %s", targetState)
 }
 
 // cleanupFailedInstance cleans up a failed instance creation

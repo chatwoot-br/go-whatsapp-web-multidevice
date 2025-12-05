@@ -33,7 +33,7 @@ func TestAdminAPI_CreateInstance_Simple(t *testing.T) {
 
 	// Test 1: Minimal config - should call CreateInstance
 	t.Run("minimal config calls CreateInstance", func(t *testing.T) {
-		mockLifecycle.On("CreateInstance", 3001).Return(expectedInstance, nil).Once()
+		mockLifecycle.On("CreateInstance", mock.Anything, 3001).Return(expectedInstance, nil).Once()
 
 		app := fiber.New()
 		api.SetupRoutes(app)
@@ -55,7 +55,7 @@ func TestAdminAPI_CreateInstance_Simple(t *testing.T) {
 	// Test 2: Custom config - should call CreateInstanceWithConfig
 	t.Run("custom config calls CreateInstanceWithConfig", func(t *testing.T) {
 		// Use mock.Anything for the config to avoid strict matching issues
-		mockLifecycle.On("CreateInstanceWithConfig", 3002, mock.Anything).Return(expectedInstance, nil).Once()
+		mockLifecycle.On("CreateInstanceWithConfig", mock.Anything, 3002, mock.Anything).Return(expectedInstance, nil).Once()
 
 		app := fiber.New()
 		api.SetupRoutes(app)

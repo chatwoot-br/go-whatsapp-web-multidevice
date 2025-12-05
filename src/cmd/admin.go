@@ -98,6 +98,19 @@ func runAdminServer(cmd *cobra.Command, args []string) error {
 
 	// Create config writer
 	instanceConfig := admin.DefaultInstanceConfig()
+
+	// Validate security configuration and warn about weak credentials
+	admin.LogDefaultCredentialWarnings(logger)
+	securityConfig := &admin.SecurityConfig{
+		BasicAuth:     instanceConfig.BasicAuth,
+		WebhookSecret: instanceConfig.WebhookSecret,
+		Logger:        logger,
+	}
+	warnings := admin.ValidateAndWarn(securityConfig)
+	if len(warnings) > 0 {
+		logger.Warnf("Found %d security warning(s). Review configuration for production use.", len(warnings))
+	}
+
 	configWriter, err := admin.NewConfigWriter(instanceConfig)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create config writer")

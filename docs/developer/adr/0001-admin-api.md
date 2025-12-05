@@ -126,8 +126,28 @@ Add subcommand `whatsapp admin` (or embed in main), default bind `:8088`.
 
 **Idempotency & concurrency**
 - Per-port lock (flock `/run/gowa.<port>.lock` or in-process mutex) around create/delete.
-- Treat “already exists/unknown group” as success where reasonable.
+- Treat "already exists/unknown group" as success where reasonable.
 - Validate port is not already claimed by another running process (and not listening).
+
+**Lock timeout behavior**
+- Lock acquisition uses context with **30-second default timeout** (`DefaultLockTimeout`).
+- If the lock cannot be acquired within the timeout, the API returns `503 Service Unavailable` or `408 Request Timeout`.
+- Locks are acquired with non-blocking `LOCK_NB` flag and retry every 100ms until timeout.
+- This prevents goroutine leaks and indefinite blocking under high contention.
+
+**Eventual consistency for read operations**
+- `GET /admin/instances` (list) and `GET /admin/instances/{port}` (get) do **not acquire locks**.
+- These are read-only operations that query Supervisord directly for current process state.
+- Under concurrent create/delete operations, reads may briefly show stale data.
+- This is acceptable tradeoff for read performance and avoiding lock contention.
+- Write operations (create/update/delete) always acquire exclusive locks to ensure consistency.
+
+**Security recommendations for production**
+- **GOWA_BASIC_AUTH**: Change from default `admin:admin` to a strong password (min 8 chars, mixed case + numbers).
+- **GOWA_WEBHOOK_SECRET**: Use a cryptographically random string (32+ characters recommended).
+- **ADMIN_TOKEN**: Use a unique, random bearer token (UUID v4 or similar).
+- The Admin server logs warnings at startup if default/weak credentials are detected.
+- In production mode (`GO_ENV=production` or `APP_ENV=production`), security warnings are escalated to errors.
 
 **HTTP semantics**
 - `201 Created` on create; `409 Conflict` if port is already owned; `404 Not Found` on delete of unknown; `502/504` for Supervisor reachability/timeouts.

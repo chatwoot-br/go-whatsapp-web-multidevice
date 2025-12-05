@@ -34,7 +34,7 @@ func TestAdminAPI_UpdateInstance(t *testing.T) {
 
 	// Test 1: Update instance with partial config
 	t.Run("update instance with partial config", func(t *testing.T) {
-		mockLifecycle.On("UpdateInstanceConfig", 3001, mock.Anything).Return(expectedInstance, nil).Once()
+		mockLifecycle.On("UpdateInstanceConfig", mock.Anything, 3001, mock.Anything).Return(expectedInstance, nil).Once()
 
 		app := fiber.New()
 		api.SetupRoutes(app)
@@ -59,7 +59,7 @@ func TestAdminAPI_UpdateInstance(t *testing.T) {
 
 	// Test 2: Update instance - instance not found
 	t.Run("update non-existent instance", func(t *testing.T) {
-		mockLifecycle.On("UpdateInstanceConfig", 3002, mock.Anything).Return(nil, fmt.Errorf("instance on port 3002 not found")).Once()
+		mockLifecycle.On("UpdateInstanceConfig", mock.Anything, 3002, mock.Anything).Return(nil, fmt.Errorf("instance on port 3002 not found")).Once()
 
 		app := fiber.New()
 		api.SetupRoutes(app)
