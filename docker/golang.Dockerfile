@@ -31,7 +31,7 @@ RUN chmod +x /app/start-admin.sh
 RUN mkdir -p /etc/supervisor/conf.d /var/log/supervisor /app/instances /run
 
 # Copy the correct supervisord configuration
-COPY docs/features/ADR-001/supervisord.conf /etc/supervisor/supervisord.conf
+COPY .devcontainer/supervisord.conf /etc/supervisor/supervisord.conf
 
 # Make the whatsapp binary available globally
 RUN ln -s /app/whatsapp /usr/local/bin/whatsapp
