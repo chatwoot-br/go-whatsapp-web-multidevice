@@ -35,12 +35,12 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
+        # Init container runs as root to set up directory permissions
         - name: init-directories
           image: busybox:1.36
-          {{- with .Values.securityContext }}
           securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
+            runAsUser: 0
+            runAsNonRoot: false
           command: ['sh', '-c']
           args:
             - |
@@ -53,16 +53,13 @@ spec:
               mkdir -p /shared-data/storages
               mkdir -p /shared-data/supervisor/conf.d
               mkdir -p /shared-data/supervisor/logs
-              mkdir -p /tmp
-              echo "Setting permissions..."
+              echo "Setting ownership to user 1000..."
+              chown -R 1000:1000 /shared-data
               chmod -R 755 /shared-data
-              chmod -R 755 /tmp
               echo "Shared volume structure created successfully"
           volumeMounts:
             - name: shared-data
               mountPath: "/shared-data"
-            - name: app-temp
-              mountPath: "/tmp"
         # Init container to generate supervisord config with secrets
         - name: init-supervisor-config
           image: busybox:1.36
