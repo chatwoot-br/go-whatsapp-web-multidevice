@@ -128,12 +128,15 @@ spec:
               echo "Starting gowa container..."
               echo "Waiting for supervisord to be ready..."
 
-              # Wait for supervisord with proper health check instead of fixed sleep
+              # Wait for supervisord port to be open (auth required, so check for any HTTP response)
               max_attempts=60
               attempt=0
               while [ $attempt -lt $max_attempts ]; do
-                if wget -q --spider "http://127.0.0.1:9001" 2>/dev/null; then
-                  echo "Supervisord is ready!"
+                # curl returns 0 for success, 22 for HTTP errors (including 401 auth required)
+                # Exit code 7 means connection refused (server not up yet)
+                http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:9001" 2>/dev/null || echo "000")
+                if [ "$http_code" != "000" ]; then
+                  echo "Supervisord is ready! (HTTP $http_code)"
                   break
                 fi
                 attempt=$((attempt + 1))
@@ -288,15 +291,15 @@ spec:
         
         {{- if .Values.swaggerUI.enabled }}
         # Swagger UI sidecar container
+        # Note: readOnlyRootFilesystem disabled because swagger-ui writes swagger-initializer.js at startup
         - name: swagger-ui
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop:
               - ALL
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            runAsUser: 1000
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
           image: "{{ .Values.swaggerUI.image.repository }}:{{ .Values.swaggerUI.image.tag }}"
           imagePullPolicy: {{ .Values.swaggerUI.image.pullPolicy }}
           ports:
