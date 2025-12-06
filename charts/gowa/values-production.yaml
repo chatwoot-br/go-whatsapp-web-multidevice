@@ -1,167 +1,91 @@
-# Production values for go-whatsapp-admin-api
-# This file contains production-ready configuration examples
+# Production values for gowa Helm chart
+# Usage: helm install gowa ./charts/gowa -f charts/gowa/values-production.yaml
+#
+# REQUIRED: Set these via --set or environment-specific values file:
+#   --set admin.token="your-secure-token"
+#   --set admin.supervisor.password="your-secure-password"
+#   --set ingress.hosts[0].host="your-domain.com"
 
-# Number of replicas for high availability
-replicaCount: 1
-
+# Image configuration
+# Uses appVersion from Chart.yaml by default (recommended)
 image:
-  repository: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
   pullPolicy: IfNotPresent
-  tag: "latest"
+  # tag: "v7.10.1-1"  # Uncomment to pin specific version
 
-# Use existing secret for admin token (recommended for production)
+# Admin API configuration
 admin:
   port: 8088
-  existingSecret: "whatsapp-admin-secret"
-  existingSecretKey: "token"
+  # SECURITY: Use existingSecret in production instead of inline token
+  # token: ""  # Set via --set or use existingSecret
+  existingSecret: ""  # e.g., "gowa-admin-secret"
+  existingSecretKey: "admin-token"
 
-# Service configuration
-service:
-  type: ClusterIP
-  ports:
-    # Admin API port
-    - name: admin-api
-      port: 8088
-      targetPort: 8088
-      protocol: TCP
-    # Supervisord RPC port
-    - name: supervisor-rpc
-      port: 9001
-      targetPort: 9001
-      protocol: TCP
-    # WhatsApp instance ports (3001-3010)
-    - name: whatsapp-3001
-      port: 3001
-      targetPort: 3001
-      protocol: TCP
-    - name: whatsapp-3002
-      port: 3002
-      targetPort: 3002
-      protocol: TCP
-    - name: whatsapp-3003
-      port: 3003
-      targetPort: 3003
-      protocol: TCP
-    - name: whatsapp-3004
-      port: 3004
-      targetPort: 3004
-      protocol: TCP
-    - name: whatsapp-3005
-      port: 3005
-      targetPort: 3005
-      protocol: TCP
-    - name: whatsapp-3006
-      port: 3006
-      targetPort: 3006
-      protocol: TCP
-    - name: whatsapp-3007
-      port: 3007
-      targetPort: 3007
-      protocol: TCP
-    - name: whatsapp-3008
-      port: 3008
-      targetPort: 3008
-      protocol: TCP
-    - name: whatsapp-3009
-      port: 3009
-      targetPort: 3009
-      protocol: TCP
-    - name: whatsapp-3010
-      port: 3010
-      targetPort: 3010
-      protocol: TCP
+  supervisor:
+    # SECURITY: Always set a strong password in production
+    # password: ""  # Set via --set or use existingSecret
+    existingSecret: ""  # e.g., "gowa-supervisor-secret"
 
-# Ingress with TLS
+# Ingress configuration
 ingress:
   enabled: true
   className: "nginx"
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/rate-limit: "10"
-    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
   hosts:
-    - host: whatsapp-admin.yourdomain.com
+    - host: whatsapp.example.com  # CHANGE THIS
       paths:
         - path: /
-          pathType: ImplementationSpecific
+          pathType: Prefix
   tls:
-    - secretName: whatsapp-admin-tls
+    - secretName: gowa-tls
       hosts:
-        - whatsapp-admin.yourdomain.com
+        - whatsapp.example.com  # CHANGE THIS
 
-# Resource limits and requests
+# Resource limits
 resources:
   limits:
     cpu: 1000m
     memory: 1Gi
   requests:
-    cpu: 500m
+    cpu: 250m
     memory: 512Mi
 
-# Persistence with specific storage class
+# Persistence
 persistence:
   enabled: true
-  storageClass: "hcloud-volumes"
-  accessMode: ReadWriteOnce
-  size: "10Gi"
+  size: 10Gi
+  # storageClass: ""  # Use cluster default or specify
 
-# Health check configuration
-livenessProbe:
-  httpGet:
-    path: /healthz
-    port: admin-api
-  initialDelaySeconds: 30
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 3
+# Disable Swagger UI in production (security)
+swaggerUI:
+  enabled: false
 
-readinessProbe:
-  httpGet:
-    path: /readyz
-    port: admin-api
-  initialDelaySeconds: 5
-  periodSeconds: 5
-  timeoutSeconds: 3
-  failureThreshold: 3
+# Enable cleanup CronJob
+cleanup:
+  enabled: true
+  schedule: "0 3 * * *"  # 3 AM daily
+  retentionDays: 7
 
-# Security context
-podSecurityContext:
-  runAsNonRoot: false
-  runAsUser: 0
-  runAsGroup: 0
-  fsGroup: 0
-
-securityContext:
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop:
-    - ALL
-    add:
-    - CHOWN
-    - DAC_OVERRIDE
-    - FOWNER
-  readOnlyRootFilesystem: false
-  runAsNonRoot: false
-  runAsUser: 0
-
-# Node selection
-nodeSelector:
-  kubernetes.io/os: linux
-
-# Tolerations for dedicated nodes
-tolerations: []
-
-# Affinity rules for pod distribution
-affinity:
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-    - weight: 100
-      podAffinityTerm:
-        labelSelector:
-          matchExpressions:
-          - key: app.kubernetes.io/name
-            operator: In
-            values:
-            - go-whatsapp-admin-api
-        topologyKey: kubernetes.io/hostname
+# Environment variables for production
+env:
+  - name: APP_DEBUG
+    value: "false"
+  - name: ADMIN_DEBUG
+    value: "false"
+  - name: SUPERVISOR_URL
+    value: "http://127.0.0.1:9001/RPC2"
+  - name: SUPERVISOR_CONF_DIR
+    value: "/etc/supervisor/conf.d"
+  - name: INSTANCES_DIR
+    value: "/app/instances"
+  - name: SUPERVISOR_LOG_DIR
+    value: "/var/log/supervisor"
+  - name: LOCK_DIR
+    value: "/tmp"
+  - name: DB_URI
+    value: "file:/app/storages/whatsapp.db?_foreign_keys=on"
+  - name: WHATSAPP_CHAT_STORAGE
+    value: "true"
+  - name: ADMIN_PORT
+    value: "8088"
