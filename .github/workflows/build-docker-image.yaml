@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+'        # Upstream version: v7.10.1
+      - 'v[0-9]+.[0-9]+.[0-9]+\+[0-9]+' # Fork version: v7.10.1+1
 
 jobs:
   create-runner-amd:
@@ -53,6 +54,12 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - name: Convert tag for Docker (replace + with -)
+        id: docker_tag
+        run: |
+          # Docker tags don't support '+', so convert v7.10.1+1 to v7.10.1-1
+          DOCKER_TAG="${GITHUB_REF_NAME//+/-}"
+          echo "tag=$DOCKER_TAG" >> $GITHUB_OUTPUT
       - name: Login GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -70,7 +77,7 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:latest
             ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:latest-amd
-            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ github.ref_name }}-amd
+            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ steps.docker_tag.outputs.tag }}-amd
 
   build-and-push-arm:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -82,6 +89,12 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - name: Convert tag for Docker (replace + with -)
+        id: docker_tag
+        run: |
+          # Docker tags don't support '+', so convert v7.10.1+1 to v7.10.1-1
+          DOCKER_TAG="${GITHUB_REF_NAME//+/-}"
+          echo "tag=$DOCKER_TAG" >> $GITHUB_OUTPUT
       - name: Login GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -98,7 +111,7 @@ jobs:
           file: ./docker/golang.Dockerfile
           tags: |
             ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:latest-arm
-            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ github.ref_name }}-arm
+            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ steps.docker_tag.outputs.tag }}-arm
 
   merge-manifest:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -108,6 +121,12 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Convert tag for Docker (replace + with -)
+        id: docker_tag
+        run: |
+          # Docker tags don't support '+', so convert v7.10.1+1 to v7.10.1-1
+          DOCKER_TAG="${GITHUB_REF_NAME//+/-}"
+          echo "tag=$DOCKER_TAG" >> $GITHUB_OUTPUT
       - name: Login GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -116,11 +135,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Create Versioned Manifest (GHCR) (${{ github.ref_name }})
+      - name: Create Versioned Manifest (GHCR) (${{ steps.docker_tag.outputs.tag }})
         run: |
-          docker buildx imagetools create -t ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ github.ref_name }} \
-            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ github.ref_name }}-amd \
-            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ github.ref_name }}-arm
+          docker buildx imagetools create -t ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ steps.docker_tag.outputs.tag }} \
+            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ steps.docker_tag.outputs.tag }}-amd \
+            ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:${{ steps.docker_tag.outputs.tag }}-arm
       - name: Create Latest Manifest (GHCR)
         run: |
           docker buildx imagetools create -t ghcr.io/${{ github.repository_owner }}/go-whatsapp-web-multidevice:latest \
