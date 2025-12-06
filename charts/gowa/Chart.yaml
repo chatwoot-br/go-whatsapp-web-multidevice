@@ -8,7 +8,7 @@ type: application
 version: 7.10.1
 
 # Application version being deployed
-appVersion: "v7.10.1"
+appVersion: "v7.10.1+1"
 
 # Chart metadata
 home: https://github.com/chatwoot-br/go-whatsapp-web-multidevice
