@@ -17,10 +17,16 @@ Follow these steps:
    - Run `cd src && go mod tidy` to ensure dependencies are clean
    - Verify working directory is clean with `git status`
 
-3. **Update version in these files** (use the new version number):
-   - `src/config/settings.go` line 8: `AppVersion = "vX.Y.Z+N"`
-   - `charts/gowa/Chart.yaml` line 8: `version: X.Y.Z` (upstream version, without 'v' or fork rev)
-   - `charts/gowa/Chart.yaml` line 11: `appVersion: "vX.Y.Z+N"` (full fork version)
+3. **Update version in these files**:
+
+   **IMPORTANT**: Different files use different formats!
+   - Git tag & Go code: Use `+` (e.g., `v7.10.1+1`)
+   - Helm appVersion: Use `-` (e.g., `v7.10.1-1`) - Docker doesn't support `+`
+
+   Files to update:
+   - `src/config/settings.go` line 8: `AppVersion = "vX.Y.Z+N"` (use `+`)
+   - `charts/gowa/Chart.yaml` line 8: `version: X.Y.Z` (upstream version only)
+   - `charts/gowa/Chart.yaml` line 11: `appVersion: "vX.Y.Z-N"` (use `-` for Docker)
 
 4. **Update CHANGELOG.md** at the top with the new version section:
 

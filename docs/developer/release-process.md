@@ -57,19 +57,18 @@ Where:
 
 Per [SemVer 2.0](https://semver.org/), build metadata (`+...`) is ignored for precedence comparison. This means `v7.10.1` and `v7.10.1+1` are considered equal for dependency resolution. This is acceptable since we control our own deployments.
 
-### Docker Tag Conversion
+### Version Format by Context
 
-Docker tags don't support the `+` character, so GitHub Actions automatically converts `+` to `-`:
+Different contexts require different version formats due to character restrictions:
 
-| Git Tag | Docker Tag |
-|---------|------------|
-| `v7.10.1+1` | `v7.10.1-1` |
-| `v7.10.1+2` | `v7.10.1-2` |
+| Context | Format | Example | Notes |
+|---------|--------|---------|-------|
+| Git tag | `+` | `v7.10.1+1` | SemVer build metadata |
+| Docker tag | `-` | `v7.10.1-1` | Docker doesn't support `+` |
+| Helm appVersion | `-` | `v7.10.1-1` | Must match Docker tag |
+| App version (Go) | `+` | `v7.10.1+1` | Display version in API |
 
-When pulling Docker images, use the `-` format:
-```bash
-docker pull ghcr.io/chatwoot-br/go-whatsapp-web-multidevice:v7.10.1-1
-```
+GitHub Actions automatically converts `+` to `-` when building Docker images.
 
 ## Files to Update
 
@@ -79,7 +78,7 @@ When releasing a new version, you must update these files:
 
 ```go
 var (
-    AppVersion = "v7.10.1+1"  // Update this line
+    AppVersion = "v7.10.1+1"  // Use '+' format
     // ... rest of config
 )
 ```
@@ -92,13 +91,13 @@ var (
 # Chart version (upstream version, without 'v' prefix)
 version: 7.10.1
 
-# Application version (full fork version with 'v' prefix)
-appVersion: "v7.10.1+1"
+# Application version - must match Docker tag (use '-' not '+')
+appVersion: "v7.10.1-1"
 ```
 
 **Locations**: Lines 8 and 11
 
-**Note**: The `version` field uses the upstream version (for Helm chart compatibility). The `appVersion` field uses the full fork version format.
+**Important**: The `appVersion` uses `-` format because it's used as the default Docker image tag, and Docker doesn't support `+` in tags.
 
 ### 3. Changelog (`CHANGELOG.md`)
 
@@ -160,12 +159,12 @@ git log upstream/main --oneline -5
 #### 2. Update Version Files
 
 ```bash
-# Update src/config/settings.go
+# Update src/config/settings.go (use '+' format)
 # Change line 8: AppVersion = "v7.10.1+1"
 
 # Update charts/gowa/Chart.yaml
 # Change line 8: version: 7.10.1 (upstream version only)
-# Change line 11: appVersion: "v7.10.1+1" (full fork version)
+# Change line 11: appVersion: "v7.10.1-1" (use '-' for Docker compatibility)
 
 # Update CHANGELOG.md
 # Add new version section at the top
