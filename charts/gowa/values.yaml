@@ -185,23 +185,18 @@ autoscaling:
   # targetMemoryUtilizationPercentage: 80
 
 # Additional volumes on the output Deployment definition.
-# Uses a single PVC (shared-data) with subPaths for isolation
-volumes:
-  - name: supervisor-config
-    configMap:
-      name: "{{ .Release.Name }}-supervisor-config"
-      defaultMode: 0644
-  - name: shared-data
-    persistentVolumeClaim:
-      claimName: "{{ .Release.Name }}-data"
-  - name: supervisor-run
-    emptyDir: {}
-  - name: app-temp
-    emptyDir: {}
+# NOTE: Main volumes are defined in deployment.yaml, not here.
+# This section is for reference only. Actual volume names:
+#   - supervisor-config-template (ConfigMap with template)
+#   - supervisor-config-generated (emptyDir with rendered config)
+#   - shared-data (PVC)
+#   - supervisor-run (emptyDir)
+#   - app-temp (emptyDir)
 
 # Additional volumeMounts on the output Deployment definition.
+# These are mounted in the main gowa container.
 volumeMounts:
-  - name: supervisor-config
+  - name: supervisor-config-generated
     mountPath: "/etc/supervisor/supervisord.conf"
     subPath: "supervisord.conf"
     readOnly: true
