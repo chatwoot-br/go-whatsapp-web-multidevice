@@ -1,77 +1,294 @@
-version: '3.8'
+# Docker Compose configuration for GOWA Admin API
+# This configuration mirrors the Helm chart deployment pattern
+#
+# Architecture:
+#   - init-directories: Creates directory structure and sets permissions
+#   - supervisord: Runs supervisord daemon for managing GOWA instances
+#   - gowa-admin: Admin API server that manages instances via supervisord
+#   - swagger-ui: Optional API documentation UI
+#
+# Usage:
+#   docker-compose -f docker-compose.admin.yml up -d
+#
+# For production, create a .env file or use docker-compose override
+
+x-common-env: &common-env
+  # Supervisor configuration (override via .env file or environment variables)
+  SUPERVISOR_URL: "http://supervisord:9001/RPC2"
+  SUPERVISOR_USER: "admin"
+  SUPERVISOR_PASS: "changeme"
+  SUPERVISOR_CONF_DIR: "/app/supervisor/conf.d"
+  SUPERVISOR_LOG_DIR: "/app/supervisor/logs"
+  # Directory configuration
+  INSTANCES_DIR: "/app/instances"
+  LOCK_DIR: "/tmp"
+  # Database configuration
+  DB_URI: "file:/app/storages/whatsapp.db?_foreign_keys=on"
+  # Application settings
+  APP_DEBUG: "${APP_DEBUG:-true}"
+  ADMIN_DEBUG: "${ADMIN_DEBUG:-true}"
+  ADMIN_PORT: "8088"
+  WHATSAPP_CHAT_STORAGE: "true"
+  WHATSAPP_SETTING_MAX_AUDIO_SIZE: "16777216"
+  WHATSAPP_SETTING_AUTO_CONVERT_AUDIO: "true"
 
 services:
+  # Init container: Creates directory structure and sets permissions
+  # Mirrors: Helm init-directories container
+  init-directories:
+    image: busybox:1.36
+    user: "0:0"  # Run as root to set permissions
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        echo "Creating shared volume directory structure..."
+        mkdir -p /shared-data/instances
+        mkdir -p /shared-data/statics/media
+        mkdir -p /shared-data/statics/qrcode
+        mkdir -p /shared-data/statics/senditems
+        mkdir -p /shared-data/storages
+        mkdir -p /shared-data/supervisor/conf.d
+        mkdir -p /shared-data/supervisor/logs
+        echo "Setting ownership to user 1000..."
+        chown -R 1000:1000 /shared-data
+        chmod -R 755 /shared-data
+        echo "Shared volume structure created successfully"
+    volumes:
+      - shared_data:/shared-data
+    restart: "no"
+
+  # Init container: Generates supervisord config with secrets substituted
+  # Mirrors: Helm init-supervisor-config container
+  # Runs as root to write to volume, then chown to 1000
+  init-supervisor-config:
+    image: busybox:1.36
+    user: "0:0"
+    depends_on:
+      init-directories:
+        condition: service_completed_successfully
+    environment:
+      SUPERVISOR_USER: "admin"
+      SUPERVISOR_PASS: "changeme"
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        echo "Generating supervisord config..."
+        cat > /supervisor-config/supervisord.conf << TEMPLATE
+        [inet_http_server]
+        port=0.0.0.0:9001
+        username=$${SUPERVISOR_USER}
+        password=$${SUPERVISOR_PASS}
+
+        [supervisord]
+        logfile=/app/supervisor/logs/supervisord.log
+        pidfile=/tmp/supervisord.pid
+        childlogdir=/app/supervisor/logs
+        nodaemon=true
+        loglevel=info
+
+        [rpcinterface:supervisor]
+        supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+        [supervisorctl]
+        serverurl=http://127.0.0.1:9001
+        username=$${SUPERVISOR_USER}
+        password=$${SUPERVISOR_PASS}
+
+        [include]
+        files = /app/supervisor/conf.d/*.conf
+        TEMPLATE
+        chown 1000:1000 /supervisor-config/supervisord.conf
+        echo "Supervisord config generated successfully"
+        cat /supervisor-config/supervisord.conf
+    volumes:
+      - supervisor_config:/supervisor-config
+    restart: "no"
+
+  # Supervisord sidecar container
+  # Mirrors: Helm supervisord container
+  supervisord:
+    build:
+      context: .
+      dockerfile: docker/golang.Dockerfile
+    user: "1000:1000"
+    depends_on:
+      init-directories:
+        condition: service_completed_successfully
+      init-supervisor-config:
+        condition: service_completed_successfully
+    ports:
+      - "9001:9001"  # Supervisor web interface
+    volumes:
+      # Generated config from init container
+      - supervisor_config:/supervisor-config:ro
+      # Shared data at /app (contains supervisor/conf.d, supervisor/logs, instances)
+      - shared_data:/app
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "Starting supervisord..."
+        exec /usr/bin/supervisord -c /supervisor-config/supervisord.conf
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-u", "admin:changeme", "http://127.0.0.1:9001"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Admin API container
+  # Mirrors: Helm gowa container
   gowa-admin:
     build:
       context: .
       dockerfile: docker/golang.Dockerfile
-    ports:
-      - "8088:8088"  # Admin API port
-      - "9001:9001"  # Supervisor web interface
-      - "3001-3010:3001-3010"  # Range for GOWA instances
+    user: "1000:1000"
+    depends_on:
+      supervisord:
+        condition: service_healthy
     environment:
-      # Admin API Configuration
-      ADMIN_TOKEN: "change-this-to-a-secure-token"
-      SUPERVISOR_URL: "http://127.0.0.1:9001/RPC2"
-      SUPERVISOR_USER: "admin"
-      SUPERVISOR_PASS: "change-me-now"
-      SUPERVISOR_CONF_DIR: "/etc/supervisor/conf.d"
-      INSTANCES_DIR: "/app/instances"
-      SUPERVISOR_LOG_DIR: "/var/log/supervisor"
+      <<: *common-env
+      # ADMIN_TOKEN is required - override in production via .env or environment
+      ADMIN_TOKEN: "changeme"
       GOWA_BIN: "/usr/local/bin/whatsapp"
       GOWA_BASIC_AUTH: "admin:admin"
       GOWA_DEBUG: "false"
       GOWA_OS: "Chrome"
       GOWA_ACCOUNT_VALIDATION: "false"
-      LOCK_DIR: "/run"
-      
-      # Admin Server Configuration
-      ADMIN_DEBUG: "true"
+      GOWA_BASE_PATH: ""
+      GOWA_AUTO_REPLY: ""
+      GOWA_AUTO_MARK_READ: "false"
+      GOWA_WEBHOOK: ""
+      GOWA_WEBHOOK_SECRET: "secret"
+      GOWA_CHAT_STORAGE: "true"
+    ports:
+      - "8088:8088"  # Admin API port
+      - "3001-3010:3001-3010"  # WhatsApp instance ports
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "Starting gowa-admin container..."
+        echo "Waiting for supervisord to be ready..."
+
+        # Wait for supervisord with proper health check (matches Helm deployment)
+        max_attempts=60
+        attempt=0
+        while [ $$attempt -lt $$max_attempts ]; do
+          if curl -sf -u admin:changeme "http://supervisord:9001" >/dev/null 2>&1; then
+            echo "Supervisord is ready!"
+            break
+          fi
+          attempt=$$((attempt + 1))
+          echo "Waiting for supervisord... attempt $$attempt/$$max_attempts"
+          sleep 1
+        done
+
+        if [ $$attempt -eq $$max_attempts ]; then
+          echo "Warning: Supervisord not responding after $$max_attempts seconds, starting anyway..."
+        fi
+
+        echo "Starting Admin API on port 8088..."
+        exec /usr/local/bin/whatsapp admin --port 8088
     volumes:
-      - instances_data:/app/instances
-      - supervisor_conf:/etc/supervisor/conf.d
-      - supervisor_logs:/var/log/supervisor
-      - supervisor_run:/run
-    entrypoint: ["/app/start-admin.sh"]
-    command: []
+      # Mount shared data at /app (contains instances, statics, storages subdirs)
+      - shared_data:/app
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8088/healthz"]
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8088/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    restart: unless-stopped
+
+  # Swagger UI sidecar (optional, matches Helm swaggerUI)
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    user: "1000:1000"
+    depends_on:
+      gowa-admin:
+        condition: service_healthy
+    environment:
+      SWAGGER_JSON: "/etc/swagger/admin-api-openapi.yaml"
+      BASE_URL: "/swagger"
+      DEEP_LINKING: "true"
+      DISPLAY_OPERATION_ID: "false"
+      DEFAULT_MODELS_EXPAND_DEPTH: "1"
+      DEFAULT_MODEL_EXPAND_DEPTH: "1"
+      DOC_EXPANSION: "list"
+      FILTER: "false"
+      TAGS_SORTER: "alpha"
+    ports:
+      - "8080:8080"  # Swagger UI port
+    volumes:
+      - ./docs/reference/api:/etc/swagger:ro
+    profiles:
+      - swagger  # Only start with: docker-compose --profile swagger up
+    restart: unless-stopped
 
 volumes:
-  instances_data:
-    driver: local
-  supervisor_conf:
-    driver: local
-  supervisor_logs:
-    driver: local
-  supervisor_run:
+  # Shared data volume (mirrors Helm PVC)
+  # Contains: instances, statics, storages, supervisor configs/logs
+  shared_data:
     driver: local
 
-# Example of how to use the Admin API
-# 
-# 1. Start the services:
-#    docker-compose up -d
+  # Supervisor config volume (generated config with secrets)
+  supervisor_config:
+    driver: local
+
+# Network configuration
+networks:
+  default:
+    name: gowa-network
+
+# =============================================================================
+# Usage Examples
+# =============================================================================
 #
-# 2. Wait for the service to be healthy:
-#    docker-compose ps
+# 1. Start services (without Swagger UI):
+#    docker-compose -f docker-compose.admin.yml up -d
 #
-# 3. Create a new GOWA instance:
+# 2. Start services with Swagger UI:
+#    docker-compose -f docker-compose.admin.yml --profile swagger up -d
+#
+# 3. Set custom credentials (recommended for production):
+#    ADMIN_TOKEN=your-secure-token \
+#    SUPERVISOR_USER=admin \
+#    SUPERVISOR_PASS=secure-password \
+#    docker-compose -f docker-compose.admin.yml up -d
+#
+# 4. Or use a .env file:
+#    echo "ADMIN_TOKEN=your-secure-token" > .env
+#    echo "SUPERVISOR_USER=admin" >> .env
+#    echo "SUPERVISOR_PASS=secure-password" >> .env
+#    docker-compose -f docker-compose.admin.yml up -d
+#
+# 5. View logs:
+#    docker-compose -f docker-compose.admin.yml logs -f
+#
+# 6. Create a GOWA instance (default token: changeme):
 #    curl -X POST "http://localhost:8088/admin/instances" \
-#      -H "Authorization: Bearer change-this-to-a-secure-token" \
+#      -H "Authorization: Bearer changeme" \
 #      -H "Content-Type: application/json" \
 #      -d '{"port": 3001}'
 #
-# 4. List instances:
+# 7. List instances:
 #    curl -X GET "http://localhost:8088/admin/instances" \
-#      -H "Authorization: Bearer change-this-to-a-secure-token"
+#      -H "Authorization: Bearer changeme"
 #
-# 5. Access your GOWA instance:
+# 8. Access GOWA instance:
 #    http://localhost:3001
 #
-# 6. Delete the instance:
-#    curl -X DELETE "http://localhost:8088/admin/instances/3001" \
-#      -H "Authorization: Bearer change-this-to-a-secure-token"
+# 9. Access Swagger UI (if enabled):
+#    http://localhost:8080/swagger
+#
+# 10. Stop services:
+#     docker-compose -f docker-compose.admin.yml down
+#
+# 11. Stop and remove volumes (clean start):
+#     docker-compose -f docker-compose.admin.yml down -v
