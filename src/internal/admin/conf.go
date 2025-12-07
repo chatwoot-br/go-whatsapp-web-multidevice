@@ -161,6 +161,33 @@ func (cw *ConfigWriter) RemoveConfig(port int) error {
 	return nil
 }
 
+// RemoveStorage removes the entire instance directory for a given port
+func (cw *ConfigWriter) RemoveStorage(port int) error {
+	instanceDir := filepath.Join(cw.config.InstancesDir, strconv.Itoa(port))
+
+	if err := os.RemoveAll(instanceDir); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove instance directory %s: %w", instanceDir, err)
+	}
+
+	return nil
+}
+
+// RemoveLogs removes the log files for a given port
+func (cw *ConfigWriter) RemoveLogs(port int) error {
+	patterns := []string{
+		filepath.Join(cw.config.LogDir, fmt.Sprintf("gowa_%d.out.log", port)),
+		filepath.Join(cw.config.LogDir, fmt.Sprintf("gowa_%d.err.log", port)),
+	}
+
+	for _, pattern := range patterns {
+		if err := os.Remove(pattern); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove log file %s: %w", pattern, err)
+		}
+	}
+
+	return nil
+}
+
 // ConfigExists checks if a configuration file exists for a given port
 func (cw *ConfigWriter) ConfigExists(port int) bool {
 	configPath := filepath.Join(cw.config.ConfDir, fmt.Sprintf("gowa-%d.conf", port))

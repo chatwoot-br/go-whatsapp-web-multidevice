@@ -174,6 +174,18 @@ func (lm *LifecycleManager) DeleteInstance(ctx context.Context, port int) error 
 		}
 	}
 
+	// Remove storage directory (database, chat storage, media, etc.)
+	if err := lm.configWriter.RemoveStorage(port); err != nil {
+		lm.logger.Warnf("Failed to remove storage for port %d: %v", port, err)
+		// Continue with cleanup - storage removal is best-effort
+	}
+
+	// Remove log files
+	if err := lm.configWriter.RemoveLogs(port); err != nil {
+		lm.logger.Warnf("Failed to remove logs for port %d: %v", port, err)
+		// Continue with cleanup - log removal is best-effort
+	}
+
 	// Remove configuration file
 	if err := lm.configWriter.RemoveConfig(port); err != nil {
 		return fmt.Errorf("failed to remove config: %w", err)
