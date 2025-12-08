@@ -12,6 +12,12 @@ Follow these steps:
    - **Upstream sync**: Use new upstream version + reset fork rev to 1 (e.g., `v7.11.0+1`)
    - **Fork-only**: Keep upstream version + increment fork rev (e.g., `v7.10.1+1` → `v7.10.1+2`)
 
+   **Chart version calculation:**
+   - Check if any commits contain `helm`, `chart`, or `k8s` in the message
+   - If chart changes exist: bump chart `version` patch (e.g., `7.10.1` → `7.10.2`)
+   - If upstream sync with chart changes: use upstream chart version
+   - If no chart changes: keep current chart version
+
 2. **Run pre-release checks**:
    - Run tests: `cd src && go test ./...`
    - Run `cd src && go mod tidy` to ensure dependencies are clean
@@ -25,7 +31,7 @@ Follow these steps:
 
    Files to update:
    - `src/config/settings.go` line 8: `AppVersion = "vX.Y.Z+N"` (use `+`)
-   - `charts/gowa/Chart.yaml` line 8: `version: X.Y.Z` (upstream version only)
+   - `charts/gowa/Chart.yaml` line 8: `version: A.B.C` (bump if chart changes, see step 1)
    - `charts/gowa/Chart.yaml` line 11: `appVersion: "vX.Y.Z-N"` (use `-` for Docker)
 
 4. **Update CHANGELOG.md** at the top with the new version section:
