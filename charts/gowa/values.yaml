@@ -336,7 +336,8 @@ persistence:
   size: 10Gi  # Increased size to accommodate all data (instances + supervisor configs + logs + statics)
   # existingClaim: ""
 
-# Cleanup CronJob configuration
+# Cleanup sidecar configuration
+# Runs crond inside the deployment pod to avoid Multi-Attach volume errors
 # Automatically deletes old files from specified directories
 cleanup:
   enabled: true
