@@ -166,6 +166,7 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 			Filename:   message.Filename,
 			URL:        message.URL,
 			FileLength: message.FileLength,
+			MediaPath:  message.MediaPath,
 			CreatedAt:  message.CreatedAt.Format(time.RFC3339),
 			UpdatedAt:  message.UpdatedAt.Format(time.RFC3339),
 		}

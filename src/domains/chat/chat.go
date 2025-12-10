@@ -64,6 +64,7 @@ type MessageInfo struct {
 	Filename   string `json:"filename"`
 	URL        string `json:"url"`
 	FileLength uint64 `json:"file_length"`
+	MediaPath  string `json:"media_path,omitempty"` // Local path to downloaded media
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
 }

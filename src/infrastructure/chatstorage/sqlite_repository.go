@@ -66,7 +66,7 @@ func (r *SQLiteRepository) GetMessageByID(id string) (*domainChatStorage.Message
 	query := `
 		SELECT id, chat_jid, sender, content, timestamp, is_from_me,
 			media_type, filename, url, media_key, file_sha256,
-			file_enc_sha256, file_length, created_at, updated_at
+			file_enc_sha256, file_length, media_path, created_at, updated_at
 		FROM messages
 		WHERE id = ?
 		LIMIT 1
@@ -176,10 +176,10 @@ func (r *SQLiteRepository) StoreMessage(message *domainChatStorage.Message) erro
 
 	query := `
 		INSERT INTO messages (
-			id, chat_jid, sender, content, timestamp, is_from_me, 
-			media_type, filename, url, media_key, file_sha256, 
-			file_enc_sha256, file_length, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			id, chat_jid, sender, content, timestamp, is_from_me,
+			media_type, filename, url, media_key, file_sha256,
+			file_enc_sha256, file_length, media_path, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id, chat_jid) DO UPDATE SET
 			sender = excluded.sender,
 			content = excluded.content,
@@ -192,6 +192,7 @@ func (r *SQLiteRepository) StoreMessage(message *domainChatStorage.Message) erro
 			file_sha256 = excluded.file_sha256,
 			file_enc_sha256 = excluded.file_enc_sha256,
 			file_length = excluded.file_length,
+			media_path = COALESCE(excluded.media_path, messages.media_path),
 			updated_at = excluded.updated_at
 	`
 
@@ -199,7 +200,7 @@ func (r *SQLiteRepository) StoreMessage(message *domainChatStorage.Message) erro
 		message.ID, message.ChatJID, message.Sender, message.Content,
 		message.Timestamp, message.IsFromMe, message.MediaType, message.Filename,
 		message.URL, message.MediaKey, message.FileSHA256, message.FileEncSHA256,
-		message.FileLength, message.CreatedAt, message.UpdatedAt,
+		message.FileLength, message.MediaPath, message.CreatedAt, message.UpdatedAt,
 	)
 
 	return err
@@ -220,10 +221,10 @@ func (r *SQLiteRepository) StoreMessagesBatch(messages []*domainChatStorage.Mess
 	// Prepare the statement once for better performance
 	stmt, err := tx.Prepare(`
 		INSERT INTO messages (
-			id, chat_jid, sender, content, timestamp, is_from_me, 
-			media_type, filename, url, media_key, file_sha256, 
-			file_enc_sha256, file_length, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			id, chat_jid, sender, content, timestamp, is_from_me,
+			media_type, filename, url, media_key, file_sha256,
+			file_enc_sha256, file_length, media_path, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id, chat_jid) DO UPDATE SET
 			sender = excluded.sender,
 			content = excluded.content,
@@ -236,6 +237,7 @@ func (r *SQLiteRepository) StoreMessagesBatch(messages []*domainChatStorage.Mess
 			file_sha256 = excluded.file_sha256,
 			file_enc_sha256 = excluded.file_enc_sha256,
 			file_length = excluded.file_length,
+			media_path = COALESCE(excluded.media_path, messages.media_path),
 			updated_at = excluded.updated_at
 	`)
 	if err != nil {
@@ -257,7 +259,7 @@ func (r *SQLiteRepository) StoreMessagesBatch(messages []*domainChatStorage.Mess
 			message.ID, message.ChatJID, message.Sender, message.Content,
 			message.Timestamp, message.IsFromMe, message.MediaType, message.Filename,
 			message.URL, message.MediaKey, message.FileSHA256, message.FileEncSHA256,
-			message.FileLength, message.CreatedAt, message.UpdatedAt,
+			message.FileLength, message.MediaPath, message.CreatedAt, message.UpdatedAt,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to store message %s: %w", message.ID, err)
@@ -297,7 +299,7 @@ func (r *SQLiteRepository) GetMessages(filter *domainChatStorage.MessageFilter) 
 	query := `
 		SELECT id, chat_jid, sender, content, timestamp, is_from_me,
 			media_type, filename, url, media_key, file_sha256,
-			file_enc_sha256, file_length, created_at, updated_at
+			file_enc_sha256, file_length, media_path, created_at, updated_at
 		FROM messages
 		WHERE ` + strings.Join(conditions, " AND ") + `
 		ORDER BY timestamp DESC
@@ -357,7 +359,7 @@ func (r *SQLiteRepository) SearchMessages(chatJID, searchText string, limit int)
 	query := `
 		SELECT id, chat_jid, sender, content, timestamp, is_from_me,
 			media_type, filename, url, media_key, file_sha256,
-			file_enc_sha256, file_length, created_at, updated_at
+			file_enc_sha256, file_length, media_path, created_at, updated_at
 		FROM messages
 		WHERE ` + strings.Join(conditions, " AND ") + `
 		ORDER BY timestamp DESC
@@ -401,6 +403,13 @@ func (r *SQLiteRepository) DeleteMessage(id, chatJID string) error {
 	return err
 }
 
+// UpdateMessageMediaPath updates the media_path for a message after download
+func (r *SQLiteRepository) UpdateMessageMediaPath(messageID, chatJID, mediaPath string) error {
+	query := `UPDATE messages SET media_path = ?, updated_at = ? WHERE id = ? AND chat_jid = ?`
+	_, err := r.db.Exec(query, mediaPath, time.Now(), messageID, chatJID)
+	return err
+}
+
 // getCount is a private helper for count queries
 func (r *SQLiteRepository) getCount(query string, args ...any) (int64, error) {
 	var count int64
@@ -411,12 +420,16 @@ func (r *SQLiteRepository) getCount(query string, args ...any) (int64, error) {
 // scanMessage is a private helper for scanning message rows
 func (r *SQLiteRepository) scanMessage(scanner interface{ Scan(...any) error }) (*domainChatStorage.Message, error) {
 	message := &domainChatStorage.Message{}
+	var mediaPath sql.NullString
 	err := scanner.Scan(
 		&message.ID, &message.ChatJID, &message.Sender, &message.Content,
 		&message.Timestamp, &message.IsFromMe, &message.MediaType, &message.Filename,
 		&message.URL, &message.MediaKey, &message.FileSHA256, &message.FileEncSHA256,
-		&message.FileLength, &message.CreatedAt, &message.UpdatedAt,
+		&message.FileLength, &mediaPath, &message.CreatedAt, &message.UpdatedAt,
 	)
+	if mediaPath.Valid {
+		message.MediaPath = mediaPath.String
+	}
 	return message, err
 }
 
@@ -821,6 +834,11 @@ func (r *SQLiteRepository) getMigrations() []string {
 		// Migration 2: Add index for message ID lookups (performance optimization)
 		`
 		CREATE INDEX IF NOT EXISTS idx_messages_id ON messages(id);
+		`,
+
+		// Migration 3: Add media_path column for tracking downloaded media
+		`
+		ALTER TABLE messages ADD COLUMN media_path TEXT;
 		`,
 	}
 }

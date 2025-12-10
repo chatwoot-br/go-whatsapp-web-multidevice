@@ -658,6 +658,11 @@ func handleMessage(ctx context.Context, evt *events.Message, chatStorageRepo dom
 	// Media is saved to statics/media/ for unified storage
 	downloadedMedia := downloadMessageMedia(ctx, evt)
 
+	// Update media_path in database if media was downloaded
+	if downloadedMedia != nil {
+		updateMessageMediaPath(ctx, evt, downloadedMedia, chatStorageRepo)
+	}
+
 	// Auto-mark message as read if configured
 	handleAutoMarkRead(ctx, evt)
 
@@ -807,6 +812,45 @@ func downloadMessageMedia(ctx context.Context, evt *events.Message) *DownloadedM
 	}
 
 	return downloaded
+}
+
+// updateMessageMediaPath updates the media_path in the database after auto-download
+func updateMessageMediaPath(ctx context.Context, evt *events.Message, downloadedMedia *DownloadedMedia, chatStorageRepo domainChatStorage.IChatStorageRepository) {
+	if downloadedMedia == nil {
+		return
+	}
+
+	// Determine which media was downloaded and get its path
+	var mediaPath string
+	if downloadedMedia.Image != nil {
+		mediaPath = downloadedMedia.Image.MediaPath
+	} else if downloadedMedia.Audio != nil {
+		mediaPath = downloadedMedia.Audio.MediaPath
+	} else if downloadedMedia.Document != nil {
+		mediaPath = downloadedMedia.Document.MediaPath
+	} else if downloadedMedia.Sticker != nil {
+		mediaPath = downloadedMedia.Sticker.MediaPath
+	} else if downloadedMedia.Video != nil {
+		mediaPath = downloadedMedia.Video.MediaPath
+	} else if downloadedMedia.VideoNote != nil {
+		mediaPath = downloadedMedia.VideoNote.MediaPath
+	}
+
+	if mediaPath == "" {
+		return
+	}
+
+	// Get normalized chat JID
+	client := GetClient()
+	normalizedChatJID := NormalizeJIDFromLID(ctx, evt.Info.Chat, client)
+	chatJID := normalizedChatJID.String()
+
+	// Update the media path in the database
+	if err := chatStorageRepo.UpdateMessageMediaPath(evt.Info.ID, chatJID, mediaPath); err != nil {
+		log.Warnf("Failed to update media_path for message %s: %v", evt.Info.ID, err)
+	} else {
+		log.Infof("Updated media_path for message %s: %s", evt.Info.ID, mediaPath)
+	}
 }
 
 func handleAutoMarkRead(_ context.Context, evt *events.Message) {
