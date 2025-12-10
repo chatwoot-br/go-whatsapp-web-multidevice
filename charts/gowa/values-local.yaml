@@ -4,7 +4,7 @@
 # helm upgrade gowa ./charts/gowa -f charts/gowa/values-local.yaml
 # helm uninstall gowa
 # Access:
-#   kubectl port-forward svc/gowa 8088:8088 8080:8080 9001:9001 3001:3001 3002:3002
+#   kubectl port-forward svc/gowa 8088:8088 8080:8080 9001:9001 3001:3001
 #   Supervisor: http://localhost:9001
 #   Admin API: http://localhost:8088
 #   Swagger UI: http://localhost:8080

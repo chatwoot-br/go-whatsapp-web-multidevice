@@ -5,7 +5,7 @@ description: A Helm chart for Go WhatsApp Web Multidevice Admin API
 type: application
 
 # Chart version follows Semantic Versioning (https://semver.org/)
-version: 7.10.3
+version: 7.10.2
 
 # Application version being deployed
 # NOTE: Uses '-' instead of '+' because Docker tags don't support '+'
