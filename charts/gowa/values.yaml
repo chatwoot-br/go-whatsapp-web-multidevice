@@ -282,6 +282,11 @@ env:
     value: "16777216"
   - name: WHATSAPP_SETTING_AUTO_CONVERT_AUDIO
     value: "true"
+  # Cleanup defaults (used by POST /admin/cleanup when not specified in request)
+  - name: CLEANUP_RETENTION_DAYS
+    value: "7"
+  - name: CLEANUP_DIRECTORIES
+    value: "/app/statics/media,/app/statics/qrcode,/app/statics/senditems"
 
 # Pod Disruption Budget for high availability
 # Ensures minimum availability during voluntary disruptions
@@ -337,14 +342,15 @@ persistence:
   # existingClaim: ""
 
 # Cleanup CronJob configuration
-# Automatically deletes old files from specified directories
+# Automatically deletes old files from specified directories via Admin API
+# NOTE: This uses HTTP endpoint instead of mounting PVC to avoid Multi-Attach errors
 cleanup:
   enabled: true
   # Schedule in cron format (default: 2 AM daily)
   schedule: "0 2 * * *"
   # Delete files older than this many days
   retentionDays: 7
-  # Directories to clean (relative to shared-data volume)
+  # Directories to clean (relative to /app/)
   # NOTE: Do NOT add instances, storages, or supervisor/conf.d - these contain persistent data
   directories:
     - statics/media

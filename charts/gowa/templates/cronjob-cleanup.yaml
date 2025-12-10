@@ -29,7 +29,7 @@ spec:
           {{- end }}
           containers:
             - name: cleanup
-              image: busybox:1.36
+              image: curlimages/curl:8.5.0
               {{- with .Values.securityContext }}
               securityContext:
                 {{- toYaml . | nindent 16 }}
@@ -38,18 +38,66 @@ spec:
               args:
                 - |
                   set -e
-                  echo "Starting cleanup of files older than {{ .Values.cleanup.retentionDays }} days..."
+                  echo "Starting cleanup via Admin API..."
+                  echo "Retention days: {{ .Values.cleanup.retentionDays }}"
+                  echo "Directories: {{ join "," .Values.cleanup.directories }}"
 
-                  {{- range .Values.cleanup.directories }}
-                  echo "Cleaning /shared-data/{{ . }}..."
-                  find /shared-data/{{ . }} -type f -mtime +{{ $.Values.cleanup.retentionDays }} -delete 2>/dev/null || true
-                  find /shared-data/{{ . }} -type d -empty -delete 2>/dev/null || true
+                  # Build the request payload
+                  PAYLOAD=$(cat <<EOF
+                  {
+                    "retention_days": {{ .Values.cleanup.retentionDays }},
+                    "directories": [
+                      {{- $dirs := list }}
+                      {{- range .Values.cleanup.directories }}
+                      {{- $dirs = append $dirs (printf "\"/app/%s\"" .) }}
+                      {{- end }}
+                      {{ join "," $dirs }}
+                    ],
+                    "dry_run": false
+                  }
+                  EOF
+                  )
+
+                  echo "Calling cleanup endpoint..."
+                  RESPONSE=$(curl -s -w "\n%{http_code}" \
+                    -X POST \
+                    -H "Content-Type: application/json" \
+                    -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+                    -d "${PAYLOAD}" \
+                    "http://{{ include "gowa.fullname" . }}:{{ .Values.admin.port }}/admin/cleanup")
+
+                  # Extract HTTP status code (last line)
+                  HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+                  # Extract response body (all but last line)
+                  BODY=$(echo "$RESPONSE" | sed '$d')
+
+                  echo "Response (HTTP $HTTP_CODE):"
+                  echo "$BODY" | head -c 1000
+
+                  if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+                    echo ""
+                    echo "Cleanup completed successfully"
+                    exit 0
+                  else
+                    echo ""
+                    echo "Cleanup failed with HTTP status: $HTTP_CODE"
+                    exit 1
+                  fi
+              env:
+                - name: ADMIN_TOKEN
+                  {{- if .Values.admin.token }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "gowa.fullname" . }}-secret
+                      key: admin-token
+                  {{- else if .Values.admin.existingSecret }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.admin.existingSecret }}
+                      key: {{ .Values.admin.existingSecretKey | default "admin-token" }}
+                  {{- else }}
+                  value: ""
                   {{- end }}
-
-                  echo "Cleanup completed successfully"
-              volumeMounts:
-                - name: shared-data
-                  mountPath: /shared-data
               resources:
                 limits:
                   cpu: 100m
@@ -57,14 +105,6 @@ spec:
                 requests:
                   cpu: 50m
                   memory: 32Mi
-          volumes:
-            - name: shared-data
-              {{- if .Values.persistence.enabled }}
-              persistentVolumeClaim:
-                claimName: {{ include "gowa.fullname" . }}-data-pvc
-              {{- else }}
-              emptyDir: {}
-              {{- end }}
           restartPolicy: OnFailure
           {{- with .Values.nodeSelector }}
           nodeSelector:

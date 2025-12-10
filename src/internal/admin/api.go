@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -80,6 +81,32 @@ type HealthResponse struct {
 	Version    string    `json:"version"`
 }
 
+// CleanupRequest represents the request body for cleanup operation
+type CleanupRequest struct {
+	RetentionDays int      `json:"retention_days,omitempty"`
+	Directories   []string `json:"directories,omitempty"`
+	DryRun        bool     `json:"dry_run,omitempty"`
+}
+
+// CleanupResult represents the result of cleaning a single directory
+type CleanupResult struct {
+	Directory    string   `json:"directory"`
+	FilesDeleted int      `json:"files_deleted"`
+	DirsDeleted  int      `json:"dirs_deleted"`
+	BytesFreed   int64    `json:"bytes_freed"`
+	Errors       []string `json:"errors,omitempty"`
+}
+
+// CleanupResponse represents the response from cleanup operation
+type CleanupResponse struct {
+	RetentionDays int             `json:"retention_days"`
+	DryRun        bool            `json:"dry_run"`
+	Results       []CleanupResult `json:"results"`
+	TotalFiles    int             `json:"total_files_deleted"`
+	TotalDirs     int             `json:"total_dirs_deleted"`
+	TotalBytes    int64           `json:"total_bytes_freed"`
+}
+
 // NewAdminAPI creates a new AdminAPI instance
 func NewAdminAPI(lifecycle ILifecycleManager, logger *logrus.Logger) (*AdminAPI, error) {
 	adminToken := os.Getenv("ADMIN_TOKEN")
@@ -121,6 +148,7 @@ func (api *AdminAPI) SetupRoutes(app *fiber.App) {
 	admin.Get("/instances/:port", api.getInstanceHandler)
 	admin.Patch("/instances/:port", api.updateInstanceHandler)
 	admin.Delete("/instances/:port", api.deleteInstanceHandler)
+	admin.Post("/cleanup", api.cleanupHandler)
 }
 
 // timeoutMiddleware adds a timeout context to each request
@@ -391,6 +419,175 @@ func (api *AdminAPI) readinessHandler(c *fiber.Ctx) error {
 	}
 
 	return api.successResponse(c, http.StatusOK, nil, "Service is ready")
+}
+
+// cleanupHandler handles POST /admin/cleanup
+// Cleans up old files from specified directories
+func (api *AdminAPI) cleanupHandler(c *fiber.Ctx) error {
+	requestID := api.getRequestID(c)
+
+	var req CleanupRequest
+	if err := c.BodyParser(&req); err != nil && err.Error() != "Unprocessable Entity" {
+		return api.errorResponse(c, http.StatusBadRequest, "invalid_json", "Invalid JSON in request body")
+	}
+
+	// Default retention days from env or fallback to 7
+	retentionDays := req.RetentionDays
+	if retentionDays <= 0 {
+		envDays := os.Getenv("CLEANUP_RETENTION_DAYS")
+		if envDays != "" {
+			if days, err := strconv.Atoi(envDays); err == nil && days > 0 {
+				retentionDays = days
+			}
+		}
+		if retentionDays <= 0 {
+			retentionDays = 7
+		}
+	}
+
+	// Default directories from env or fallback to standard paths
+	directories := req.Directories
+	if len(directories) == 0 {
+		envDirs := os.Getenv("CLEANUP_DIRECTORIES")
+		if envDirs != "" {
+			directories = strings.Split(envDirs, ",")
+		} else {
+			// Default directories for media cleanup
+			directories = []string{
+				"/app/statics/media",
+				"/app/statics/qrcode",
+				"/app/statics/senditems",
+			}
+		}
+	}
+
+	api.logger.WithFields(logrus.Fields{
+		"request_id":     requestID,
+		"retention_days": retentionDays,
+		"directories":    directories,
+		"dry_run":        req.DryRun,
+	}).Info("Starting cleanup operation")
+
+	cutoffTime := time.Now().AddDate(0, 0, -retentionDays)
+	response := CleanupResponse{
+		RetentionDays: retentionDays,
+		DryRun:        req.DryRun,
+		Results:       make([]CleanupResult, 0, len(directories)),
+	}
+
+	for _, dir := range directories {
+		result := api.cleanupDirectory(dir, cutoffTime, req.DryRun)
+		response.Results = append(response.Results, result)
+		response.TotalFiles += result.FilesDeleted
+		response.TotalDirs += result.DirsDeleted
+		response.TotalBytes += result.BytesFreed
+	}
+
+	api.logger.WithFields(logrus.Fields{
+		"request_id":    requestID,
+		"files_deleted": response.TotalFiles,
+		"dirs_deleted":  response.TotalDirs,
+		"bytes_freed":   response.TotalBytes,
+		"dry_run":       req.DryRun,
+	}).Info("Cleanup operation completed")
+
+	return api.successResponse(c, http.StatusOK, response, "Cleanup completed successfully")
+}
+
+// cleanupDirectory cleans files older than cutoffTime from a directory
+func (api *AdminAPI) cleanupDirectory(dir string, cutoffTime time.Time, dryRun bool) CleanupResult {
+	result := CleanupResult{
+		Directory: dir,
+		Errors:    make([]string, 0),
+	}
+
+	// Check if directory exists
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		api.logger.Debugf("Directory does not exist, skipping: %s", dir)
+		return result
+	}
+
+	// First pass: delete old files
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("error accessing %s: %v", path, err))
+			return nil // Continue walking despite errors
+		}
+
+		// Skip the root directory itself
+		if path == dir {
+			return nil
+		}
+
+		// Only process files (not directories) in first pass
+		if !info.IsDir() && info.ModTime().Before(cutoffTime) {
+			if dryRun {
+				result.FilesDeleted++
+				result.BytesFreed += info.Size()
+				api.logger.Debugf("Would delete file: %s (size: %d, mtime: %s)", path, info.Size(), info.ModTime())
+			} else {
+				if err := os.Remove(path); err != nil {
+					result.Errors = append(result.Errors, fmt.Sprintf("failed to delete %s: %v", path, err))
+				} else {
+					result.FilesDeleted++
+					result.BytesFreed += info.Size()
+					api.logger.Debugf("Deleted file: %s", path)
+				}
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("walk error: %v", err))
+	}
+
+	// Second pass: delete empty directories (bottom-up)
+	api.cleanupEmptyDirs(dir, dryRun, &result)
+
+	return result
+}
+
+// cleanupEmptyDirs removes empty directories recursively (bottom-up)
+func (api *AdminAPI) cleanupEmptyDirs(dir string, dryRun bool, result *CleanupResult) {
+	// Collect all subdirectories first
+	var subdirs []string
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() && path != dir {
+			subdirs = append(subdirs, path)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return
+	}
+
+	// Process directories in reverse order (deepest first)
+	for i := len(subdirs) - 1; i >= 0; i-- {
+		subdir := subdirs[i]
+		entries, err := os.ReadDir(subdir)
+		if err != nil {
+			continue
+		}
+
+		if len(entries) == 0 {
+			if dryRun {
+				result.DirsDeleted++
+				api.logger.Debugf("Would delete empty directory: %s", subdir)
+			} else {
+				if err := os.Remove(subdir); err != nil {
+					result.Errors = append(result.Errors, fmt.Sprintf("failed to delete dir %s: %v", subdir, err))
+				} else {
+					result.DirsDeleted++
+					api.logger.Debugf("Deleted empty directory: %s", subdir)
+				}
+			}
+		}
+	}
 }
 
 // errorResponse sends a standardized error response
