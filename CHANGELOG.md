@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) with fork revision tracking (`vX.Y.Z+N`).
 
+## [v7.10.1+3] - 2025-12-11
+
+### Fork Changes
+- fix(helm): use admin API endpoint for cleanup CronJob to avoid Multi-Attach errors
+- feat(api): add media_path to chat messages API for external consumers
+
+### Versions
+- Git tag: `v7.10.1+3`
+- Docker tag: `v7.10.1-3` (+ converted to - for Docker compatibility)
+- Helm chart: `7.10.3` (bumped due to chart changes)
+
+---
+
 ## [v7.10.1+2] - 2025-12-08
 
 ### Fork Changes
