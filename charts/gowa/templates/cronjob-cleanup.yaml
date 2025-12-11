@@ -1,0 +1,117 @@
+{{- if .Values.cleanup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "gowa.fullname" . }}-cleanup
+  labels:
+    {{- include "gowa.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cleanup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "gowa.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: cleanup
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "gowa.serviceAccountName" . }}
+          {{- with .Values.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: cleanup
+              image: curlimages/curl:8.5.0
+              {{- with .Values.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              command: ['sh', '-c']
+              args:
+                - |
+                  set -e
+                  echo "Starting cleanup via Admin API..."
+                  echo "Retention days: {{ .Values.cleanup.retentionDays }}"
+                  echo "Directories: {{ join "," .Values.cleanup.directories }}"
+
+                  # Build the request payload
+                  PAYLOAD=$(cat <<EOF
+                  {
+                    "retention_days": {{ .Values.cleanup.retentionDays }},
+                    "directories": [
+                      {{- $dirs := list }}
+                      {{- range .Values.cleanup.directories }}
+                      {{- $dirs = append $dirs (printf "\"/app/%s\"" .) }}
+                      {{- end }}
+                      {{ join "," $dirs }}
+                    ],
+                    "dry_run": false
+                  }
+                  EOF
+                  )
+
+                  echo "Calling cleanup endpoint..."
+                  RESPONSE=$(curl -s -w "\n%{http_code}" \
+                    -X POST \
+                    -H "Content-Type: application/json" \
+                    -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+                    -d "${PAYLOAD}" \
+                    "http://{{ include "gowa.fullname" . }}:{{ .Values.admin.port }}/admin/cleanup")
+
+                  # Extract HTTP status code (last line)
+                  HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+                  # Extract response body (all but last line)
+                  BODY=$(echo "$RESPONSE" | sed '$d')
+
+                  echo "Response (HTTP $HTTP_CODE):"
+                  echo "$BODY" | head -c 1000
+
+                  if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+                    echo ""
+                    echo "Cleanup completed successfully"
+                    exit 0
+                  else
+                    echo ""
+                    echo "Cleanup failed with HTTP status: $HTTP_CODE"
+                    exit 1
+                  fi
+              env:
+                - name: ADMIN_TOKEN
+                  {{- if .Values.admin.token }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "gowa.fullname" . }}-secret
+                      key: admin-token
+                  {{- else if .Values.admin.existingSecret }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.admin.existingSecret }}
+                      key: {{ .Values.admin.existingSecretKey | default "admin-token" }}
+                  {{- else }}
+                  value: ""
+                  {{- end }}
+              resources:
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+                requests:
+                  cpu: 50m
+                  memory: 32Mi
+          restartPolicy: OnFailure
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

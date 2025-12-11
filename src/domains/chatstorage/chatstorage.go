@@ -27,6 +27,7 @@ type Message struct {
 	FileSHA256    []byte    `db:"file_sha256"`
 	FileEncSHA256 []byte    `db:"file_enc_sha256"`
 	FileLength    uint64    `db:"file_length"`
+	MediaPath     string    `db:"media_path"` // Local path to downloaded media
 	CreatedAt     time.Time `db:"created_at"`
 	UpdatedAt     time.Time `db:"updated_at"`
 }

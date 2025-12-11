@@ -1,0 +1,91 @@
+# Production values for gowa Helm chart
+# Usage: helm install gowa ./charts/gowa -f charts/gowa/values-production.yaml
+#
+# REQUIRED: Set these via --set or environment-specific values file:
+#   --set admin.token="your-secure-token"
+#   --set admin.supervisor.password="your-secure-password"
+#   --set ingress.hosts[0].host="your-domain.com"
+
+# Image configuration
+# Uses appVersion from Chart.yaml by default (recommended)
+image:
+  pullPolicy: IfNotPresent
+  # tag: "v7.10.1-1"  # Uncomment to pin specific version
+
+# Admin API configuration
+admin:
+  port: 8088
+  # SECURITY: Use existingSecret in production instead of inline token
+  # token: ""  # Set via --set or use existingSecret
+  existingSecret: ""  # e.g., "gowa-admin-secret"
+  existingSecretKey: "admin-token"
+
+  supervisor:
+    # SECURITY: Always set a strong password in production
+    # password: ""  # Set via --set or use existingSecret
+    existingSecret: ""  # e.g., "gowa-supervisor-secret"
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+  hosts:
+    - host: whatsapp.example.com  # CHANGE THIS
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: gowa-tls
+      hosts:
+        - whatsapp.example.com  # CHANGE THIS
+
+# Resource limits
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+# Persistence
+persistence:
+  enabled: true
+  size: 10Gi
+  # storageClass: ""  # Use cluster default or specify
+
+# Disable Swagger UI in production (security)
+swaggerUI:
+  enabled: false
+
+# Enable cleanup CronJob
+cleanup:
+  enabled: true
+  schedule: "0 3 * * *"  # 3 AM daily
+  retentionDays: 7
+
+# Environment variables for production
+env:
+  - name: APP_DEBUG
+    value: "false"
+  - name: ADMIN_DEBUG
+    value: "false"
+  - name: SUPERVISOR_URL
+    value: "http://127.0.0.1:9001/RPC2"
+  - name: SUPERVISOR_CONF_DIR
+    value: "/etc/supervisor/conf.d"
+  - name: INSTANCES_DIR
+    value: "/app/instances"
+  - name: SUPERVISOR_LOG_DIR
+    value: "/var/log/supervisor"
+  - name: LOCK_DIR
+    value: "/tmp"
+  - name: DB_URI
+    value: "file:/app/storages/whatsapp.db?_foreign_keys=on"
+  - name: WHATSAPP_CHAT_STORAGE
+    value: "true"
+  - name: ADMIN_PORT
+    value: "8088"

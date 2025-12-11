@@ -218,6 +218,27 @@ func (service serviceMessage) DownloadMedia(ctx context.Context, request domainM
 		return response, fmt.Errorf("message %s does not belong to chat %s", request.MessageID, dataWaRecipient.String())
 	}
 
+	// Check if media is already downloaded and file exists (cache hit)
+	if message.MediaPath != "" {
+		if fileInfo, err := os.Stat(message.MediaPath); err == nil {
+			// File exists - return cached response
+			logrus.Info(map[string]any{
+				"message_id": request.MessageID,
+				"status":     "cache_hit",
+				"media_path": message.MediaPath,
+			})
+			response.MessageID = request.MessageID
+			response.Status = "Media already downloaded"
+			response.MediaType = message.MediaType
+			response.Filename = filepath.Base(message.MediaPath)
+			response.FilePath = config.AppBasePath + "/" + message.MediaPath
+			response.FileSize = fileInfo.Size()
+			return response, nil
+		}
+		// File path exists in DB but file deleted - clear path and re-download
+		logrus.Warnf("Media path %s no longer exists, re-downloading", message.MediaPath)
+	}
+
 	// Create directory structure for organized storage
 	chatDir := filepath.Join(config.PathMedia, utils.ExtractPhoneNumber(message.ChatJID))
 	dateDir := filepath.Join(chatDir, message.Timestamp.Format("2006-01-02"))
@@ -288,12 +309,19 @@ func (service serviceMessage) DownloadMedia(ctx context.Context, request domainM
 		logrus.Warnf("Could not get file size for %s: %v", extractedMedia.MediaPath, err)
 	}
 
+	// Update database with media path for future cache hits
+	if err := service.chatStorageRepo.UpdateMessageMediaPath(request.MessageID, message.ChatJID, extractedMedia.MediaPath); err != nil {
+		logrus.Warnf("Failed to update media path in database: %v", err)
+		// Continue - download was successful even if DB update failed
+	}
+
 	// Build response
 	response.MessageID = request.MessageID
 	response.Status = fmt.Sprintf("Media downloaded successfully to %s", extractedMedia.MediaPath)
 	response.MediaType = message.MediaType
 	response.Filename = filepath.Base(extractedMedia.MediaPath)
-	response.FilePath = extractedMedia.MediaPath
+	// Convert filesystem path to URL path (add leading / and base path if configured)
+	response.FilePath = config.AppBasePath + "/" + extractedMedia.MediaPath
 	if fileInfo != nil {
 		response.FileSize = fileInfo.Size()
 	}

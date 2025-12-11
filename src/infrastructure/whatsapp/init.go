@@ -37,6 +37,25 @@ type ExtractedMedia struct {
 	Caption   string `json:"caption"`
 }
 
+// DownloadedMedia holds all downloaded media from a message to avoid duplicate downloads
+type DownloadedMedia struct {
+	Audio     *utils.ExtractedMedia
+	Document  *utils.ExtractedMedia
+	Image     *utils.ExtractedMedia
+	Sticker   *utils.ExtractedMedia
+	Video     *utils.ExtractedMedia
+	VideoNote *utils.ExtractedMedia // PTV (Push-To-Video) messages
+}
+
+// HasAnyMedia returns true if any media was successfully downloaded
+func (dm *DownloadedMedia) HasAnyMedia() bool {
+	if dm == nil {
+		return false
+	}
+	return dm.Audio != nil || dm.Document != nil || dm.Image != nil ||
+		dm.Sticker != nil || dm.Video != nil || dm.VideoNote != nil
+}
+
 // Global variables
 var (
 	globalStateMu sync.RWMutex
@@ -635,8 +654,14 @@ func handleMessage(ctx context.Context, evt *events.Message, chatStorageRepo dom
 		log.Errorf("Failed to store incoming message %s: %v", evt.Info.ID, err)
 	}
 
-	// Handle image message if present
-	handleImageMessage(ctx, evt)
+	// Download all media once to avoid duplicate downloads
+	// Media is saved to statics/media/ for unified storage
+	downloadedMedia := downloadMessageMedia(ctx, evt)
+
+	// Update media_path in database if media was downloaded
+	if downloadedMedia != nil {
+		updateMessageMediaPath(ctx, evt, downloadedMedia, chatStorageRepo)
+	}
 
 	// Auto-mark message as read if configured
 	handleAutoMarkRead(ctx, evt)
@@ -644,8 +669,8 @@ func handleMessage(ctx context.Context, evt *events.Message, chatStorageRepo dom
 	// Handle auto-reply if configured
 	handleAutoReply(ctx, evt, chatStorageRepo)
 
-	// Forward to webhook if configured
-	handleWebhookForward(ctx, evt)
+	// Forward to webhook if configured (pass pre-downloaded media)
+	handleWebhookForward(ctx, evt, downloadedMedia)
 }
 
 func buildMessageMetaParts(evt *events.Message) []string {
@@ -665,20 +690,166 @@ func buildMessageMetaParts(evt *events.Message) []string {
 	return metaParts
 }
 
-func handleImageMessage(ctx context.Context, evt *events.Message) {
+// downloadMessageMedia downloads all media from a message once to avoid duplicate downloads
+// All media is saved to config.PathMedia (statics/media/) for unified storage
+func downloadMessageMedia(ctx context.Context, evt *events.Message) *DownloadedMedia {
 	if !config.WhatsappAutoDownloadMedia {
-		return
+		return nil
 	}
+
 	client := GetClient()
 	if client == nil {
+		return nil
+	}
+
+	// Create context with timeout for all media downloads (30 seconds)
+	downloadCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	downloaded := &DownloadedMedia{}
+
+	// Download image
+	if img := evt.Message.GetImageMessage(); img != nil {
+		if img.GetFileLength() > uint64(config.WhatsappSettingMaxDownloadSize) {
+			log.Warnf("Skipping oversized image (%d bytes, max %d) from %s",
+				img.GetFileLength(), config.WhatsappSettingMaxDownloadSize, evt.Info.SourceString())
+		} else if media, err := utils.ExtractMedia(downloadCtx, client, config.PathMedia, img); err != nil {
+			log.Errorf("Failed to download image from %s: %v", evt.Info.SourceString(), err)
+		} else {
+			log.Infof("Image downloaded to %s", media.MediaPath)
+			downloaded.Image = &media
+		}
+	}
+
+	// Download audio
+	if audio := evt.Message.GetAudioMessage(); audio != nil {
+		if audio.GetFileLength() > uint64(config.WhatsappSettingMaxDownloadSize) {
+			log.Warnf("Skipping oversized audio (%d bytes, max %d) from %s",
+				audio.GetFileLength(), config.WhatsappSettingMaxDownloadSize, evt.Info.SourceString())
+		} else if media, err := utils.ExtractMedia(downloadCtx, client, config.PathMedia, audio); err != nil {
+			log.Errorf("Failed to download audio from %s: %v", evt.Info.SourceString(), err)
+		} else {
+			log.Infof("Audio downloaded to %s", media.MediaPath)
+			downloaded.Audio = &media
+		}
+	}
+
+	// Download document
+	if doc := evt.Message.GetDocumentMessage(); doc != nil {
+		if doc.GetFileLength() > uint64(config.WhatsappSettingMaxDownloadSize) {
+			log.Warnf("Skipping oversized document (%d bytes, max %d) from %s",
+				doc.GetFileLength(), config.WhatsappSettingMaxDownloadSize, evt.Info.SourceString())
+		} else if media, err := utils.ExtractMedia(downloadCtx, client, config.PathMedia, doc); err != nil {
+			log.Errorf("Failed to download document from %s: %v", evt.Info.SourceString(), err)
+		} else {
+			log.Infof("Document downloaded to %s", media.MediaPath)
+			downloaded.Document = &media
+		}
+	}
+
+	// Download sticker
+	if sticker := evt.Message.GetStickerMessage(); sticker != nil {
+		if sticker.GetFileLength() > uint64(config.WhatsappSettingMaxDownloadSize) {
+			log.Warnf("Skipping oversized sticker (%d bytes, max %d) from %s",
+				sticker.GetFileLength(), config.WhatsappSettingMaxDownloadSize, evt.Info.SourceString())
+		} else if media, err := utils.ExtractMedia(downloadCtx, client, config.PathMedia, sticker); err != nil {
+			log.Errorf("Failed to download sticker from %s: %v", evt.Info.SourceString(), err)
+		} else {
+			log.Infof("Sticker downloaded to %s", media.MediaPath)
+			downloaded.Sticker = &media
+		}
+	}
+
+	// Download video
+	if video := evt.Message.GetVideoMessage(); video != nil {
+		if video.GetFileLength() > uint64(config.WhatsappSettingMaxDownloadSize) {
+			log.Warnf("Skipping oversized video (%d bytes, max %d) from %s",
+				video.GetFileLength(), config.WhatsappSettingMaxDownloadSize, evt.Info.SourceString())
+		} else if media, err := utils.ExtractMedia(downloadCtx, client, config.PathMedia, video); err != nil {
+			log.Errorf("Failed to download video from %s: %v", evt.Info.SourceString(), err)
+		} else {
+			log.Infof("Video downloaded to %s", media.MediaPath)
+			downloaded.Video = &media
+		}
+	}
+
+	// Download PTV (video note)
+	if ptv := evt.Message.GetPtvMessage(); ptv != nil {
+		if ptv.GetFileLength() > uint64(config.WhatsappSettingMaxDownloadSize) {
+			log.Warnf("Skipping oversized video note (%d bytes, max %d) from %s",
+				ptv.GetFileLength(), config.WhatsappSettingMaxDownloadSize, evt.Info.SourceString())
+		} else if media, err := utils.ExtractMedia(downloadCtx, client, config.PathMedia, ptv); err != nil {
+			log.Errorf("Failed to download video note from %s: %v", evt.Info.SourceString(), err)
+		} else {
+			log.Infof("Video note downloaded to %s", media.MediaPath)
+			downloaded.VideoNote = &media
+		}
+	}
+
+	// Log download summary
+	downloadCount := 0
+	if downloaded.Image != nil {
+		downloadCount++
+	}
+	if downloaded.Audio != nil {
+		downloadCount++
+	}
+	if downloaded.Document != nil {
+		downloadCount++
+	}
+	if downloaded.Sticker != nil {
+		downloadCount++
+	}
+	if downloaded.Video != nil {
+		downloadCount++
+	}
+	if downloaded.VideoNote != nil {
+		downloadCount++
+	}
+	if downloadCount > 0 {
+		log.Infof("Media download complete for message %s: %d file(s) downloaded to %s",
+			evt.Info.ID, downloadCount, config.PathMedia)
+	}
+
+	return downloaded
+}
+
+// updateMessageMediaPath updates the media_path in the database after auto-download
+func updateMessageMediaPath(ctx context.Context, evt *events.Message, downloadedMedia *DownloadedMedia, chatStorageRepo domainChatStorage.IChatStorageRepository) {
+	if downloadedMedia == nil {
 		return
 	}
-	if img := evt.Message.GetImageMessage(); img != nil {
-		if path, err := utils.ExtractMedia(ctx, client, config.PathStorages, img); err != nil {
-			log.Errorf("Failed to download image: %v", err)
-		} else {
-			log.Infof("Image downloaded to %s", path)
-		}
+
+	// Determine which media was downloaded and get its path
+	var mediaPath string
+	if downloadedMedia.Image != nil {
+		mediaPath = downloadedMedia.Image.MediaPath
+	} else if downloadedMedia.Audio != nil {
+		mediaPath = downloadedMedia.Audio.MediaPath
+	} else if downloadedMedia.Document != nil {
+		mediaPath = downloadedMedia.Document.MediaPath
+	} else if downloadedMedia.Sticker != nil {
+		mediaPath = downloadedMedia.Sticker.MediaPath
+	} else if downloadedMedia.Video != nil {
+		mediaPath = downloadedMedia.Video.MediaPath
+	} else if downloadedMedia.VideoNote != nil {
+		mediaPath = downloadedMedia.VideoNote.MediaPath
+	}
+
+	if mediaPath == "" {
+		return
+	}
+
+	// Get normalized chat JID
+	client := GetClient()
+	normalizedChatJID := NormalizeJIDFromLID(ctx, evt.Info.Chat, client)
+	chatJID := normalizedChatJID.String()
+
+	// Update the media path in the database
+	if err := chatStorageRepo.UpdateMessageMediaPath(evt.Info.ID, chatJID, mediaPath); err != nil {
+		log.Warnf("Failed to update media_path for message %s: %v", evt.Info.ID, err)
+	} else {
+		log.Infof("Updated media_path for message %s: %s", evt.Info.ID, mediaPath)
 	}
 }
 
@@ -817,7 +988,7 @@ func handleAutoReply(ctx context.Context, evt *events.Message, chatStorageRepo d
 	}
 }
 
-func handleWebhookForward(ctx context.Context, evt *events.Message) {
+func handleWebhookForward(ctx context.Context, evt *events.Message, downloadedMedia *DownloadedMedia) {
 	// Skip webhook for specific protocol messages that shouldn't trigger webhooks
 	if protocolMessage := evt.Message.GetProtocolMessage(); protocolMessage != nil {
 		protocolType := protocolMessage.GetType().String()
@@ -830,11 +1001,11 @@ func handleWebhookForward(ctx context.Context, evt *events.Message) {
 
 	if len(config.WhatsappWebhook) > 0 &&
 		!strings.Contains(evt.Info.SourceString(), "broadcast") {
-		go func(evt *events.Message) {
-			if err := forwardMessageToWebhook(ctx, evt); err != nil {
+		go func(ctx context.Context, evt *events.Message, media *DownloadedMedia) {
+			if err := forwardMessageToWebhook(ctx, evt, media); err != nil {
 				logrus.Error("Failed forward to webhook: ", err)
 			}
-		}(evt)
+		}(ctx, evt, downloadedMedia)
 	}
 }
 

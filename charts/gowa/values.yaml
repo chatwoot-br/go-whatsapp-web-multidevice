@@ -1,0 +1,358 @@
+# Default values for go-whatsapp-admin-api.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+replicaCount: 1
+
+# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+image:
+  repository: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
+  # This sets the pull policy for images.
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  # tag: "latest"
+
+# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# This is for setting Kubernetes Annotations to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+podAnnotations: {}
+# This is for setting Kubernetes Labels to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+podLabels: {}
+
+# Pod security context - runs as non-root for security
+# Note: The application requires write access to certain directories
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+service:
+  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  type: ClusterIP
+  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+  ports:
+    # Admin API port
+    - name: admin-api
+      port: 8088
+      targetPort: 8088
+      protocol: TCP
+    # Swagger UI port
+    - name: swagger-ui
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    # Supervisord RPC port
+    - name: supervisor-rpc
+      port: 9001
+      targetPort: 9001
+      protocol: TCP
+    # WhatsApp instance ports (3001-3010)
+    - name: whatsapp-3001
+      port: 3001
+      targetPort: 3001
+      protocol: TCP
+    - name: whatsapp-3002
+      port: 3002
+      targetPort: 3002
+      protocol: TCP
+    - name: whatsapp-3003
+      port: 3003
+      targetPort: 3003
+      protocol: TCP
+    - name: whatsapp-3004
+      port: 3004
+      targetPort: 3004
+      protocol: TCP
+    - name: whatsapp-3005
+      port: 3005
+      targetPort: 3005
+      protocol: TCP
+    - name: whatsapp-3006
+      port: 3006
+      targetPort: 3006
+      protocol: TCP
+    - name: whatsapp-3007
+      port: 3007
+      targetPort: 3007
+      protocol: TCP
+    - name: whatsapp-3008
+      port: 3008
+      targetPort: 3008
+      protocol: TCP
+    - name: whatsapp-3009
+      port: 3009
+      targetPort: 3009
+      protocol: TCP
+    - name: whatsapp-3010
+      port: 3010
+      targetPort: 3010
+      protocol: TCP
+
+# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+    # nginx.ingress.kubernetes.io/auth-type: basic
+    # nginx.ingress.kubernetes.io/auth-secret: admin-auth
+  hosts:
+    - host: admin-api.example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: admin-api-tls
+  #    hosts:
+  #      - admin-api.example.local
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: admin-api
+  initialDelaySeconds: 40
+  periodSeconds: 10
+  timeoutSeconds: 5
+  
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: admin-api
+  initialDelaySeconds: 35
+  periodSeconds: 5
+  timeoutSeconds: 3
+
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: admin-api
+  initialDelaySeconds: 30
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 12
+
+# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+# NOTE: Main volumes are defined in deployment.yaml, not here.
+# This section is for reference only. Actual volume names:
+#   - supervisor-config-template (ConfigMap with template)
+#   - supervisor-config-generated (emptyDir with rendered config)
+#   - shared-data (PVC)
+#   - supervisor-run (emptyDir)
+#   - app-temp (emptyDir)
+
+# Additional volumeMounts on the output Deployment definition.
+# These are mounted in the main gowa container.
+volumeMounts:
+  - name: supervisor-config-generated
+    mountPath: "/etc/supervisor/supervisord.conf"
+    subPath: "supervisord.conf"
+    readOnly: true
+  - name: shared-data
+    mountPath: "/etc/supervisor/conf.d"
+    subPath: "supervisor/conf.d"
+  - name: shared-data
+    mountPath: "/app/instances"
+    subPath: "instances"
+  - name: shared-data
+    mountPath: "/var/log/supervisor"
+    subPath: "supervisor/logs"
+  - name: supervisor-run
+    mountPath: "/var/run"
+  - name: shared-data
+    mountPath: "/app/statics"
+    subPath: "statics"
+  - name: shared-data
+    mountPath: "/app/storages"
+    subPath: "storages"
+  - name: app-temp
+    mountPath: "/tmp"
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Admin API specific configuration
+admin:
+  # Port for the admin API server
+  port: 8088
+
+  # Admin token for API authentication
+  # SECURITY: Never commit actual tokens. Use existingSecret in production.
+  token: ""
+  existingSecret: ""
+  existingSecretKey: "admin-token"
+
+  # Supervisor credentials
+  # SECURITY: These are stored in a Kubernetes Secret, not in configmap
+  supervisor:
+    url: "http://127.0.0.1:9001/RPC2"
+    # Credentials stored in secret (supervisor-credentials)
+    username: "admin"
+    password: ""  # Set via --set or existingSecret
+    existingSecret: ""
+    existingSecretUsernameKey: "username"
+    existingSecretPasswordKey: "password"
+
+  # Directory configuration
+  directories:
+    supervisorConfDir: "/etc/supervisor/conf.d"
+    instancesDir: "/app/instances"
+    supervisorLogDir: "/var/log/supervisor"
+    lockDir: "/tmp"
+
+# Environment variables for the admin API
+# Note: Sensitive values (SUPERVISOR_USER, SUPERVISOR_PASS) are injected from secrets
+env:
+  - name: SUPERVISOR_URL
+    value: "http://127.0.0.1:9001/RPC2"
+  - name: SUPERVISOR_CONF_DIR
+    value: "/etc/supervisor/conf.d"
+  - name: INSTANCES_DIR
+    value: "/app/instances"
+  - name: SUPERVISOR_LOG_DIR
+    value: "/var/log/supervisor"
+  - name: LOCK_DIR
+    value: "/tmp"
+  - name: DB_URI
+    value: "file:/app/storages/whatsapp.db?_foreign_keys=on"
+  - name: APP_DEBUG
+    value: "true"
+  - name: WHATSAPP_CHAT_STORAGE
+    value: "true"
+  - name: ADMIN_PORT
+    value: "8088"
+  - name: ADMIN_DEBUG
+    value: "true"
+  - name: WHATSAPP_SETTING_MAX_AUDIO_SIZE
+    value: "16777216"
+  - name: WHATSAPP_SETTING_AUTO_CONVERT_AUDIO
+    value: "true"
+  # Cleanup defaults (used by POST /admin/cleanup when not specified in request)
+  - name: CLEANUP_RETENTION_DAYS
+    value: "7"
+  - name: CLEANUP_DIRECTORIES
+    value: "/app/statics/media,/app/statics/qrcode,/app/statics/senditems"
+
+# Pod Disruption Budget for high availability
+# Ensures minimum availability during voluntary disruptions
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Network Policy for security isolation
+# Restricts network traffic to/from the pods
+networkPolicy:
+  enabled: false
+  # Allow ingress from these namespaces (by label)
+  ingressNamespaceSelector: {}
+  # Allow ingress from these pods (by label)
+  ingressPodSelector: {}
+  # Allow egress to these destinations
+  egressRules: []
+
+# Swagger UI sidecar configuration
+swaggerUI:
+  enabled: true
+  image:
+    repository: swaggerapi/swagger-ui
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  port: 8080
+  # Base URL used inside the OpenAPI "servers" section; can be overridden per deployment
+  serverUrl: "http://localhost:8088"
+  config:
+    # Swagger UI configuration options
+    deepLinking: true
+    displayOperationId: false
+    defaultModelsExpandDepth: 1
+    defaultModelExpandDepth: 1
+    defaultModelRendering: "example"
+    displayRequestDuration: false
+    docExpansion: "list"
+    filter: false
+    maxDisplayedTags: -1
+    operationsSorter: null
+    showExtensions: false
+    showCommonExtensions: false
+    tagsSorter: "alpha"
+    validatorUrl: null
+
+# Persistence configuration for all application data
+persistence:
+  enabled: true
+  # storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi  # Increased size to accommodate all data (instances + supervisor configs + logs + statics)
+  # existingClaim: ""
+
+# Cleanup CronJob configuration
+# Automatically deletes old files from specified directories via Admin API
+# NOTE: This uses HTTP endpoint instead of mounting PVC to avoid Multi-Attach errors
+cleanup:
+  enabled: true
+  # Schedule in cron format (default: 2 AM daily)
+  schedule: "0 2 * * *"
+  # Delete files older than this many days
+  retentionDays: 7
+  # Directories to clean (relative to /app/)
+  # NOTE: Do NOT add instances, storages, or supervisor/conf.d - these contain persistent data
+  directories:
+    - statics/media
+    - statics/qrcode
+    - statics/senditems

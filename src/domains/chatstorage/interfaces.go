@@ -23,6 +23,7 @@ type IChatStorageRepository interface {
 	GetMessages(filter *MessageFilter) ([]*Message, error)
 	SearchMessages(chatJID, searchText string, limit int) ([]*Message, error) // Database-level search
 	DeleteMessage(id, chatJID string) error
+	UpdateMessageMediaPath(messageID, chatJID, mediaPath string) error // Update media path after download
 	StoreSentMessageWithContext(ctx context.Context, messageID string, senderJID string, recipientJID string, content string, timestamp time.Time) error
 
 	// Statistics

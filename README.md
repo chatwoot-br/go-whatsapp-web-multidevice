@@ -13,17 +13,17 @@
 Your support helps ensure the library stays maintained and receives regular updates!
 ___
 
-![release version](https://img.shields.io/github/v/release/aldinokemal/go-whatsapp-web-multidevice)
-![Build Image](https://github.com/aldinokemal/go-whatsapp-web-multidevice/actions/workflows/build-docker-image.yaml/badge.svg)
-![Binary Release](https://github.com/aldinokemal/go-whatsapp-web-multidevice/actions/workflows/release.yml/badge.svg)
+![release version](https://img.shields.io/github/v/release/chatwoot-br/go-whatsapp-web-multidevice)
+![Build Image](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/actions/workflows/build-docker-image.yaml/badge.svg)
+![Binary Release](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/actions/workflows/release.yml/badge.svg)
 
 ## Support for `ARM` & `AMD` Architecture along with `MCP` Support
 
 Download:
 
-- [Release](https://github.com/aldinokemal/go-whatsapp-web-multidevice/releases/latest)
-- [Docker Hub](https://hub.docker.com/r/aldinokemal2104/go-whatsapp-web-multidevice/tags)
-- [GitHub Container Registry](https://github.com/aldinokemal/go-whatsapp-web-multidevice/pkgs/container/go-whatsapp-web-multidevice)
+- [Release](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases/latest)
+- [Docker Hub](https://ghcr.io/chatwoot-br/go-whatsapp-web-multidevice/tags)
+- [GitHub Container Registry](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/pkgs/container/go-whatsapp-web-multidevice)
 
 ## Support n8n package (n8n.io)
 
@@ -39,11 +39,12 @@ Download:
     - for example: `./whatsapp mcp`
 - `v7`
   - Starting version 7.x we are using goreleaser to build the binary, so you can download the binary
-      from [release](https://github.com/aldinokemal/go-whatsapp-web-multidevice/releases/latest)
+      from [release](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases/latest)
 
 ## Feature
 
-- Send WhatsApp message via http API, [docs/openapi.yml](./docs/openapi.yaml) for more details
+- Send WhatsApp message via http API, [docs/reference/api/openapi.yaml](./docs/reference/api/openapi.yaml) for more details
+- **Interactive API Documentation with Swagger UI** - Built-in Swagger UI for Admin API accessible at `/swagger` endpoint
 - **MCP (Model Context Protocol) Server Support** - Integrate with AI agents and tools using standardized protocol
 - Mention someone
   - `@phoneNumber`
@@ -74,15 +75,15 @@ Download:
 - Webhook for received message
   - `--webhook="http://yourwebhook.site/handler"`, or you can simplify
   - `-w="http://yourwebhook.site/handler"`
-  - for more detail, see [Webhook Payload Documentation](./docs/webhook-payload.md)
+  - for more detail, see [Webhook Documentation](./docs/guides/webhooks/)
 - Webhook Secret
   Our webhook will be sent to you with an HMAC header and a sha256 default key `secret`.
 
   You may modify this by using the option below:
   - `--webhook-secret="secret"`
-- **Webhook Payload Documentation**
+- **Webhook Documentation**
   For detailed webhook payload schemas, security implementation, and integration examples,
-  see [Webhook Payload Documentation](./docs/webhook-payload.md)
+  see [Webhook Guides](./docs/guides/webhooks/) and [Webhook Reference](./docs/reference/webhooks/)
 - **Webhook TLS Configuration**
 
   If you encounter TLS certificate verification errors when using webhooks (e.g., with Cloudflare tunnels or self-signed certificates):
@@ -143,6 +144,9 @@ To use environment variables:
 | `WHATSAPP_WEBHOOK_SECRET`     | Webhook secret for validation               | `secret`                                     | `WHATSAPP_WEBHOOK_SECRET=super-secret-key`  |
 | `WHATSAPP_WEBHOOK_INSECURE_SKIP_VERIFY` | Skip TLS verification for webhooks (insecure) | `false` | `WHATSAPP_WEBHOOK_INSECURE_SKIP_VERIFY=true` |
 | `WHATSAPP_ACCOUNT_VALIDATION` | Enable account validation                   | `true`                                       | `WHATSAPP_ACCOUNT_VALIDATION=false`         |
+| `WHATSAPP_CHAT_STORAGE`       | Enable chat storage                         | `true`                                       | `WHATSAPP_CHAT_STORAGE=false`               |
+
+> For the Admin API implementation details and complete environment variable mappings for per-instance configuration, see [Admin API Guide](./docs/guides/admin-api.md).
 
 Note: Command-line flags will override any values set in environment variables or `.env` file.
 
@@ -175,24 +179,49 @@ Note: Command-line flags will override any values set in environment variables o
 
 ## How to use
 
+### Development Environment (Recommended)
+
+For the best development experience with Admin API support:
+
+1. **VS Code Dev Container** (Includes everything pre-configured):
+   - Clone this repo: `git clone https://github.com/chatwoot-br/go-whatsapp-web-multidevice`
+   - Open in VS Code
+   - When prompted, click "Reopen in Container"
+   - Wait for the container to build and setup automatically
+   - Use `./.devcontainer/dev.sh help` for available commands
+   - See `.devcontainer/README.md` for detailed development guide
+
+2. **Features included in Dev Container**:
+   - ✅ Go 1.24+ with all tools
+   - ✅ FFmpeg pre-installed
+   - ✅ Supervisord configured and running
+   - ✅ Admin API ready to use
+   - ✅ Development helper scripts
+   - ✅ Port forwarding configured
+   - ✅ Environment variables pre-set
+
 ### Basic
 
-1. Clone this repo: `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
+1. Clone this repo: `git clone https://github.com/chatwoot-br/go-whatsapp-web-multidevice`
 2. Open the folder that was cloned via cmd/terminal.
 3. run `cd src`
 4. run `go run . rest` (for REST API mode)
 5. Open `http://localhost:3000`
+ 
+## Helm chart for Admin API
+
+This repository includes a Helm chart that deploys the Admin API and a supervisord sidecar used to manage WhatsApp instances. See `charts/README.md` for consolidated configuration, deployment and debugging instructions.
 
 ### Docker (you don't need to install in required)
 
-1. Clone this repo: `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
+1. Clone this repo: `git clone https://github.com/chatwoot-br/go-whatsapp-web-multidevice`
 2. Open the folder that was cloned via cmd/terminal.
 3. run `docker-compose up -d --build`
 4. open `http://localhost:3000`
 
 ### Build your own binary
 
-1. Clone this repo `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
+1. Clone this repo `git clone https://github.com/chatwoot-br/go-whatsapp-web-multidevice`
 2. Open the folder that was cloned via cmd/terminal.
 3. run `cd src`
 4. run
@@ -205,12 +234,30 @@ Note: Command-line flags will override any values set in environment variables o
         1. run `.\whatsapp.exe --help` for more detail flags
 6. open `http://localhost:3000` in browser
 
+### Admin API (Multi-Instance Management)
+
+For managing multiple WhatsApp instances:
+
+1. **Using Dev Container** (easiest):
+   ```bash
+   ./.devcontainer/dev.sh start-admin
+   ./.devcontainer/dev.sh create 3001
+   ```
+
+2. **Manual setup**:
+   - Install and configure supervisord
+   - Set required environment variables (see `.src/.env.dev`)
+   - Run: `go run . admin --port 8088`
+   - See [Admin API Guide](./docs/guides/admin-api.md) for details
+
+**Note**: The Admin API supports all environment variables listed above. Use `GOWA_*` prefixed versions to configure defaults for instances (e.g., `GOWA_DEBUG=true`, `GOWA_WEBHOOK=https://webhook.site/xxx`). All instances created through the Admin API will inherit these settings and support the full feature set of standalone GOWA instances.
+
 ### MCP Server (Model Context Protocol)
 
 This application can also run as an MCP server, allowing AI agents and tools to interact with WhatsApp through a
 standardized protocol.
 
-1. Clone this repo `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
+1. Clone this repo `git clone https://github.com/chatwoot-br/go-whatsapp-web-multidevice`
 2. Open the folder that was cloned via cmd/terminal.
 3. run `cd src`
 4. run `go run . mcp` or build the binary and run `./whatsapp mcp`
@@ -291,13 +338,13 @@ For AI tools that support MCP with SSE (like Cursor), add this configuration:
 Using Docker Hub:
 
 ```bash
-docker run --detach --publish=3000:3000 --name=whatsapp --restart=always --volume=$(docker volume create --name=whatsapp):/app/storages aldinokemal2104/go-whatsapp-web-multidevice rest --autoreply="Dont't reply this message please"
+docker run --detach --publish=3000:3000 --name=whatsapp --restart=always --volume=$(docker volume create --name=whatsapp):/app/storages ghcr.io/chatwoot-br/go-whatsapp-web-multidevice rest --autoreply="Dont't reply this message please"
 ```
 
 Using GitHub Container Registry:
 
 ```bash
-docker run --detach --publish=3000:3000 --name=whatsapp --restart=always --volume=$(docker volume create --name=whatsapp):/app/storages ghcr.io/aldinokemal/go-whatsapp-web-multidevice rest --autoreply="Dont't reply this message please"
+docker run --detach --publish=3000:3000 --name=whatsapp --restart=always --volume=$(docker volume create --name=whatsapp):/app/storages ghcr.io/chatwoot-br/go-whatsapp-web-multidevice rest --autoreply="Dont't reply this message please"
 ```
 
 ### Production Mode REST (docker compose)
@@ -309,7 +356,7 @@ Using Docker Hub:
 ```yml
 services:
   whatsapp:
-    image: aldinokemal2104/go-whatsapp-web-multidevice
+    image: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
     container_name: whatsapp
     restart: always
     ports:
@@ -333,7 +380,7 @@ Using GitHub Container Registry:
 ```yml
 services:
   whatsapp:
-    image: ghcr.io/aldinokemal/go-whatsapp-web-multidevice
+    image: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
     container_name: whatsapp
     restart: always
     ports:
@@ -357,7 +404,7 @@ or with env file (Docker Hub):
 ```yml
 services:
   whatsapp:
-    image: aldinokemal2104/go-whatsapp-web-multidevice
+    image: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
     container_name: whatsapp
     restart: always
     ports:
@@ -380,7 +427,7 @@ or with env file (GitHub Container Registry):
 ```yml
 services:
   whatsapp:
-    image: ghcr.io/aldinokemal/go-whatsapp-web-multidevice
+    image: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
     container_name: whatsapp
     restart: always
     ports:
@@ -400,7 +447,7 @@ volumes:
 
 ### Production Mode (binary)
 
-- download binary from [release](https://github.com/aldinokemal/go-whatsapp-web-multidevice/releases)
+- download binary from [release](https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases)
 
 You can fork or edit this source code !
 
@@ -416,7 +463,7 @@ You can fork or edit this source code !
 ### HTTP REST API
 
 - [API Specification Document](https://bump.sh/aldinokemal/doc/go-whatsapp-web-multidevice).
-- Check [docs/openapi.yml](./docs/openapi.yaml) for detailed API specifications.
+- Check [docs/reference/api/openapi.yaml](./docs/reference/api/openapi.yaml) for detailed API specifications.
 - Use [SwaggerEditor](https://editor.swagger.io) to visualize the API.
 - Generate HTTP clients using [openapi-generator](https://openapi-generator.tech/#try).
 
@@ -530,6 +577,92 @@ You can fork or edit this source code !
 
 - Please do this if you have an error (invalid flag in pkg-config --cflags: -Xpreprocessor)
   `export CGO_CFLAGS_ALLOW="-Xpreprocessor"`
+
+### Admin API & Swagger UI
+
+The application includes an Admin API for managing multiple GOWA instances with built-in Swagger UI documentation.
+
+#### Admin API Features
+- Create, list, update, and delete GOWA instances
+- Health and readiness endpoints
+- Supervisor-based instance management
+- Authentication via bearer token
+
+#### Swagger UI Integration
+- Interactive API documentation at `/swagger` endpoint
+- Real-time testing of Admin API endpoints
+- Automatic OpenAPI specification serving
+- CORS-enabled for browser access
+
+#### Kubernetes/Helm Deployment
+```bash
+# Deploy with Swagger UI enabled
+helm install my-release charts/gowa --set swaggerUI.enabled=true
+
+# Access Swagger UI (after port forwarding)
+kubectl port-forward svc/my-release-gowa 8080:8080
+open http://localhost:8080/swagger
+```
+
+For more details, see:
+- [Admin API Documentation](./docs/guides/admin-api.md)
+- [Admin API OpenAPI Spec](./docs/reference/api/admin-api-openapi.yaml)
+
+## 📚 Documentation
+
+Complete documentation is available in the [docs/](./docs/) directory. Here's where to find what you need:
+
+### Quick Start
+- **[Getting Started](./docs/getting-started/)** - Tutorials for new users
+  - [Quick Start Guide](./docs/getting-started/quick-start.md) - Get running in 5 minutes
+  - [Installation Guide](./docs/getting-started/installation.md) - Complete installation instructions
+  - [First Message Guide](./docs/getting-started/first-message.md) - Send your first WhatsApp message
+  - [Configuration Basics](./docs/getting-started/configuration-basics.md) - Essential configuration
+
+### How-To Guides
+- **[Deployment Guides](./docs/guides/deployment/)** - Production deployment
+  - [Docker Deployment](./docs/guides/deployment/docker.md)
+  - [Kubernetes Deployment](./docs/guides/deployment/kubernetes.md)
+  - [Binary Deployment](./docs/guides/deployment/binary.md)
+  - [Production Checklist](./docs/guides/deployment/production-checklist.md)
+- **[Webhook Guides](./docs/guides/webhooks/)** - Real-time event integration
+  - [Setup Guide](./docs/guides/webhooks/setup.md)
+  - [Security & HMAC](./docs/guides/webhooks/security.md)
+  - [Integration Examples](./docs/guides/webhooks/examples.md)
+- **[MCP Integration](./docs/guides/mcp-integration.md)** - AI agent integration
+- **[Admin API](./docs/guides/admin-api.md)** - Multi-instance management
+- **[Media Handling](./docs/guides/media-handling.md)** - Send and process media files
+
+### API Reference
+- **[API Documentation](./docs/reference/api/)**
+  - [OpenAPI Specification](./docs/reference/api/openapi.yaml)
+  - [API Guide](./docs/reference/api/openapi.md)
+  - [Admin API Spec](./docs/reference/api/admin-api-openapi.yaml)
+- **[Webhook Reference](./docs/reference/webhooks/)**
+  - [Event Types](./docs/reference/webhooks/event-types.md)
+  - [Payload Schemas](./docs/reference/webhooks/payload-schemas.md)
+- **[Configuration Reference](./docs/reference/configuration.md)** - All environment variables
+- **[Troubleshooting Guide](./docs/reference/troubleshooting.md)** - Common issues
+
+### For Developers
+- **[Developer Documentation](./docs/developer/)**
+  - [Architecture Overview](./docs/developer/architecture.md)
+  - [Contributing Guide](./docs/developer/contributing.md)
+  - [Documentation Guide](./docs/developer/documentation-guide.md)
+  - [Testing Guide](./docs/developer/testing.md)
+  - [Release Process](./docs/developer/release-process.md)
+
+### Operations
+- **[Operations Guides](./docs/operations/)**
+  - [Monitoring](./docs/operations/monitoring.md)
+  - [Performance Tuning](./docs/operations/performance-tuning.md)
+  - [Security Best Practices](./docs/operations/security-best-practices.md)
+  - [Audio Optimization](./docs/operations/audio-optimization.md)
+
+### Postmortems
+- **[Postmortems](./docs/postmortems/)** - Lessons learned from production issues
+
+**Start here**: [docs/README.md](./docs/README.md) - Comprehensive documentation index with persona-based navigation
 
 ## Important
 

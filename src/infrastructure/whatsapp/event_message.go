@@ -10,15 +10,14 @@ import (
 	"go.mau.fi/whatsmeow/types"
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
-	pkgError "github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/error"
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
 // forwardMessageToWebhook is a helper function to forward message event to webhook url
-func forwardMessageToWebhook(ctx context.Context, evt *events.Message) error {
-	payload, err := createMessagePayload(ctx, evt)
+func forwardMessageToWebhook(ctx context.Context, evt *events.Message, downloadedMedia *DownloadedMedia) error {
+	payload, err := createMessagePayload(ctx, evt, downloadedMedia)
 	if err != nil {
 		return err
 	}
@@ -26,7 +25,7 @@ func forwardMessageToWebhook(ctx context.Context, evt *events.Message) error {
 	return forwardPayloadToConfiguredWebhooks(ctx, payload, "message event")
 }
 
-func createMessagePayload(ctx context.Context, evt *events.Message) (map[string]any, error) {
+func createMessagePayload(ctx context.Context, evt *events.Message, downloadedMedia *DownloadedMedia) (map[string]any, error) {
 	message := utils.BuildEventMessage(evt)
 	waReaction := utils.BuildEventReaction(evt)
 	forwarded := utils.BuildForwarded(evt)
@@ -134,18 +133,16 @@ func createMessagePayload(ctx context.Context, evt *events.Message) (map[string]
 	}
 
 	if audioMedia := evt.Message.GetAudioMessage(); audioMedia != nil {
-		if config.WhatsappAutoDownloadMedia {
-			path, err := utils.ExtractMedia(ctx, cli, config.PathMedia, audioMedia)
-			if err != nil {
-				logrus.Errorf("Failed to download audio from %s: %v", evt.Info.SourceString(), err)
-				return nil, pkgError.WebhookError(fmt.Sprintf("Failed to download audio: %v", err))
-			}
-			body["audio"] = path
-		} else {
+		if downloadedMedia != nil && downloadedMedia.Audio != nil {
+			// Use pre-downloaded media
+			body["audio"] = *downloadedMedia.Audio
+		} else if !config.WhatsappAutoDownloadMedia {
+			// Auto-download disabled, return URL only
 			body["audio"] = map[string]any{
 				"url": audioMedia.GetURL(),
 			}
 		}
+		// If auto-download enabled but no pre-downloaded media, skip (shouldn't happen)
 	}
 
 	if contactMessage := evt.Message.GetContactMessage(); contactMessage != nil {
@@ -153,14 +150,11 @@ func createMessagePayload(ctx context.Context, evt *events.Message) (map[string]
 	}
 
 	if documentMedia := evt.Message.GetDocumentMessage(); documentMedia != nil {
-		if config.WhatsappAutoDownloadMedia {
-			path, err := utils.ExtractMedia(ctx, cli, config.PathMedia, documentMedia)
-			if err != nil {
-				logrus.Errorf("Failed to download document from %s: %v", evt.Info.SourceString(), err)
-				return nil, pkgError.WebhookError(fmt.Sprintf("Failed to download document: %v", err))
-			}
-			body["document"] = path
-		} else {
+		if downloadedMedia != nil && downloadedMedia.Document != nil {
+			// Use pre-downloaded media
+			body["document"] = *downloadedMedia.Document
+		} else if !config.WhatsappAutoDownloadMedia {
+			// Auto-download disabled, return URL only
 			body["document"] = map[string]any{
 				"url":      documentMedia.GetURL(),
 				"filename": documentMedia.GetFileName(),
@@ -169,14 +163,11 @@ func createMessagePayload(ctx context.Context, evt *events.Message) (map[string]
 	}
 
 	if imageMedia := evt.Message.GetImageMessage(); imageMedia != nil {
-		if config.WhatsappAutoDownloadMedia {
-			path, err := utils.ExtractMedia(ctx, cli, config.PathMedia, imageMedia)
-			if err != nil {
-				logrus.Errorf("Failed to download image from %s: %v", evt.Info.SourceString(), err)
-				return nil, pkgError.WebhookError(fmt.Sprintf("Failed to download image: %v", err))
-			}
-			body["image"] = path
-		} else {
+		if downloadedMedia != nil && downloadedMedia.Image != nil {
+			// Use pre-downloaded media
+			body["image"] = *downloadedMedia.Image
+		} else if !config.WhatsappAutoDownloadMedia {
+			// Auto-download disabled, return URL only
 			body["image"] = map[string]any{
 				"url":     imageMedia.GetURL(),
 				"caption": imageMedia.GetCaption(),
@@ -201,14 +192,11 @@ func createMessagePayload(ctx context.Context, evt *events.Message) (map[string]
 	}
 
 	if stickerMedia := evt.Message.GetStickerMessage(); stickerMedia != nil {
-		if config.WhatsappAutoDownloadMedia {
-			path, err := utils.ExtractMedia(ctx, cli, config.PathMedia, stickerMedia)
-			if err != nil {
-				logrus.Errorf("Failed to download sticker from %s: %v", evt.Info.SourceString(), err)
-				return nil, pkgError.WebhookError(fmt.Sprintf("Failed to download sticker: %v", err))
-			}
-			body["sticker"] = path
-		} else {
+		if downloadedMedia != nil && downloadedMedia.Sticker != nil {
+			// Use pre-downloaded media
+			body["sticker"] = *downloadedMedia.Sticker
+		} else if !config.WhatsappAutoDownloadMedia {
+			// Auto-download disabled, return URL only
 			body["sticker"] = map[string]any{
 				"url": stickerMedia.GetURL(),
 			}
@@ -216,14 +204,11 @@ func createMessagePayload(ctx context.Context, evt *events.Message) (map[string]
 	}
 
 	if videoMedia := evt.Message.GetVideoMessage(); videoMedia != nil {
-		if config.WhatsappAutoDownloadMedia {
-			path, err := utils.ExtractMedia(ctx, cli, config.PathMedia, videoMedia)
-			if err != nil {
-				logrus.Errorf("Failed to download video from %s: %v", evt.Info.SourceString(), err)
-				return nil, pkgError.WebhookError(fmt.Sprintf("Failed to download video: %v", err))
-			}
-			body["video"] = path
-		} else {
+		if downloadedMedia != nil && downloadedMedia.Video != nil {
+			// Use pre-downloaded media
+			body["video"] = *downloadedMedia.Video
+		} else if !config.WhatsappAutoDownloadMedia {
+			// Auto-download disabled, return URL only
 			body["video"] = map[string]any{
 				"url":     videoMedia.GetURL(),
 				"caption": videoMedia.GetCaption(),
@@ -233,14 +218,11 @@ func createMessagePayload(ctx context.Context, evt *events.Message) (map[string]
 
 	// Handle PTV (Push-To-Video) messages - also known as "video notes" (circular video messages)
 	if ptvMedia := evt.Message.GetPtvMessage(); ptvMedia != nil {
-		if config.WhatsappAutoDownloadMedia {
-			path, err := utils.ExtractMedia(ctx, cli, config.PathMedia, ptvMedia)
-			if err != nil {
-				logrus.Errorf("Failed to download video note from %s: %v", evt.Info.SourceString(), err)
-				return nil, pkgError.WebhookError(fmt.Sprintf("Failed to download video note: %v", err))
-			}
-			body["video_note"] = path
-		} else {
+		if downloadedMedia != nil && downloadedMedia.VideoNote != nil {
+			// Use pre-downloaded media
+			body["video_note"] = *downloadedMedia.VideoNote
+		} else if !config.WhatsappAutoDownloadMedia {
+			// Auto-download disabled, return URL only
 			body["video_note"] = map[string]any{
 				"url":     ptvMedia.GetURL(),
 				"caption": ptvMedia.GetCaption(),

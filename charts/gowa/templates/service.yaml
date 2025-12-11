@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gowa.fullname" . }}
+  labels:
+    {{- include "gowa.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  # Session affinity for stateful WhatsApp connections
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours
+  ports:
+    {{- range .Values.service.ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: {{ .protocol }}
+    {{- end }}
+  selector:
+    {{- include "gowa.selectorLabels" . | nindent 4 }}

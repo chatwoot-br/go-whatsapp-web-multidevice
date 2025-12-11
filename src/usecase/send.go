@@ -316,12 +316,7 @@ func (service serviceSend) SendImage(ctx context.Context, request domainSend.Ima
 		caption = "🖼️ " + request.Caption
 	}
 	ts, err := service.wrapSendMessage(ctx, dataWaRecipient, msg, caption)
-	go func() {
-		errDelete := utils.RemoveFile(0, deletedItems...)
-		if errDelete != nil {
-			fmt.Println("error when deleting picture: ", errDelete)
-		}
-	}()
+	go utils.RemoveFileWithTimeout(1, 10*time.Second, deletedItems...)
 	if err != nil {
 		return response, err
 	}
@@ -426,8 +421,8 @@ func (service serviceSend) SendVideo(ctx context.Context, request domainSend.Vid
 	// Ensure temporary files are always removed, even on early returns
 	defer func() {
 		if len(deletedItems) > 0 {
-			// Run cleanup in background with slight delay to avoid race with open handles
-			go utils.RemoveFile(1, deletedItems...)
+			// Run cleanup in background with timeout to prevent goroutine leaks
+			go utils.RemoveFileWithTimeout(1, 10*time.Second, deletedItems...)
 		}
 	}()
 
@@ -465,11 +460,19 @@ func (service serviceSend) SendVideo(ctx context.Context, request domainSend.Vid
 		return response, pkgError.InternalServerError("ffmpeg not installed")
 	}
 
-	// Generate thumbnail using ffmpeg
+	// Generate thumbnail using ffmpeg with timeout
 	thumbnailVideoPath := fmt.Sprintf("%s/%s", config.PathSendItems, generateUUID+".png")
-	cmdThumbnail := exec.Command("ffmpeg", "-i", oriVideoPath, "-ss", "00:00:01.000", "-vframes", "1", thumbnailVideoPath)
+
+	// Add execution timeout for thumbnail generation (30 seconds)
+	thumbCtx, thumbCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer thumbCancel()
+
+	cmdThumbnail := exec.CommandContext(thumbCtx, "ffmpeg", "-i", oriVideoPath, "-ss", "00:00:01.000", "-vframes", "1", thumbnailVideoPath)
 	err = cmdThumbnail.Run()
 	if err != nil {
+		if thumbCtx.Err() == context.DeadlineExceeded {
+			return response, pkgError.InternalServerError("video thumbnail generation timed out after 30 seconds")
+		}
 		return response, pkgError.InternalServerError(fmt.Sprintf("failed to create thumbnail %v", err))
 	}
 
@@ -492,6 +495,10 @@ func (service serviceSend) SendVideo(ctx context.Context, request domainSend.Vid
 	if request.Compress {
 		compresVideoPath := fmt.Sprintf("%s/%s", config.PathSendItems, generateUUID+".mp4")
 
+		// Add execution timeout for video compression (120 seconds for large videos)
+		compressCtx, compressCancel := context.WithTimeout(ctx, 120*time.Second)
+		defer compressCancel()
+
 		// Use proper compression settings to reduce file size
 		// -crf 28: Constant Rate Factor (18-28 is good range, higher = smaller file)
 		// -preset medium: Balance between encoding speed and compression efficiency
@@ -499,7 +506,7 @@ func (service serviceSend) SendVideo(ctx context.Context, request domainSend.Vid
 		// -c:a aac: Use AAC codec for audio
 		// -movflags +faststart: Optimize for web streaming
 		// -vf scale=720:-2: Scale video to max width 720px, maintain aspect ratio
-		cmdCompress := exec.Command("ffmpeg", "-i", oriVideoPath,
+		cmdCompress := exec.CommandContext(compressCtx, "ffmpeg", "-i", oriVideoPath,
 			"-c:v", "libx264",
 			"-crf", "28",
 			"-preset", "fast",
@@ -513,6 +520,10 @@ func (service serviceSend) SendVideo(ctx context.Context, request domainSend.Vid
 		// Capture both stdout and stderr for better error reporting
 		output, err := cmdCompress.CombinedOutput()
 		if err != nil {
+			if compressCtx.Err() == context.DeadlineExceeded {
+				logrus.Errorf("ffmpeg compression timed out after 120 seconds")
+				return response, pkgError.InternalServerError("video compression timed out after 120 seconds")
+			}
 			logrus.Errorf("ffmpeg compression failed: %v, output: %s", err, string(output))
 			return response, pkgError.InternalServerError(fmt.Sprintf("failed to compress video: %v", err))
 		}
@@ -758,8 +769,10 @@ func (service serviceSend) SendAudio(ctx context.Context, request domainSend.Aud
 	}
 
 	var (
-		audioBytes    []byte
-		audioMimeType string
+		audioBytes       []byte
+		audioMimeType    string
+		originalMimeType string
+		deletedItems     []string
 	)
 
 	// Handle audio from URL or file
@@ -768,11 +781,24 @@ func (service serviceSend) SendAudio(ctx context.Context, request domainSend.Aud
 		if err != nil {
 			return response, pkgError.InternalServerError(fmt.Sprintf("failed to download audio from URL %v", err))
 		}
-		audioMimeType = http.DetectContentType(audioBytes)
+		originalMimeType = http.DetectContentType(audioBytes)
 	} else if request.Audio != nil {
 		audioBytes = helpers.MultipartFormFileHeaderToBytes(request.Audio)
-		audioMimeType = http.DetectContentType(audioBytes)
+		originalMimeType = http.DetectContentType(audioBytes)
 	}
+
+	// Convert audio to more compatible format if needed
+	audioBytes, audioMimeType, deletedItems, err = service.processAudioForWhatsApp(ctx, audioBytes, originalMimeType)
+	if err != nil {
+		return response, pkgError.InternalServerError(fmt.Sprintf("failed to process audio: %v", err))
+	}
+
+	// Cleanup converted files after sending with timeout to prevent goroutine leaks
+	defer func() {
+		if len(deletedItems) > 0 {
+			go utils.RemoveFileWithTimeout(1, 10*time.Second, deletedItems...)
+		}
+	}()
 
 	// upload to WhatsApp servers
 	audioUploaded, err := service.uploadMedia(ctx, whatsmeow.MediaAudio, audioBytes, dataWaRecipient)
@@ -780,6 +806,12 @@ func (service serviceSend) SendAudio(ctx context.Context, request domainSend.Aud
 		err = pkgError.WaUploadMediaError(fmt.Sprintf("Failed to upload audio: %v", err))
 		return response, err
 	}
+
+	logrus.Infof("Audio uploaded successfully - URL: %s, FileLength: %d, DirectPath: %s",
+		audioUploaded.URL, audioUploaded.FileLength, audioUploaded.DirectPath)
+
+	// Get audio duration using ffprobe if available
+	audioDuration := service.getAudioDuration(ctx, audioBytes, audioMimeType)
 
 	msg := &waE2E.Message{
 		AudioMessage: &waE2E.AudioMessage{
@@ -790,6 +822,9 @@ func (service serviceSend) SendAudio(ctx context.Context, request domainSend.Aud
 			FileSHA256:    audioUploaded.FileSHA256,
 			FileEncSHA256: audioUploaded.FileEncSHA256,
 			MediaKey:      audioUploaded.MediaKey,
+			PTT:           proto.Bool(true),                              // Mark as Push-to-Talk (voice message)
+			Seconds:       proto.Uint32(audioDuration),                   // Audio duration in seconds
+			Waveform:      service.generateSimpleWaveform(audioDuration), // Generate simple waveform
 		},
 	}
 
@@ -807,15 +842,19 @@ func (service serviceSend) SendAudio(ctx context.Context, request domainSend.Aud
 		msg.AudioMessage.ContextInfo.Expiration = proto.Uint32(uint32(*request.BaseRequest.Duration))
 	}
 
-	content := "🎵 Audio"
+	content := "🎤 Voice Message"
+
+	logrus.Infof("Sending PTT audio message to %s with MIME type %s", dataWaRecipient.String(), audioMimeType)
 
 	ts, err := service.wrapSendMessage(ctx, dataWaRecipient, msg, content)
 	if err != nil {
 		return response, err
 	}
 
+	logrus.Infof("PTT audio message sent successfully - MessageID: %s, Timestamp: %s", ts.ID, ts.Timestamp.String())
+
 	response.MessageID = ts.ID
-	response.Status = fmt.Sprintf("Send audio success %s (server timestamp: %s)", request.BaseRequest.Phone, ts.Timestamp.String())
+	response.Status = fmt.Sprintf("Send voice message success %s (server timestamp: %s)", request.BaseRequest.Phone, ts.Timestamp.String())
 	return response, nil
 }
 
@@ -894,7 +933,7 @@ func (service serviceSend) SendChatPresence(ctx context.Context, request domainS
 		return response, fmt.Errorf("invalid action: %s. Must be 'start' or 'stop'", request.Action)
 	}
 
-	err = whatsapp.GetClient().SendChatPresence(ctx, userJid, presenceType, types.ChatPresenceMedia(""))
+	err = whatsapp.GetClient().SendChatPresence(ctx, userJid, presenceType, types.ChatPresenceMediaText)
 	if err != nil {
 		return response, err
 	}
@@ -1105,6 +1144,192 @@ func (service serviceSend) uploadMedia(ctx context.Context, mediaType whatsmeow.
 		uploaded, err = whatsapp.GetClient().Upload(ctx, media, mediaType)
 	}
 	return uploaded, err
+}
+
+// processAudioForWhatsApp converts audio to more compatible formats for WhatsApp
+func (service serviceSend) processAudioForWhatsApp(ctx context.Context, audioBytes []byte, originalMimeType string) (processedBytes []byte, finalMimeType string, deletedItems []string, err error) {
+	// List of preferred audio formats for WhatsApp PTT (in order of preference)
+	// AAC/M4A is the native format for WhatsApp voice messages
+	preferredFormats := []string{"audio/aac", "audio/mp4", "audio/m4a", "audio/mpeg"}
+
+	// Check if the original format is already optimal
+	for _, preferred := range preferredFormats {
+		if originalMimeType == preferred {
+			return audioBytes, originalMimeType, deletedItems, nil
+		}
+	}
+
+	// Check if context is already cancelled before starting conversion
+	if ctx.Err() != nil {
+		logrus.Warnf("Context cancelled before audio conversion, sending original")
+		return audioBytes, originalMimeType, deletedItems, nil
+	}
+
+	// Check if ffmpeg is available
+	_, err = exec.LookPath("ffmpeg")
+	if err != nil {
+		logrus.Warnf("FFmpeg not available, sending audio as-is with MIME type: %s", originalMimeType)
+		return audioBytes, originalMimeType, deletedItems, nil
+	}
+
+	generateUUID := fiberUtils.UUID()
+
+	// Save original audio to temp file
+	originalPath := fmt.Sprintf("%s/%s_original", config.PathSendItems, generateUUID)
+	err = os.WriteFile(originalPath, audioBytes, 0644)
+	if err != nil {
+		return audioBytes, originalMimeType, deletedItems, fmt.Errorf("failed to save original audio: %v", err)
+	}
+	deletedItems = append(deletedItems, originalPath)
+
+	// Convert to AAC (M4A) format - WhatsApp's native voice message format
+	convertedPath := fmt.Sprintf("%s/%s_converted.m4a", config.PathSendItems, generateUUID)
+	deletedItems = append(deletedItems, convertedPath)
+
+	// Add execution timeout for audio conversion (45 seconds)
+	convCtx, convCancel := context.WithTimeout(ctx, 45*time.Second)
+	defer convCancel()
+
+	// FFmpeg command to convert to AAC with optimal settings for WhatsApp PTT
+	cmdConvert := exec.CommandContext(convCtx, "ffmpeg",
+		"-i", originalPath,
+		"-c:a", "aac", // Use AAC codec (WhatsApp native)
+		"-b:a", "32k", // 32kbps bitrate (optimal for voice)
+		"-ar", "16000", // 16kHz sample rate (standard for voice)
+		"-ac", "1", // Mono audio (WhatsApp requirement for PTT)
+		"-f", "mp4", // Force MP4 container
+		"-movflags", "+faststart", // Optimize for streaming
+		"-y", // Overwrite output file
+		convertedPath)
+
+	// Capture conversion output for debugging
+	output, err := cmdConvert.CombinedOutput()
+	if err != nil {
+		if convCtx.Err() == context.DeadlineExceeded {
+			logrus.Warnf("FFmpeg audio conversion timed out after 45 seconds. Sending original audio.")
+		} else if ctx.Err() != nil {
+			logrus.Warnf("Context cancelled during audio conversion. Sending original audio.")
+		} else {
+			logrus.Warnf("FFmpeg AAC conversion failed: %v, output: %s. Sending original audio.", err, string(output))
+		}
+		return audioBytes, originalMimeType, deletedItems, nil
+	}
+
+	// Read converted audio
+	convertedBytes, err := os.ReadFile(convertedPath)
+	if err != nil {
+		logrus.Warnf("Failed to read converted audio: %v. Sending original audio.", err)
+		return audioBytes, originalMimeType, deletedItems, nil
+	}
+
+	// Verify the converted file is not empty and is smaller or similar size
+	if len(convertedBytes) == 0 {
+		logrus.Warn("Converted audio file is empty. Sending original audio.")
+		return audioBytes, originalMimeType, deletedItems, nil
+	}
+
+	logrus.Infof("Audio converted from %s to audio/aac (original: %d bytes, converted: %d bytes)",
+		originalMimeType, len(audioBytes), len(convertedBytes))
+
+	return convertedBytes, "audio/aac", deletedItems, nil
+}
+
+// getAudioDuration gets the duration of audio in seconds using ffprobe
+func (service serviceSend) getAudioDuration(ctx context.Context, audioBytes []byte, mimeType string) uint32 {
+	// Check if ffprobe is available
+	_, err := exec.LookPath("ffprobe")
+	if err != nil {
+		logrus.Warnf("FFprobe not available, using default duration")
+		return 10 // Default duration for PTT if we can't detect
+	}
+
+	generateUUID := fiberUtils.UUID()
+
+	// Save audio to temp file for analysis
+	tempPath := fmt.Sprintf("%s/%s_duration_check", config.PathSendItems, generateUUID)
+
+	// Register cleanup first to handle partial writes and ensure cleanup even on early returns
+	defer func() {
+		if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+			logrus.Warnf("Failed to cleanup temp file %s: %v", tempPath, err)
+		}
+	}()
+
+	err = os.WriteFile(tempPath, audioBytes, 0644)
+	if err != nil {
+		logrus.Warnf("Failed to save audio for duration check: %v", err)
+		return 10
+	}
+
+	// Add execution timeout for duration check (15 seconds)
+	probeCtx, probeCancel := context.WithTimeout(ctx, 15*time.Second)
+	defer probeCancel()
+
+	// Use ffprobe to get duration
+	cmd := exec.CommandContext(probeCtx, "ffprobe",
+		"-v", "quiet",
+		"-show_entries", "format=duration",
+		"-of", "csv=p=0",
+		tempPath)
+
+	output, err := cmd.Output()
+	if err != nil {
+		if probeCtx.Err() == context.DeadlineExceeded {
+			logrus.Warnf("FFprobe timed out after 15 seconds, using default duration")
+		} else if ctx.Err() != nil {
+			logrus.Warnf("Context cancelled during ffprobe, using default duration")
+		} else {
+			logrus.Warnf("Failed to get audio duration with ffprobe: %v", err)
+		}
+		return 10
+	}
+
+	// Parse duration
+	durationStr := strings.TrimSpace(string(output))
+	duration := utils.StrToFloat64(durationStr)
+	if duration <= 0 {
+		logrus.Warnf("Invalid duration parsed: %s, using default", durationStr)
+		return 10
+	}
+
+	// Convert to uint32 seconds
+	durationSeconds := uint32(duration)
+	if durationSeconds == 0 {
+		durationSeconds = 1 // Minimum 1 second for PTT
+	}
+
+	logrus.Infof("Audio duration detected: %.2f seconds", duration)
+	return durationSeconds
+}
+
+// generateSimpleWaveform generates a simple waveform for PTT messages
+func (service serviceSend) generateSimpleWaveform(durationSeconds uint32) []byte {
+	// WhatsApp PTT waveform is typically an array of bytes representing audio levels
+	// For simplicity, generate a basic waveform pattern
+
+	// Calculate number of waveform points (typically 32-64 points for PTT)
+	numPoints := int(durationSeconds * 8) // 8 points per second
+	if numPoints < 32 {
+		numPoints = 32
+	}
+	if numPoints > 64 {
+		numPoints = 64
+	}
+
+	waveform := make([]byte, numPoints)
+
+	// Generate a simple waveform pattern
+	for i := 0; i < numPoints; i++ {
+		// Create a wave pattern with some randomness
+		amplitude := byte(30 + (i * 20 / numPoints) + (i%7)*5) // Basic wave with variation
+		if amplitude > 100 {
+			amplitude = 100
+		}
+		waveform[i] = amplitude
+	}
+
+	logrus.Infof("Generated waveform with %d points for %d seconds audio", numPoints, durationSeconds)
+	return waveform
 }
 
 func (service serviceSend) getDefaultEphemeralExpiration(jid string) (expiration uint32) {

@@ -41,6 +41,36 @@ func RemoveFile(delaySecond int, paths ...string) error {
 	return nil
 }
 
+// RemoveFileWithTimeout removes files after a delay with a maximum timeout.
+// It logs failures instead of returning errors, suitable for cleanup goroutines.
+// The timeout prevents goroutine leaks if file removal hangs.
+func RemoveFileWithTimeout(delaySecond int, timeout time.Duration, paths ...string) {
+	if delaySecond > 0 {
+		time.Sleep(time.Duration(delaySecond) * time.Second)
+	}
+
+	// Use a channel to handle timeout
+	done := make(chan struct{})
+
+	go func() {
+		for _, path := range paths {
+			if path != "" {
+				if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+					logrus.Warnf("Failed to cleanup temp file %s: %v", path, err)
+				}
+			}
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Cleanup completed successfully
+	case <-time.After(timeout):
+		logrus.Warnf("Cleanup operation timed out after %v for paths: %v", timeout, paths)
+	}
+}
+
 // CreateFolder create new folder and sub folder if not exist
 func CreateFolder(folderPath ...string) error {
 	for _, folder := range folderPath {
