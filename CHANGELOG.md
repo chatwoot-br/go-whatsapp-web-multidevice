@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) with fork revision tracking (`vX.Y.Z+N`).
 
+## [v7.11.0+1] - 2025-12-11 (Synced with upstream v7.11.0)
+
+### Upstream Changes
+- feat: add support for Push-To-Video (PTV) messages
+- refactor: normalize JID handling and clean up unused code
+
+### Fork Changes
+- feat: add disappearing messages management for chats via new API endpoint and UI component
+- feat: enhance group request participants with phone number and display name
+- chore: bump API version to 6.13.1 and add phone number and display name fields
+
+### Versions
+- Git tag: `v7.11.0+1`
+- Docker tag: `v7.11.0-1` (+ converted to - for Docker compatibility)
+- Helm chart: `7.11.1` (X.Y from upstream + N from fork rev)
+
+---
+
 ## [v7.10.1+3] - 2025-12-11
 
 ### Fork Changes

@@ -63,10 +63,17 @@ Different contexts require different version formats due to character restrictio
 
 | Context | Format | Example | Notes |
 |---------|--------|---------|-------|
-| Git tag | `+` | `v7.10.1+1` | SemVer build metadata |
-| Docker tag | `-` | `v7.10.1-1` | Docker doesn't support `+` |
-| Helm appVersion | `-` | `v7.10.1-1` | Must match Docker tag |
-| App version (Go) | `+` | `v7.10.1+1` | Display version in API |
+| Git tag | `vX.Y.Z+N` | `v7.11.0+1` | SemVer build metadata |
+| Docker tag | `vX.Y.Z-N` | `v7.11.0-1` | Docker doesn't support `+` |
+| Helm appVersion | `vX.Y.Z-N` | `v7.11.0-1` | Must match Docker tag |
+| Helm chart version | `X.Y.N` | `7.11.1` | Major.Minor from upstream, patch is fork rev |
+| App version (Go) | `vX.Y.Z+N` | `v7.11.0+1` | Display version in API |
+
+**Helm Chart Version Convention:**
+- Chart version follows pattern `X.Y.N` where X.Y is upstream major.minor and N is fork revision
+- For `v7.11.0+1` → chart version is `7.11.1`
+- For `v7.11.0+2` → chart version is `7.11.2`
+- This ensures chart version always increments with each release
 
 GitHub Actions automatically converts `+` to `-` when building Docker images.
 
@@ -88,14 +95,20 @@ var (
 ### 2. Helm Chart Version (`charts/gowa/Chart.yaml`)
 
 ```yaml
-# Chart version (upstream version, without 'v' prefix)
-version: 7.10.1
+# Chart version: X.Y.N where X.Y is upstream major.minor, N is fork revision
+version: 7.11.1
 
 # Application version - must match Docker tag (use '-' not '+')
-appVersion: "v7.10.1-1"
+appVersion: "v7.11.0-1"
 ```
 
 **Locations**: Lines 8 and 11
+
+**Chart Version Convention:**
+- Chart version follows pattern `X.Y.N`
+- `X.Y` comes from upstream major.minor (e.g., `7.11` from `v7.11.0`)
+- `N` is the fork revision number (e.g., `1` from `+1`)
+- Example: `v7.11.0+1` → chart version `7.11.1`
 
 **Important**: The `appVersion` uses `-` format because it's used as the default Docker image tag, and Docker doesn't support `+` in tags.
 
@@ -160,11 +173,11 @@ git log upstream/main --oneline -5
 
 ```bash
 # Update src/config/settings.go (use '+' format)
-# Change line 8: AppVersion = "v7.10.1+1"
+# Change line 8: AppVersion = "v7.11.0+1"
 
 # Update charts/gowa/Chart.yaml
-# Change line 8: version: 7.10.1 (upstream version only)
-# Change line 11: appVersion: "v7.10.1-1" (use '-' for Docker compatibility)
+# Change line 8: version: 7.11.1 (X.Y from upstream, N from fork rev)
+# Change line 11: appVersion: "v7.11.0-1" (use '-' for Docker compatibility)
 
 # Update CHANGELOG.md
 # Add new version section at the top
@@ -393,8 +406,8 @@ cd src && go test ./...
 Reset fork revision to 1 with the new upstream version:
 
 - `src/config/settings.go`: `AppVersion = "v7.11.0+1"`
-- `charts/gowa/Chart.yaml` line 8: `version: 7.11.0`
-- `charts/gowa/Chart.yaml` line 11: `appVersion: "v7.11.0+1"`
+- `charts/gowa/Chart.yaml` line 8: `version: 7.11.1` (X.Y from upstream + N from fork rev)
+- `charts/gowa/Chart.yaml` line 11: `appVersion: "v7.11.0-1"`
 
 ### 4. Create Release
 
@@ -451,7 +464,8 @@ Recommended release schedule:
 
 ---
 
-**Last Updated**: 2025-12-06
-**Upstream Version**: v7.10.1
-**Current Fork Version**: v7.10.1+1
+**Last Updated**: 2025-12-11
+**Upstream Version**: v7.11.0
+**Current Fork Version**: v7.11.0+1
 **Version Format**: `v{MAJOR}.{MINOR}.{PATCH}+{FORK_REV}`
+**Helm Chart Version Format**: `{MAJOR}.{MINOR}.{FORK_REV}`

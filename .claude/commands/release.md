@@ -13,10 +13,10 @@ Follow these steps:
    - **Fork-only**: Keep upstream version + increment fork rev (e.g., `v7.10.1+1` → `v7.10.1+2`)
 
    **Chart version calculation:**
-   - Check if any commits contain `helm`, `chart`, or `k8s` in the message
-   - If chart changes exist: bump chart `version` patch (e.g., `7.10.1` → `7.10.2`)
-   - If upstream sync with chart changes: use upstream chart version
-   - If no chart changes: keep current chart version
+   - Chart version follows pattern `X.Y.N` where X.Y is upstream major.minor and N is fork revision
+   - For `v7.11.0+1` → chart version is `7.11.1`
+   - For `v7.11.0+2` → chart version is `7.11.2`
+   - This ensures chart version always increments with each release
 
 2. **Run pre-release checks**:
    - Run tests: `cd src && go test ./...`
@@ -31,7 +31,7 @@ Follow these steps:
 
    Files to update:
    - `src/config/settings.go` line 8: `AppVersion = "vX.Y.Z+N"` (use `+`)
-   - `charts/gowa/Chart.yaml` line 8: `version: A.B.C` (bump if chart changes, see step 1)
+   - `charts/gowa/Chart.yaml` line 8: `version: X.Y.N` (e.g., `7.11.1` for `v7.11.0+1`)
    - `charts/gowa/Chart.yaml` line 11: `appVersion: "vX.Y.Z-N"` (use `-` for Docker)
 
 4. **Update CHANGELOG.md** at the top with the new version section:
