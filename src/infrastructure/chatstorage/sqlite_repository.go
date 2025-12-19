@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
@@ -17,12 +18,17 @@ import (
 
 // SQLiteRepository implements Repository using SQLite
 type SQLiteRepository struct {
-	db *sql.DB
+	db            *sql.DB
+	migrationLock sync.Mutex            // Prevents concurrent migrations
+	migratedPairs map[string]struct{}   // Tracks completed migrations to avoid duplicates
 }
 
 // NewSQLiteRepository creates a new SQLite repository
 func NewStorageRepository(db *sql.DB) domainChatStorage.IChatStorageRepository {
-	return &SQLiteRepository{db: db}
+	return &SQLiteRepository{
+		db:            db,
+		migratedPairs: make(map[string]struct{}),
+	}
 }
 
 // StoreChat creates or updates a chat
@@ -525,19 +531,64 @@ func (r *SQLiteRepository) CreateMessage(ctx context.Context, evt *events.Messag
 		return nil
 	}
 
-	// Get WhatsApp client for LID resolution
-	client := whatsapp.GetClient()
+	// Get LID resolver for canonical LID format storage
+	resolver := whatsapp.GetLIDResolver()
 
-	// Normalize chat and sender JIDs (convert @lid to @s.whatsapp.net)
-	normalizedChatJID := whatsapp.NormalizeJIDFromLID(ctx, evt.Info.Chat, client)
-	normalizedSender := whatsapp.NormalizeJIDFromLID(ctx, evt.Info.Sender, client)
+	// Determine canonical chat JID (LID format preferred for individual chats)
+	var canonicalChatJID types.JID
+	var canonicalSenderJID types.JID
+	var pnChatJID types.JID // Phone number JID for migration
 
-	chatJID := normalizedChatJID.String()
-	// Store the full sender JID (user@server) to ensure consistency between received and sent messages
-	sender := normalizedSender.String()
+	if evt.Info.Chat.Server == "lid" {
+		// Already in LID format - use as-is (canonical)
+		canonicalChatJID = evt.Info.Chat
+		// Get PN for human-readable name
+		if resolver != nil {
+			pnChatJID, _ = resolver.ResolveToPNForWebhook(ctx, evt.Info.Chat)
+		}
+	} else if evt.Info.Chat.Server == types.DefaultUserServer && resolver != nil {
+		// PN format - try to convert to LID
+		resolvedLID := resolver.ResolveToLID(ctx, evt.Info.Chat)
+		if resolvedLID.Server == "lid" {
+			canonicalChatJID = resolvedLID
+			pnChatJID = evt.Info.Chat
+		} else {
+			// LID not available, use PN as fallback
+			canonicalChatJID = evt.Info.Chat
+		}
+	} else {
+		// Groups, broadcasts, etc. - use as-is
+		canonicalChatJID = evt.Info.Chat
+	}
 
-	// Get appropriate chat name using pushname if available
-	chatName := r.GetChatNameWithPushName(normalizedChatJID, chatJID, normalizedSender.User, evt.Info.PushName)
+	// Handle sender JID similarly
+	if evt.Info.Sender.Server == "lid" {
+		canonicalSenderJID = evt.Info.Sender
+	} else if evt.Info.Sender.Server == types.DefaultUserServer && resolver != nil {
+		resolvedLID := resolver.ResolveToLID(ctx, evt.Info.Sender)
+		if resolvedLID.Server == "lid" {
+			canonicalSenderJID = resolvedLID
+		} else {
+			canonicalSenderJID = evt.Info.Sender
+		}
+	} else {
+		canonicalSenderJID = evt.Info.Sender
+	}
+
+	chatJID := canonicalChatJID.String()
+	sender := canonicalSenderJID.String()
+
+	// Migrate existing PN chat to LID format if we have both
+	if canonicalChatJID.Server == "lid" && !pnChatJID.IsEmpty() && pnChatJID.Server == types.DefaultUserServer {
+		r.migrateExistingPNChat(ctx, canonicalChatJID, pnChatJID)
+	}
+
+	// Get human-readable chat name (prefer PN for display)
+	displayJID := canonicalChatJID
+	if resolver != nil && canonicalChatJID.Server == "lid" {
+		displayJID, _ = resolver.ResolveToPNForWebhook(ctx, canonicalChatJID)
+	}
+	chatName := r.GetChatNameWithPushName(displayJID, chatJID, displayJID.User, evt.Info.PushName)
 
 	// Get existing chat to preserve ephemeral_expiration if needed
 	existingChat, err := r.GetChat(chatJID)
@@ -597,6 +648,121 @@ func (r *SQLiteRepository) CreateMessage(ctx context.Context, evt *events.Messag
 
 	// Store the message
 	return r.StoreMessage(message)
+}
+
+// migrateExistingPNChat migrates an existing chat from PN format to LID format.
+// This consolidates chat history when a PN chat is discovered to have an LID equivalent.
+// Thread-safe: uses a lock to prevent concurrent migrations for the same pair.
+func (r *SQLiteRepository) migrateExistingPNChat(ctx context.Context, lidJID, pnJID types.JID) {
+	// Validate JIDs
+	if lidJID.Server != "lid" || pnJID.Server != types.DefaultUserServer {
+		return
+	}
+
+	pnJIDStr := pnJID.String()
+	lidJIDStr := lidJID.String()
+	migrationKey := pnJIDStr + "->" + lidJIDStr
+
+	// Check context cancellation before proceeding
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+
+	// Acquire lock and check if already migrated
+	r.migrationLock.Lock()
+	if _, alreadyMigrated := r.migratedPairs[migrationKey]; alreadyMigrated {
+		r.migrationLock.Unlock()
+		logrus.Debugf("[LID_MIGRATION] Skipping already migrated pair: %s", migrationKey)
+		return
+	}
+	// Mark as in-progress to prevent concurrent attempts
+	r.migratedPairs[migrationKey] = struct{}{}
+	r.migrationLock.Unlock()
+
+	// Check if a chat exists with the PN format
+	existingPNChat, err := r.GetChat(pnJIDStr)
+	if err != nil || existingPNChat == nil {
+		// No existing PN chat to migrate
+		return
+	}
+
+	logrus.Infof("[LID_MIGRATION] Migrating chat from PN %s to LID %s", pnJIDStr, lidJIDStr)
+
+	// Begin transaction for atomic migration
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		logrus.Errorf("[LID_MIGRATION] Failed to begin transaction: %v", err)
+		return
+	}
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			logrus.Errorf("[LID_MIGRATION] Failed to rollback transaction: %v", err)
+		}
+	}()
+
+	// Check if LID chat already exists
+	var lidChatExists bool
+	err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM chats WHERE jid = ?)", lidJIDStr).Scan(&lidChatExists)
+	if err != nil {
+		logrus.Errorf("[LID_MIGRATION] Failed to check LID chat existence: %v", err)
+		return
+	}
+
+	if !lidChatExists {
+		// No LID chat exists - rename the PN chat to LID
+		_, err = tx.ExecContext(ctx, "UPDATE chats SET jid = ? WHERE jid = ?", lidJIDStr, pnJIDStr)
+		if err != nil {
+			logrus.Errorf("[LID_MIGRATION] Failed to rename chat from PN to LID: %v", err)
+			return
+		}
+		logrus.Infof("[LID_MIGRATION] Renamed chat from %s to %s", pnJIDStr, lidJIDStr)
+	} else {
+		// LID chat exists - delete the PN chat (messages will be migrated below)
+		_, err = tx.ExecContext(ctx, "DELETE FROM chats WHERE jid = ?", pnJIDStr)
+		if err != nil {
+			logrus.Errorf("[LID_MIGRATION] Failed to delete old PN chat: %v", err)
+			return
+		}
+		logrus.Infof("[LID_MIGRATION] Deleted duplicate PN chat %s (LID chat %s exists)", pnJIDStr, lidJIDStr)
+	}
+
+	// Migrate messages: update chat_jid from PN to LID
+	result, err := tx.ExecContext(ctx, "UPDATE messages SET chat_jid = ? WHERE chat_jid = ?", lidJIDStr, pnJIDStr)
+	if err != nil {
+		logrus.Errorf("[LID_MIGRATION] Failed to migrate messages chat_jid: %v", err)
+		return
+	}
+	rowsAffected, rowsErr := result.RowsAffected()
+	if rowsErr != nil {
+		logrus.Warnf("[LID_MIGRATION] Failed to get rows affected for chat_jid migration: %v", rowsErr)
+		rowsAffected = -1
+	}
+	logrus.Infof("[LID_MIGRATION] Migrated %d messages chat_jid from %s to %s", rowsAffected, pnJIDStr, lidJIDStr)
+
+	// Migrate sender JIDs in messages (for individual chats where sender == chat JID)
+	result, err = tx.ExecContext(ctx, "UPDATE messages SET sender = ? WHERE sender = ?", lidJIDStr, pnJIDStr)
+	if err != nil {
+		logrus.Errorf("[LID_MIGRATION] Failed to migrate messages sender: %v", err)
+		return
+	}
+	rowsAffected, rowsErr = result.RowsAffected()
+	if rowsErr != nil {
+		logrus.Warnf("[LID_MIGRATION] Failed to get rows affected for sender migration: %v", rowsErr)
+		rowsAffected = -1
+	}
+	if rowsAffected > 0 {
+		logrus.Infof("[LID_MIGRATION] Migrated %d messages sender from %s to %s", rowsAffected, pnJIDStr, lidJIDStr)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		logrus.Errorf("[LID_MIGRATION] Failed to commit migration transaction: %v", err)
+		return
+	}
+
+	logrus.Infof("[LID_MIGRATION] Successfully migrated chat from PN %s to LID %s", pnJIDStr, lidJIDStr)
 }
 
 // GetStorageStatistics returns current storage statistics for logging purposes
@@ -662,15 +828,60 @@ func (r *SQLiteRepository) StoreSentMessageWithContext(ctx context.Context, mess
 		return fmt.Errorf("invalid JID format: %w", err)
 	}
 
-	// Get WhatsApp client for LID resolution
-	client := whatsapp.GetClient()
+	// Get LID resolver for canonical LID format storage
+	resolver := whatsapp.GetLIDResolver()
 
-	// Normalize recipient JID (convert @lid to @s.whatsapp.net)
-	normalizedJID := whatsapp.NormalizeJIDFromLID(ctx, jid, client)
-	chatJID := normalizedJID.String()
+	// Determine canonical chat JID (LID format preferred for individual chats)
+	var canonicalChatJID types.JID
+	var pnJID types.JID // Phone number JID for display/migration
 
-	// Get chat name (no pushname available for sent messages)
-	chatName := r.GetChatNameWithPushName(normalizedJID, chatJID, normalizedJID.User, "")
+	if jid.Server == "lid" {
+		// Already in LID format - use as-is (canonical)
+		canonicalChatJID = jid
+		// Get PN for human-readable name
+		if resolver != nil {
+			pnJID, _ = resolver.ResolveToPNForWebhook(ctx, jid)
+		}
+	} else if jid.Server == types.DefaultUserServer && resolver != nil {
+		// PN format - try to convert to LID
+		resolvedLID := resolver.ResolveToLID(ctx, jid)
+		if resolvedLID.Server == "lid" {
+			canonicalChatJID = resolvedLID
+			pnJID = jid
+		} else {
+			// LID resolution failed - try to find existing LID chat
+			existingLIDChatJID := r.findExistingLIDChat(ctx, jid)
+			if existingLIDChatJID != "" {
+				parsedLID, parseErr := types.ParseJID(existingLIDChatJID)
+				if parseErr == nil {
+					canonicalChatJID = parsedLID
+					pnJID = jid
+				} else {
+					canonicalChatJID = jid
+				}
+			} else {
+				// No LID available, use PN as fallback
+				canonicalChatJID = jid
+			}
+		}
+	} else {
+		// Groups, broadcasts, etc. - use as-is
+		canonicalChatJID = jid
+	}
+
+	chatJID := canonicalChatJID.String()
+
+	// Migrate existing PN chat to LID format if we have both
+	if canonicalChatJID.Server == "lid" && !pnJID.IsEmpty() && pnJID.Server == types.DefaultUserServer {
+		r.migrateExistingPNChat(ctx, canonicalChatJID, pnJID)
+	}
+
+	// Get human-readable chat name (prefer PN for display)
+	displayJID := canonicalChatJID
+	if resolver != nil && canonicalChatJID.Server == "lid" {
+		displayJID, _ = resolver.ResolveToPNForWebhook(ctx, canonicalChatJID)
+	}
+	chatName := r.GetChatNameWithPushName(displayJID, chatJID, displayJID.User, "")
 
 	// Check context again before database operations
 	select {
@@ -719,6 +930,34 @@ func (r *SQLiteRepository) StoreSentMessageWithContext(ctx context.Context, mess
 	}
 
 	return r.StoreMessage(message)
+}
+
+// findExistingLIDChat searches for an existing LID chat that corresponds to the given PN JID.
+// This is a fallback when the LID store doesn't have a mapping, but we may have stored
+// messages from this contact before using LID format.
+func (r *SQLiteRepository) findExistingLIDChat(ctx context.Context, pnJID types.JID) string {
+	// Get the WhatsApp client and check LID store
+	client := whatsapp.GetClient()
+	if client == nil || client.Store == nil || client.Store.LIDs == nil {
+		return ""
+	}
+
+	// Try to get LID from the store
+	lid, err := client.Store.LIDs.GetLIDForPN(ctx, pnJID)
+	if err != nil || lid.IsEmpty() {
+		return ""
+	}
+
+	lidJIDStr := lid.String()
+
+	// Check if a chat exists with this LID in our database
+	existingChat, err := r.GetChat(lidJIDStr)
+	if err != nil || existingChat == nil {
+		return ""
+	}
+
+	logrus.Debugf("[LID_LOOKUP] Found existing LID chat %s for PN %s", lidJIDStr, pnJID.String())
+	return lidJIDStr
 }
 
 // _____________________________________________________________________________________________________________________

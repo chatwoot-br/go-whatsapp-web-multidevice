@@ -32,37 +32,67 @@ func createMessagePayload(ctx context.Context, evt *events.Message, downloadedMe
 
 	body := make(map[string]any)
 
+	// Always include raw IDs for reference
 	body["sender_id"] = evt.Info.Sender.User
 	body["chat_id"] = evt.Info.Chat.User
 
+	// Get resolver for LID <-> PN resolution
+	resolver := GetLIDResolver()
+
+	// Variables to hold resolved JIDs
+	var senderPN, senderLID, chatPN, chatLID types.JID
+
+	// Resolve JIDs if resolver is available
+	if resolver != nil {
+		// Resolve sender for external systems - they need phone numbers for compatibility
+		senderPN, senderLID = resolver.ResolveToPNForWebhook(ctx, evt.Info.Sender)
+
+		// Resolve chat JID similarly
+		chatPN, chatLID = resolver.ResolveToPNForWebhook(ctx, evt.Info.Chat)
+	} else {
+		// Fallback: use original JIDs when resolver is not available
+		senderPN = evt.Info.Sender
+		chatPN = evt.Info.Chat
+	}
+
+	// Build the "from" field with resolved phone number for backward compatibility
 	if from := evt.Info.SourceString(); from != "" {
-		body["from"] = from
-
-		from_user, from_group := from, ""
+		fromUser, fromGroup := from, ""
 		if strings.Contains(from, " in ") {
-			from_user = strings.Split(from, " in ")[0]
-			from_group = strings.Split(from, " in ")[1]
-		}
-
-		if strings.HasSuffix(from_user, "@lid") {
-			body["from_lid"] = from_user
-			lid, err := types.ParseJID(from_user)
-			if err != nil {
-				logrus.Errorf("Error when parse jid: %v", err)
-			} else {
-				pn, err := cli.Store.LIDs.GetPNForLID(ctx, lid)
-				if err != nil {
-					logrus.Errorf("Error when get pn for lid %s: %v", lid.String(), err)
-				}
-				if !pn.IsEmpty() {
-					if from_group != "" {
-						body["from"] = fmt.Sprintf("%s in %s", pn.String(), from_group)
-					} else {
-						body["from"] = pn.String()
-					}
-				}
+			parts := strings.Split(from, " in ")
+			fromUser = parts[0]
+			if len(parts) > 1 {
+				fromGroup = parts[1]
 			}
 		}
+
+		// Build resolved "from" with phone number if available
+		if !senderPN.IsEmpty() && senderPN.Server == types.DefaultUserServer {
+			if fromGroup != "" {
+				body["from"] = fmt.Sprintf("%s in %s", senderPN.String(), fromGroup)
+			} else {
+				body["from"] = senderPN.String()
+			}
+		} else {
+			// Fallback to original source string
+			body["from"] = from
+		}
+
+		// Always include from_lid if LID is available
+		if !senderLID.IsEmpty() {
+			body["from_lid"] = senderLID.String()
+		} else if strings.HasSuffix(fromUser, "@lid") {
+			// Fallback: extract LID from source string if resolver didn't return one
+			body["from_lid"] = fromUser
+		}
+	}
+
+	// Add resolved chat JID fields for external systems
+	if !chatPN.IsEmpty() {
+		body["chat_jid"] = chatPN.String()
+	}
+	if !chatLID.IsEmpty() {
+		body["chat_lid"] = chatLID.String()
 	}
 	if message.ID != "" {
 		tags := regexp.MustCompile(`\B@\w+`).FindAllString(message.Text, -1)
