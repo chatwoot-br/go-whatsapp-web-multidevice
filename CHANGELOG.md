@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) with fork revision tracking (`vX.Y.Z+N`).
 
+## [v7.11.0+2] - 2025-12-19
+
+### Fork Changes
+- fix(chatstorage): resolve LID-JID chat split issue ([#484](https://github.com/aldinokemal/go-whatsapp-web-multidevice/issues/484))
+  - Add LIDResolver service for bidirectional LID ↔ PN resolution
+  - Use `@lid` as canonical JID format for internal chat storage
+  - Auto-migrate existing `@s.whatsapp.net` chats to `@lid` format
+  - Include both formats in webhook payload (`from_lid`, `chat_lid`) for backward compatibility
+  - Add proactive LID resolution via GetUserInfo for new contacts
+- fix(lid_resolver): prevent memory leak with background cache cleanup
+- fix(chatstorage): prevent race condition with migration deduplication lock
+- docs: add issue investigation documentation for LID-JID chat split
+
+### Versions
+- Git tag: `v7.11.0+2`
+- Docker tag: `v7.11.0-2` (+ converted to - for Docker compatibility)
+- Helm chart: `7.11.2` (X.Y from upstream + N from fork rev)
+
+---
+
 ## [v7.11.0+1] - 2025-12-11 (Synced with upstream v7.11.0)
 
 ### Upstream Changes
