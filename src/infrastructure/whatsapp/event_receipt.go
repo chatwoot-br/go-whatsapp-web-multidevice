@@ -49,6 +49,24 @@ func createReceiptPayload(evt *events.Receipt) map[string]any {
 	payload["sender_id"] = evt.Sender
 	payload["from"] = evt.SourceString()
 
+	// Resolve LID/JID for chat and sender
+	resolver := GetLIDResolver()
+	if resolver != nil {
+		ctx := context.Background()
+		// Resolve chat JID
+		chatPN, chatLID := resolver.ResolveToPNForWebhook(ctx, evt.Chat)
+		payload["chat_jid"] = chatPN.String()
+		if !chatLID.IsEmpty() {
+			payload["chat_lid"] = chatLID.String()
+		}
+		// Resolve sender JID
+		senderPN, senderLID := resolver.ResolveToPNForWebhook(ctx, evt.Sender)
+		payload["sender_jid"] = senderPN.String()
+		if !senderLID.IsEmpty() {
+			payload["sender_lid"] = senderLID.String()
+		}
+	}
+
 	if evt.Type == types.ReceiptTypeDelivered {
 		payload["receipt_type"] = "delivered"
 	} else {

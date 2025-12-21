@@ -168,11 +168,20 @@ func (service serviceUser) MyListContacts(ctx context.Context) (response domainU
 		return
 	}
 
+	resolver := whatsapp.GetLIDResolver()
 	for jid, contact := range contacts {
-		response.Data = append(response.Data, domainUser.MyListContactsResponseData{
+		contactData := domainUser.MyListContactsResponseData{
 			JID:  jid,
 			Name: contact.FullName,
-		})
+		}
+		// Resolve LID for the contact
+		if resolver != nil {
+			lidJID := resolver.ResolveToLID(ctx, jid)
+			if lidJID.Server == "lid" {
+				contactData.LID = lidJID.String()
+			}
+		}
+		response.Data = append(response.Data, contactData)
 	}
 
 	return response, nil

@@ -12,6 +12,7 @@ import (
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/validations"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow/appstate"
+	"go.mau.fi/whatsmeow/types"
 )
 
 type serviceChat struct {
@@ -54,6 +55,7 @@ func (service serviceChat) ListChats(ctx context.Context, request domainChat.Lis
 
 	// Convert entities to domain objects
 	chatInfos := make([]domainChat.ChatInfo, 0, len(chats))
+	resolver := whatsapp.GetLIDResolver()
 	for _, chat := range chats {
 		chatInfo := domainChat.ChatInfo{
 			JID:                 chat.JID,
@@ -62,6 +64,15 @@ func (service serviceChat) ListChats(ctx context.Context, request domainChat.Lis
 			EphemeralExpiration: chat.EphemeralExpiration,
 			CreatedAt:           chat.CreatedAt.Format(time.RFC3339),
 			UpdatedAt:           chat.UpdatedAt.Format(time.RFC3339),
+		}
+		// Resolve LID for the chat JID
+		if resolver != nil {
+			if jid, err := types.ParseJID(chat.JID); err == nil {
+				lidJID := resolver.ResolveToLID(ctx, jid)
+				if lidJID.Server == "lid" {
+					chatInfo.LID = lidJID.String()
+				}
+			}
 		}
 		chatInfos = append(chatInfos, chatInfo)
 	}
@@ -154,6 +165,7 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 
 	// Convert entities to domain objects
 	messageInfos := make([]domainChat.MessageInfo, 0, len(messages))
+	msgResolver := whatsapp.GetLIDResolver()
 	for _, message := range messages {
 		messageInfo := domainChat.MessageInfo{
 			ID:         message.ID,
@@ -170,6 +182,21 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 			CreatedAt:  message.CreatedAt.Format(time.RFC3339),
 			UpdatedAt:  message.UpdatedAt.Format(time.RFC3339),
 		}
+		// Resolve LID for chat and sender JIDs
+		if msgResolver != nil {
+			if chatJID, err := types.ParseJID(message.ChatJID); err == nil {
+				lidJID := msgResolver.ResolveToLID(ctx, chatJID)
+				if lidJID.Server == "lid" {
+					messageInfo.ChatLID = lidJID.String()
+				}
+			}
+			if senderJID, err := types.ParseJID(message.Sender); err == nil {
+				lidJID := msgResolver.ResolveToLID(ctx, senderJID)
+				if lidJID.Server == "lid" {
+					messageInfo.SenderLID = lidJID.String()
+				}
+			}
+		}
 		messageInfos = append(messageInfos, messageInfo)
 	}
 
@@ -181,6 +208,15 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 		EphemeralExpiration: chat.EphemeralExpiration,
 		CreatedAt:           chat.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:           chat.UpdatedAt.Format(time.RFC3339),
+	}
+	// Resolve LID for the chat info
+	if msgResolver != nil {
+		if jid, err := types.ParseJID(chat.JID); err == nil {
+			lidJID := msgResolver.ResolveToLID(ctx, jid)
+			if lidJID.Server == "lid" {
+				chatInfo.LID = lidJID.String()
+			}
+		}
 	}
 
 	// Create pagination response
@@ -232,6 +268,14 @@ func (service serviceChat) PinChat(ctx context.Context, request domainChat.PinCh
 	response.ChatJID = request.ChatJID
 	response.Pinned = request.Pinned
 
+	// Resolve LID for the chat
+	if pinResolver := whatsapp.GetLIDResolver(); pinResolver != nil {
+		lidJID := pinResolver.ResolveToLID(ctx, targetJID)
+		if lidJID.Server == "lid" {
+			response.ChatLID = lidJID.String()
+		}
+	}
+
 	if request.Pinned {
 		response.Message = "Chat pinned successfully"
 	} else {
@@ -276,6 +320,14 @@ func (service serviceChat) SetDisappearingTimer(ctx context.Context, request dom
 	response.Status = "success"
 	response.ChatJID = request.ChatJID
 	response.TimerSeconds = request.TimerSeconds
+
+	// Resolve LID for the chat
+	if timerResolver := whatsapp.GetLIDResolver(); timerResolver != nil {
+		lidJID := timerResolver.ResolveToLID(ctx, targetJID)
+		if lidJID.Server == "lid" {
+			response.ChatLID = lidJID.String()
+		}
+	}
 
 	if request.TimerSeconds == 0 {
 		response.Message = "Disappearing messages disabled"

@@ -41,11 +41,13 @@ type PinChatResponse struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
 	ChatJID string `json:"chat_jid"`
+	ChatLID string `json:"chat_lid,omitempty"`
 	Pinned  bool   `json:"pinned"`
 }
 
 type ChatInfo struct {
 	JID                 string `json:"jid"`
+	LID                 string `json:"lid,omitempty"`
 	Name                string `json:"name"`
 	LastMessageTime     string `json:"last_message_time"`
 	EphemeralExpiration uint32 `json:"ephemeral_expiration"`
@@ -56,7 +58,9 @@ type ChatInfo struct {
 type MessageInfo struct {
 	ID         string `json:"id"`
 	ChatJID    string `json:"chat_jid"`
+	ChatLID    string `json:"chat_lid,omitempty"`
 	SenderJID  string `json:"sender_jid"`
+	SenderLID  string `json:"sender_lid,omitempty"`
 	Content    string `json:"content"`
 	Timestamp  string `json:"timestamp"`
 	IsFromMe   bool   `json:"is_from_me"`
@@ -85,5 +89,6 @@ type SetDisappearingTimerResponse struct {
 	Status       string `json:"status"`
 	Message      string `json:"message"`
 	ChatJID      string `json:"chat_jid"`
+	ChatLID      string `json:"chat_lid,omitempty"`
 	TimerSeconds uint32 `json:"timer_seconds"`
 }

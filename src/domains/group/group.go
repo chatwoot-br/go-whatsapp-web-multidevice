@@ -59,6 +59,7 @@ type GetGroupRequestParticipantsRequest struct {
 
 type GetGroupRequestParticipantsResponse struct {
 	JID         string    `json:"jid"`
+	LID         string    `json:"lid,omitempty"`
 	PhoneNumber string    `json:"phone_number"`
 	DisplayName string    `json:"display_name,omitempty"`
 	RequestedAt time.Time `json:"requested_at"`

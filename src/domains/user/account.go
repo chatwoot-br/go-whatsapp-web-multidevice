@@ -67,6 +67,7 @@ type MyListContactsResponse struct {
 
 type MyListContactsResponseData struct {
 	JID  types.JID `json:"jid"`
+	LID  string    `json:"lid,omitempty"`
 	Name string    `json:"name"`
 }
 

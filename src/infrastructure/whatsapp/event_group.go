@@ -22,9 +22,13 @@ func createGroupInfoPayload(evt *events.GroupInfo, actionType string, jids []typ
 	// Add group chat ID
 	payload["chat_id"] = evt.JID.String()
 
-	// Add action type and affected users
+	// Add action type and affected users with LID resolution
 	payload["type"] = actionType
-	payload["jids"] = jidsToStrings(jids)
+	jidStrings, lidStrings := jidsWithLIDs(context.Background(), jids)
+	payload["jids"] = jidStrings
+	if len(lidStrings) > 0 {
+		payload["lids"] = lidStrings
+	}
 
 	// Wrap in payload structure
 	body["payload"] = payload
@@ -47,6 +51,28 @@ func jidsToStrings(jids []types.JID) []string {
 		result[i] = jid.String()
 	}
 	return result
+}
+
+// jidsWithLIDs converts JIDs to strings and also resolves their LIDs
+func jidsWithLIDs(ctx context.Context, jids []types.JID) ([]string, []string) {
+	if len(jids) == 0 {
+		return []string{}, []string{}
+	}
+
+	jidStrings := make([]string, len(jids))
+	lidStrings := make([]string, 0, len(jids))
+
+	resolver := GetLIDResolver()
+	for i, jid := range jids {
+		jidStrings[i] = jid.String()
+		if resolver != nil {
+			lidJID := resolver.ResolveToLID(ctx, jid)
+			if lidJID.Server == "lid" {
+				lidStrings = append(lidStrings, lidJID.String())
+			}
+		}
+	}
+	return jidStrings, lidStrings
 }
 
 // forwardGroupInfoToWebhook forwards group information events to the configured webhook URLs

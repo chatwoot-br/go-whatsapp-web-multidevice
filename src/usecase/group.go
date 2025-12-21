@@ -203,6 +203,7 @@ func (service serviceGroup) GetGroupRequestParticipants(ctx context.Context, req
 		userInfoMap, _ = whatsapp.GetClient().GetUserInfo(ctx, jids)
 	}
 
+	resolver := whatsapp.GetLIDResolver()
 	for _, participant := range participants {
 		displayName := ""
 
@@ -214,12 +215,22 @@ func (service serviceGroup) GetGroupRequestParticipants(ctx context.Context, req
 			displayName = info.VerifiedName.Details.GetVerifiedName()
 		}
 
-		result = append(result, domainGroup.GetGroupRequestParticipantsResponse{
+		responseItem := domainGroup.GetGroupRequestParticipantsResponse{
 			JID:         participant.JID.String(),
 			PhoneNumber: participant.JID.User,
 			DisplayName: displayName,
 			RequestedAt: participant.RequestedAt,
-		})
+		}
+
+		// Resolve LID for the participant
+		if resolver != nil {
+			lidJID := resolver.ResolveToLID(ctx, participant.JID)
+			if lidJID.Server == "lid" {
+				responseItem.LID = lidJID.String()
+			}
+		}
+
+		result = append(result, responseItem)
 	}
 
 	return result, nil

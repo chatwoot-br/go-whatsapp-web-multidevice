@@ -19,8 +19,8 @@ import (
 // SQLiteRepository implements Repository using SQLite
 type SQLiteRepository struct {
 	db            *sql.DB
-	migrationLock sync.Mutex            // Prevents concurrent migrations
-	migratedPairs map[string]struct{}   // Tracks completed migrations to avoid duplicates
+	migrationLock sync.Mutex          // Prevents concurrent migrations
+	migratedPairs map[string]struct{} // Tracks completed migrations to avoid duplicates
 }
 
 // NewSQLiteRepository creates a new SQLite repository
