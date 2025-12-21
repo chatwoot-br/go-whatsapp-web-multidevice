@@ -1,116 +1,121 @@
 export default {
-    name: 'ChatList',
-    data() {
-        return {
-            chats: [],
-            loading: false,
-            searchQuery: '',
-            includeMediaChats: false,
-            currentPage: 1,
-            pageSize: 10,
-            totalChats: 0,
-            selectedChatJid: ''
-        }
+  name: "ChatList",
+  data() {
+    return {
+      chats: [],
+      loading: false,
+      searchQuery: "",
+      includeMediaChats: false,
+      currentPage: 1,
+      pageSize: 10,
+      totalChats: 0,
+      selectedChatJid: "",
+    };
+  },
+  computed: {
+    totalPages() {
+      return Math.ceil(this.totalChats / this.pageSize);
     },
-    computed: {
-        totalPages() {
-            return Math.ceil(this.totalChats / this.pageSize);
-        },
-        filteredChats() {
-            if (!this.searchQuery) return this.chats;
-            return this.chats.filter(chat => 
-                chat.name?.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-                chat.jid?.toLowerCase().includes(this.searchQuery.toLowerCase())
-            );
-        }
+    filteredChats() {
+      if (!this.searchQuery) return this.chats;
+      return this.chats.filter(
+        (chat) =>
+          chat.name?.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+          chat.jid?.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+          chat.lid?.toLowerCase().includes(this.searchQuery.toLowerCase()),
+      );
     },
-    methods: {
-        openModal() {
-            $('#modalChatList').modal('show');
-            this.loadChats();
-        },
-        closeModal() {
-            $('#modalChatList').modal('hide');
-        },
-        async loadChats() {
-            this.loading = true;
-            try {
-                const params = new URLSearchParams({
-                    offset: (this.currentPage - 1) * this.pageSize,
-                    limit: this.pageSize
-                });
-                
-                if (this.searchQuery.trim()) {
-                    params.append('search', this.searchQuery);
-                }
-                
-                if (this.includeMediaChats) {
-                    params.append('has_media', 'true');
-                }
+  },
+  methods: {
+    openModal() {
+      $("#modalChatList").modal("show");
+      this.loadChats();
+    },
+    closeModal() {
+      $("#modalChatList").modal("hide");
+    },
+    async loadChats() {
+      this.loading = true;
+      try {
+        const params = new URLSearchParams({
+          offset: (this.currentPage - 1) * this.pageSize,
+          limit: this.pageSize,
+        });
 
-                const response = await window.http.get(`/chats?${params}`);
-                this.chats = response.data.results?.data || [];
-                this.totalChats = response.data.results?.pagination?.total || 0;
-            } catch (error) {
-                showErrorInfo(error.response?.data?.message || 'Failed to load chats');
-            } finally {
-                this.loading = false;
-            }
-        },
-        async searchChats() {
-            this.currentPage = 1;
-            await this.loadChats();
-        },
-        nextPage() {
-            if (this.currentPage < this.totalPages) {
-                this.currentPage++;
-                this.loadChats();
-            }
-        },
-        prevPage() {
-            if (this.currentPage > 1) {
-                this.currentPage--;
-                this.loadChats();
-            }
-        },
-        selectChat(jid) {
-            this.selectedChatJid = jid;
-            // Store the JID for the chat messages component
-            localStorage.setItem('selectedChatJid', jid);
-
-            // Close the current modal
-            $('#modalChatList').modal('hide');
-
-            // Directly open ChatMessages modal after ChatList modal closes
-            setTimeout(() => {
-                // Find the ChatMessages component and call its openModal method
-                if (window.ChatMessagesComponent && window.ChatMessagesComponent.openModal) {
-                    window.ChatMessagesComponent.openModal();
-                }
-            }, 200);
-        },
-        formatTimestamp(timestamp) {
-            if (!timestamp) return 'N/A';
-            return moment(timestamp).format('MMM DD, YYYY HH:mm');
-        },
-        formatJid(jid) {
-            if (!jid) return '';
-            if (jid.includes('@g.us')) return 'Group';
-            if (jid.includes('@s.whatsapp.net')) return 'Contact';
-            return 'Other';
+        if (this.searchQuery.trim()) {
+          params.append("search", this.searchQuery);
         }
-    },
-    mounted() {
-        // Expose the component globally for other components to access
-        window.ChatListComponent = this;
-    },
-    beforeUnmount() {
-        // Clean up global reference
-        if (window.ChatListComponent === this) {
-            delete window.ChatListComponent;
+
+        if (this.includeMediaChats) {
+          params.append("has_media", "true");
         }
+
+        const response = await window.http.get(`/chats?${params}`);
+        this.chats = response.data.results?.data || [];
+        this.totalChats = response.data.results?.pagination?.total || 0;
+      } catch (error) {
+        showErrorInfo(error.response?.data?.message || "Failed to load chats");
+      } finally {
+        this.loading = false;
+      }
     },
-    template: `
+    async searchChats() {
+      this.currentPage = 1;
+      await this.loadChats();
+    },
+    nextPage() {
+      if (this.currentPage < this.totalPages) {
+        this.currentPage++;
+        this.loadChats();
+      }
+    },
+    prevPage() {
+      if (this.currentPage > 1) {
+        this.currentPage--;
+        this.loadChats();
+      }
+    },
+    selectChat(jid) {
+      this.selectedChatJid = jid;
+      // Store the JID for the chat messages component
+      localStorage.setItem("selectedChatJid", jid);
+
+      // Close the current modal
+      $("#modalChatList").modal("hide");
+
+      // Directly open ChatMessages modal after ChatList modal closes
+      setTimeout(() => {
+        // Find the ChatMessages component and call its openModal method
+        if (
+          window.ChatMessagesComponent &&
+          window.ChatMessagesComponent.openModal
+        ) {
+          window.ChatMessagesComponent.openModal();
+        }
+      }, 200);
+    },
+    formatTimestamp(timestamp) {
+      if (!timestamp) return "N/A";
+      return moment(timestamp).format("MMM DD, YYYY HH:mm");
+    },
+    formatJid(jid) {
+      if (!jid) return "";
+      if (jid.includes("@g.us")) return "Group";
+      if (jid.includes("@s.whatsapp.net")) return "Contact";
+      return "Other";
+    },
+  },
+  mounted() {
+    // Expose the component globally for other components to access
+    window.ChatListComponent = this;
+  },
+  beforeUnmount() {
+    // Clean up global reference
+    if (window.ChatListComponent === this) {
+      delete window.ChatListComponent;
+    }
+  },
+  template: `
     <div class="purple card" @click="openModal()" style="cursor: pointer">
         <div class="content">
             <a class="ui purple right ribbon label">Chat</a>
@@ -134,8 +139,8 @@ export default {
                     <div class="twelve wide field">
                         <label>Search Chats</label>
                         <div class="ui icon input">
-                            <input type="text" 
-                                   placeholder="Search by name or JID..." 
+                            <input type="text"
+                                   placeholder="Search by name, JID or LID..."
                                    v-model="searchQuery"
                                    @input="searchChats">
                             <i class="search icon"></i>
@@ -169,6 +174,7 @@ export default {
                             <th>Name</th>
                             <th>Type</th>
                             <th>JID</th>
+                            <th>LID</th>
                             <th>Last Message</th>
                             <th>Actions</th>
                         </tr>
@@ -189,6 +195,10 @@ export default {
                             </td>
                             <td class="collapsing">
                                 <code>{{ chat.jid }}</code>
+                            </td>
+                            <td class="collapsing">
+                                <code v-if="chat.lid">{{ chat.lid }}</code>
+                                <span v-else class="ui grey text">-</span>
                             </td>
                             <td>
                                 {{ formatTimestamp(chat.last_message_time) }}
@@ -222,5 +232,5 @@ export default {
             <div class="ui approve button">Close</div>
         </div>
     </div>
-    `
-}
+    `,
+};

@@ -90,7 +90,7 @@ export default {
         }
 
         const response = await window.http.get(
-          `/chat/${this.formattedJid}/messages?${params}`
+          `/chat/${this.formattedJid}/messages?${params}`,
         );
         this.messages = response.data.results?.data || [];
         this.totalMessages = response.data.results?.pagination?.total || 0;
@@ -103,7 +103,7 @@ export default {
         }
       } catch (error) {
         showErrorInfo(
-          error.response?.data?.message || "Failed to load messages"
+          error.response?.data?.message || "Failed to load messages",
         );
       } finally {
         this.loading = false;
@@ -175,15 +175,15 @@ export default {
       // Show loading state
       if (isDownloading) {
         return {
-          type: 'loading',
-          content: `<div class="ui active mini inline loader"></div> Downloading ${message.media_type}...`
+          type: "loading",
+          content: `<div class="ui active mini inline loader"></div> Downloading ${message.media_type}...`,
         };
       }
 
       // Show error state with retry option
       if (hasError) {
         return {
-          type: 'error',
+          type: "error",
           content: `<div class="ui red message">
             <i class="exclamation triangle icon"></i>
             Failed to download ${message.media_type}
@@ -191,7 +191,7 @@ export default {
                   onclick="document.dispatchEvent(new CustomEvent('retryMediaDownload', {detail: '${messageId}'}))">
               <i class="redo icon"></i> Retry
             </span>
-          </div>`
+          </div>`,
         };
       }
 
@@ -203,9 +203,9 @@ export default {
         const fileSize = downloadedInfo.file_size;
 
         switch (mediaType.toLowerCase()) {
-          case 'image':
+          case "image":
             return {
-              type: 'image',
+              type: "image",
               content: `<div class="ui fluid image">
                 <img src="${filePath}" alt="${filename}" style="max-width: 300px; max-height: 300px; border-radius: 4px;" 
                      onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
@@ -215,12 +215,12 @@ export default {
                     Image not available
                   </div>
                 </div>
-              </div>`
+              </div>`,
             };
 
-          case 'video':
+          case "video":
             return {
-              type: 'video',
+              type: "video",
               content: `<div class="ui fluid">
                 <video controls style="max-width: 300px; max-height: 300px; border-radius: 4px;" preload="metadata">
                   <source src="${filePath}" type="video/mp4">
@@ -228,12 +228,12 @@ export default {
                   <source src="${filePath}" type="video/ogg">
                   Your browser does not support the video tag.
                 </video>
-              </div>`
+              </div>`,
             };
 
-          case 'audio':
+          case "audio":
             return {
-              type: 'audio',
+              type: "audio",
               content: `<div class="ui fluid">
                 <audio controls style="width: 100%; max-width: 300px;">
                   <source src="${filePath}" type="audio/mpeg">
@@ -241,13 +241,15 @@ export default {
                   <source src="${filePath}" type="audio/wav">
                   Your browser does not support the audio tag.
                 </audio>
-              </div>`
+              </div>`,
             };
 
-          case 'document':
-            const sizeText = fileSize ? `(${Math.round(fileSize / 1024)} KB)` : '';
+          case "document":
+            const sizeText = fileSize
+              ? `(${Math.round(fileSize / 1024)} KB)`
+              : "";
             return {
-              type: 'document',
+              type: "document",
               content: `<div class="ui labeled button">
                 <a href="${filePath}" download="${filename}" class="ui button">
                   <i class="download icon"></i>
@@ -256,12 +258,12 @@ export default {
                 <div class="ui basic left pointing label">
                   Document
                 </div>
-              </div>`
+              </div>`,
             };
 
-          case 'sticker':
+          case "sticker":
             return {
-              type: 'sticker',
+              type: "sticker",
               content: `<div class="ui">
                 <img src="${filePath}" alt="Sticker" style="max-width: 150px; max-height: 150px; border-radius: 4px;" 
                      onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
@@ -271,27 +273,27 @@ export default {
                     Sticker not available
                   </div>
                 </div>
-              </div>`
+              </div>`,
             };
 
           default:
             return {
-              type: 'unknown',
+              type: "unknown",
               content: `<div class="ui message">
                 <i class="file icon"></i>
                 Unknown media type: ${mediaType}
-              </div>`
+              </div>`,
             };
         }
       }
 
       // Default: show media available label
       return {
-        type: 'available',
+        type: "available",
         content: `<div class="ui tiny blue label">
           <i class="linkify icon"></i>
           ${message.media_type.toUpperCase()} Available
-        </div>`
+        </div>`,
       };
     },
     getMessageStyle(message) {
@@ -315,7 +317,10 @@ export default {
     },
     // Media download methods
     isMediaDownloaded(messageId) {
-      return this.downloadedMedia[messageId] && this.downloadedMedia[messageId].status === 'completed';
+      return (
+        this.downloadedMedia[messageId] &&
+        this.downloadedMedia[messageId].status === "completed"
+      );
     },
     isMediaDownloading(messageId) {
       return this.downloadingMedia.has(messageId);
@@ -329,9 +334,12 @@ export default {
       }
 
       const messageId = message.id;
-      
+
       // Skip if already downloaded or downloading
-      if (this.isMediaDownloaded(messageId) || this.isMediaDownloading(messageId)) {
+      if (
+        this.isMediaDownloaded(messageId) ||
+        this.isMediaDownloading(messageId)
+      ) {
         return;
       }
 
@@ -343,14 +351,14 @@ export default {
       try {
         this.downloadingMedia.add(messageId);
         this.currentDownloads++;
-        
+
         // Clear any previous error
         if (this.mediaDownloadErrors[messageId]) {
           delete this.mediaDownloadErrors[messageId];
         }
 
         const response = await window.http.get(
-          `/message/${messageId}/download?phone=${this.formattedJid}`
+          `/message/${messageId}/download?phone=${this.formattedJid}`,
         );
 
         if (response.data && response.data.results) {
@@ -359,19 +367,23 @@ export default {
             media_type: response.data.results.media_type,
             file_size: response.data.results.file_size,
             filename: response.data.results.filename,
-            status: 'completed'
+            status: "completed",
           };
         }
       } catch (error) {
-        console.error(`Failed to download media for message ${messageId}:`, error);
-        this.mediaDownloadErrors[messageId] = error.response?.data?.message || 'Download failed';
+        console.error(
+          `Failed to download media for message ${messageId}:`,
+          error,
+        );
+        this.mediaDownloadErrors[messageId] =
+          error.response?.data?.message || "Download failed";
       } finally {
         this.downloadingMedia.delete(messageId);
         this.currentDownloads--;
       }
     },
     async retryMediaDownload(messageId) {
-      const message = this.messages.find(m => m.id === messageId);
+      const message = this.messages.find((m) => m.id === messageId);
       if (message) {
         // Clear the error first
         delete this.mediaDownloadErrors[messageId];
@@ -379,9 +391,13 @@ export default {
       }
     },
     async downloadAllMediaInMessages() {
-      const mediaMessages = this.messages.filter(message =>
-        message.media_type && message.url && message.id &&
-        !this.isMediaDownloaded(message.id) && !this.isMediaDownloading(message.id)
+      const mediaMessages = this.messages.filter(
+        (message) =>
+          message.media_type &&
+          message.url &&
+          message.id &&
+          !this.isMediaDownloaded(message.id) &&
+          !this.isMediaDownloading(message.id),
       );
 
       if (mediaMessages.length === 0) {
@@ -392,17 +408,23 @@ export default {
       const downloadQueue = [...mediaMessages];
 
       const processQueue = async () => {
-        while (downloadQueue.length > 0 && this.currentDownloads < this.maxConcurrentDownloads) {
+        while (
+          downloadQueue.length > 0 &&
+          this.currentDownloads < this.maxConcurrentDownloads
+        ) {
           const message = downloadQueue.shift();
           if (message) {
             await this.downloadMediaForMessage(message);
             // Small delay to prevent overwhelming the server
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
           }
         }
 
         // If there are still items in queue and we can download more, continue
-        if (downloadQueue.length > 0 && this.currentDownloads < this.maxConcurrentDownloads) {
+        if (
+          downloadQueue.length > 0 &&
+          this.currentDownloads < this.maxConcurrentDownloads
+        ) {
           setTimeout(processQueue, 500); // Wait a bit before checking again
         }
       };
@@ -412,7 +434,7 @@ export default {
     },
     backToChatList() {
       // Close current modal
-      $('#modalChatMessages').modal('hide');
+      $("#modalChatMessages").modal("hide");
 
       // Open Chat List modal after a short delay
       setTimeout(() => {
@@ -420,9 +442,9 @@ export default {
           window.ChatListComponent.openModal();
         } else {
           // Fallback: try to find and click the Chat List card
-          const chatListCards = document.querySelectorAll('.card .header');
+          const chatListCards = document.querySelectorAll(".card .header");
           for (let card of chatListCards) {
-            if (card.textContent.includes('Chat List')) {
+            if (card.textContent.includes("Chat List")) {
               card.click();
               break;
             }
@@ -442,7 +464,10 @@ export default {
     };
 
     // Listen for retry media download events
-    document.addEventListener('retryMediaDownload', this.handleRetryMediaDownload);
+    document.addEventListener(
+      "retryMediaDownload",
+      this.handleRetryMediaDownload,
+    );
   },
   beforeUnmount() {
     // Clean up global reference
@@ -452,7 +477,10 @@ export default {
 
     // Clean up event listeners
     if (this.handleRetryMediaDownload) {
-      document.removeEventListener('retryMediaDownload', this.handleRetryMediaDownload);
+      document.removeEventListener(
+        "retryMediaDownload",
+        this.handleRetryMediaDownload,
+      );
     }
   },
   template: `
@@ -555,8 +583,14 @@ export default {
                 <div style="padding-top: 1em; padding-bottom: 1em;">
                     <div class="ui info message">
                         <div class="header">
-                            Chat Messages for {{ formattedJid }}
+                            Chat Messages
                         </div>
+                        <p>
+                            <strong>JID:</strong> <code>{{ formattedJid }}</code>
+                            <span v-if="messages[0]?.chat_lid">
+                                &nbsp;|&nbsp; <strong>LID:</strong> <code>{{ messages[0].chat_lid }}</code>
+                            </span>
+                        </p>
                         <p>Showing {{ messages.length }} of {{ totalMessages }} messages</p>
                     </div>
                 </div>
@@ -577,6 +611,9 @@ export default {
                             </div>
                             <div class="meta">
                                 <span>{{ formatTimestamp(message.timestamp) }}</span>
+                                <span v-if="message.sender_lid" style="margin-left: 10px;">
+                                    <i class="user icon"></i> LID: <code style="font-size: 0.85em;">{{ message.sender_lid }}</code>
+                                </span>
                                 <span v-if="message.id" class="right floated">
                                     ID: {{ message.id }}
                                 </span>
