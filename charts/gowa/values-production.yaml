@@ -25,9 +25,22 @@ admin:
     # password: ""  # Set via --set or use existingSecret
     existingSecret: ""  # e.g., "gowa-supervisor-secret"
 
+# Proxy configuration for WhatsApp connections
+# Use this to route outbound WhatsApp traffic through a proxy server
+proxy:
+  enabled: false
+  # HTTP proxy URL (e.g., http://proxy.example.com:8080)
+  httpProxy: ""
+  # HTTPS proxy URL (e.g., http://proxy.example.com:8080)
+  httpsProxy: ""
+  # SOCKS5 proxy URL (e.g., socks5://proxy.example.com:1080)
+  allProxy: ""
+  # Comma-separated list of hosts to bypass proxy
+  noProxy: "localhost,127.0.0.1"
+
 # Ingress configuration
 ingress:
-  enabled: true
+  enabled: false
   className: "nginx"
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"

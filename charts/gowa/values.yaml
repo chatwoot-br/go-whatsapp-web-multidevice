@@ -308,7 +308,7 @@ networkPolicy:
 
 # Swagger UI sidecar configuration
 swaggerUI:
-  enabled: true
+  enabled: false
   image:
     repository: swaggerapi/swagger-ui
     tag: "latest"
@@ -356,3 +356,16 @@ cleanup:
     - statics/media
     - statics/qrcode
     - statics/senditems
+
+# Proxy configuration for WhatsApp connections
+# Use this to route outbound WhatsApp traffic through a proxy server
+proxy:
+  enabled: false
+  # HTTP proxy URL (e.g., http://proxy.example.com:8080)
+  httpProxy: ""
+  # HTTPS proxy URL (e.g., http://proxy.example.com:8080)
+  httpsProxy: ""
+  # SOCKS5 proxy URL (e.g., socks5://proxy.example.com:1080)
+  allProxy: ""
+  # Comma-separated list of hosts to bypass proxy
+  noProxy: "localhost,127.0.0.1"
