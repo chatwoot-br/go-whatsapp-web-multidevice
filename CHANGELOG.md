@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) with fork revision tracking (`vX.Y.Z+N`).
 
+## [v7.11.0+3] - 2025-12-21
+
+### Fork Changes
+- feat(api): add LID fields to all chat-related endpoints for contact deduplication
+  - Add `lid` field to ChatInfo, MessageInfo, PinChatResponse, SetDisappearingTimerResponse
+  - Add `lid` field to MyListContactsResponseData and GetGroupRequestParticipantsResponse
+  - Add LIDResolver calls in ListChats, GetChatMessages, PinChat, SetDisappearingTimer usecases
+  - Add LID resolution to receipt, group, and delete webhook event handlers
+  - MCP tools inherit LID fields automatically via shared usecases
+- feat(ui): add LID columns to chat list, messages, and contacts screens
+  - Add LID column to Chat List with search support
+  - Add chat LID in header and sender LID per message in Chat Messages
+  - Add JID and LID columns to Contacts with updated CSV export
+- docs: add implementation plan for LID/JID fields in chat endpoints
+
+### Versions
+- Git tag: `v7.11.0+3`
+- Docker tag: `v7.11.0-3` (+ converted to - for Docker compatibility)
+- Helm chart: `7.11.3` (X.Y from upstream + N from fork rev)
+
+---
+
 ## [v7.11.0+2] - 2025-12-19
 
 ### Fork Changes
