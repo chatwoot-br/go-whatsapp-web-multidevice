@@ -114,14 +114,9 @@ func handleWebhookForward(ctx context.Context, evt *events.Message, client *what
 		}
 	}
 
-	// Skip webhook for outgoing messages (IsFromMe) to avoid duplicate webhooks
-	// when multiple devices are connected. The sender's device receives an echo
-	// of the sent message, but we only want the recipient's device to trigger webhook.
-	// Note: Protocol messages (REVOKE, MESSAGE_EDIT) are allowed through above.
-	if evt.Info.IsFromMe {
-		log.Debugf("Skipping webhook for outgoing message %s (IsFromMe=true)", evt.Info.ID)
-		return
-	}
+	// Note: We forward IsFromMe messages to the webhook with is_from_me=true
+	// so Chatwoot can display them as outgoing messages. This ensures messages
+	// sent from the WhatsApp device appear in conversations.
 
 	if len(config.WhatsappWebhook) > 0 &&
 		!strings.Contains(evt.Info.SourceString(), "broadcast") {

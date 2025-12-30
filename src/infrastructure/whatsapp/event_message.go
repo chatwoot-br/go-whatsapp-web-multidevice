@@ -78,6 +78,7 @@ func buildEventPayload(ctx context.Context, client *whatsmeow.Client, evt *event
 	// Common fields for all message types
 	payload["id"] = evt.Info.ID
 	payload["timestamp"] = evt.Info.Timestamp.Format(time.RFC3339)
+	payload["is_from_me"] = evt.Info.IsFromMe
 
 	// Build from/from_lid fields
 	buildFromFields(ctx, client, evt, payload)
