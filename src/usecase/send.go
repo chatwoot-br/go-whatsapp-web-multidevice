@@ -594,6 +594,44 @@ func generateDefaultWaveform() []byte {
 	return waveform
 }
 
+// convertToOggOpus converts audio to OGG Opus format using ffmpeg.
+// OGG Opus is required for WhatsApp voice note transcription support.
+// Returns the path to the converted file, or original path if conversion fails.
+func convertToOggOpus(inputPath string) (string, error) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		return "", fmt.Errorf("ffmpeg not found: %w", err)
+	}
+
+	// Create output path with .ogg extension
+	outputPath := strings.TrimSuffix(inputPath, filepath.Ext(inputPath)) + "_converted.ogg"
+
+	// Convert to OGG Opus using ffmpeg
+	// -y: overwrite output file
+	// -i: input file
+	// -c:a libopus: use Opus codec
+	// -b:a 64k: bitrate (WhatsApp uses ~64kbps for voice)
+	// -vbr on: variable bitrate
+	// -application voip: optimize for voice
+	cmd := exec.Command("ffmpeg",
+		"-y",
+		"-i", inputPath,
+		"-c:a", "libopus",
+		"-b:a", "64k",
+		"-vbr", "on",
+		"-application", "voip",
+		outputPath,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("ffmpeg conversion failed: %v, stderr: %s", err, stderr.String())
+	}
+
+	return outputPath, nil
+}
+
 func (service serviceSend) SendVideo(ctx context.Context, request domainSend.VideoRequest) (response domainSend.GenericResponse, err error) {
 	err = validations.ValidateSendVideo(ctx, request)
 	if err != nil {
@@ -1013,10 +1051,30 @@ func (service serviceSend) SendAudio(ctx context.Context, request domainSend.Aud
 		defer os.Remove(tempAudioPath)
 	}
 
-	// For PTT (voice notes), WhatsApp requires "audio/ogg; codecs=opus"
-	// Check if it's an OGG file and add codec info for PTT
-	if request.PTT && strings.HasPrefix(audioMimeType, "audio/ogg") {
-		audioMimeType = "audio/ogg; codecs=opus"
+	// For PTT (voice notes), WhatsApp requires OGG Opus format for transcription support
+	if request.PTT {
+		if strings.HasPrefix(audioMimeType, "audio/ogg") {
+			// Already OGG, just add codec info
+			audioMimeType = "audio/ogg; codecs=opus"
+		} else if tempAudioPath != "" {
+			// Convert non-OGG audio to OGG Opus for transcription support
+			convertedPath, err := convertToOggOpus(tempAudioPath)
+			if err != nil {
+				logrus.Warnf("Failed to convert audio to OGG Opus, using original format: %v", err)
+			} else {
+				// Read converted file
+				convertedBytes, readErr := os.ReadFile(convertedPath)
+				if readErr != nil {
+					logrus.Warnf("Failed to read converted audio file: %v", readErr)
+					os.Remove(convertedPath)
+				} else {
+					audioBytes = convertedBytes
+					audioMimeType = "audio/ogg; codecs=opus"
+					// Clean up converted file after we're done
+					defer os.Remove(convertedPath)
+				}
+			}
+		}
 	}
 
 	// Generate waveform for PTT voice notes
