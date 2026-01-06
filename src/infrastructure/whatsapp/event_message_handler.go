@@ -40,7 +40,7 @@ func handleMessage(ctx context.Context, evt *events.Message, chatStorageRepo dom
 	handleAutoReply(ctx, evt, chatStorageRepo, client)
 
 	// Forward to webhook if configured
-	handleWebhookForward(ctx, evt, client)
+	handleWebhookForward(ctx, evt, chatStorageRepo, client)
 }
 
 func buildMessageMetaParts(evt *events.Message) []string {
@@ -99,7 +99,7 @@ func handleAutoMarkRead(ctx context.Context, evt *events.Message, client *whatsm
 	}
 }
 
-func handleWebhookForward(ctx context.Context, evt *events.Message, client *whatsmeow.Client) {
+func handleWebhookForward(ctx context.Context, evt *events.Message, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client) {
 	// Skip webhook for protocol messages that are internal sync messages
 	if protocolMessage := evt.Message.GetProtocolMessage(); protocolMessage != nil {
 		protocolType := protocolMessage.GetType().String()
@@ -120,12 +120,12 @@ func handleWebhookForward(ctx context.Context, evt *events.Message, client *what
 
 	if len(config.WhatsappWebhook) > 0 &&
 		!strings.Contains(evt.Info.SourceString(), "broadcast") {
-		go func(e *events.Message, c *whatsmeow.Client) {
+		go func(e *events.Message, repo domainChatStorage.IChatStorageRepository, c *whatsmeow.Client) {
 			webhookCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			if err := forwardMessageToWebhook(webhookCtx, c, e); err != nil {
+			if err := forwardMessageToWebhook(webhookCtx, c, e, repo); err != nil {
 				logrus.Error("Failed forward to webhook: ", err)
 			}
-		}(evt, client)
+		}(evt, chatStorageRepo, client)
 	}
 }
