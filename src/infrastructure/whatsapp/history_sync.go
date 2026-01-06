@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,6 +19,14 @@ import (
 )
 
 var historySyncID int32
+
+// Debounce timer for history sync webhook
+// Only sends webhook after no sync events for debounceDelay
+var (
+	historySyncDebounceTimer *time.Timer
+	historySyncDebounceMu    sync.Mutex
+	historySyncDebounceDelay = 5 * time.Second
+)
 
 func handleHistorySync(ctx context.Context, evt *events.HistorySync, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client) {
 	if client == nil || client.Store == nil || client.Store.ID == nil {
@@ -56,11 +65,32 @@ func handleHistorySync(ctx context.Context, evt *events.HistorySync, chatStorage
 		}
 	}
 
-	// Send webhook notification after history sync completes
-	// Use context.Background() because this runs async and the event context will be canceled
+	// Debounce webhook notification - wait for all sync events to complete
+	// WhatsApp sends multiple sync types (RECENT, PUSH_NAME, etc.) in sequence
+	// Only send webhook after no sync events for debounceDelay
 	if len(config.WhatsappWebhook) > 0 {
-		go forwardHistorySyncCompleteToWebhook(context.Background(), client, evt.Data.GetSyncType().String())
+		scheduleHistorySyncWebhook(client, evt.Data.GetSyncType().String())
 	}
+}
+
+// scheduleHistorySyncWebhook debounces webhook notifications
+// Resets timer on each sync event, only fires after quiet period
+func scheduleHistorySyncWebhook(client *whatsmeow.Client, syncType string) {
+	historySyncDebounceMu.Lock()
+	defer historySyncDebounceMu.Unlock()
+
+	// Cancel existing timer if any
+	if historySyncDebounceTimer != nil {
+		historySyncDebounceTimer.Stop()
+	}
+
+	log.Infof("History sync event (%s), waiting %v for more events before webhook", syncType, historySyncDebounceDelay)
+
+	// Schedule new webhook after delay
+	historySyncDebounceTimer = time.AfterFunc(historySyncDebounceDelay, func() {
+		log.Infof("History sync debounce complete, sending webhook")
+		forwardHistorySyncCompleteToWebhook(context.Background(), client, syncType)
+	})
 }
 
 // processHistorySync processes history sync data and stores messages in the database
