@@ -57,6 +57,7 @@ type MessageInfo struct {
 	ID         string `json:"id"`
 	ChatJID    string `json:"chat_jid"`
 	SenderJID  string `json:"sender_jid"`
+	SenderName string `json:"sender_name"`
 	Content    string `json:"content"`
 	Timestamp  string `json:"timestamp"`
 	IsFromMe   bool   `json:"is_from_me"`

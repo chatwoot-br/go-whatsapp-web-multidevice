@@ -28,6 +28,13 @@ var (
 	historySyncDebounceDelay = 5 * time.Second
 )
 
+// Push name cache - stores push names keyed by phone number (user part of JID)
+// This allows applying names even if PUSH_NAME arrives before RECENT sync
+var (
+	pushNameCache   = make(map[string]string)
+	pushNameCacheMu sync.RWMutex
+)
+
 func handleHistorySync(ctx context.Context, evt *events.HistorySync, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client) {
 	if client == nil || client.Store == nil || client.Store.ID == nil {
 		log.Warnf("Skipping history sync handling: WhatsApp client not initialized")
@@ -69,13 +76,13 @@ func handleHistorySync(ctx context.Context, evt *events.HistorySync, chatStorage
 	// WhatsApp sends multiple sync types (RECENT, PUSH_NAME, etc.) in sequence
 	// Only send webhook after no sync events for debounceDelay
 	if len(config.WhatsappWebhook) > 0 {
-		scheduleHistorySyncWebhook(client, evt.Data.GetSyncType().String())
+		scheduleHistorySyncWebhook(chatStorageRepo, client, evt.Data.GetSyncType().String())
 	}
 }
 
 // scheduleHistorySyncWebhook debounces webhook notifications
 // Resets timer on each sync event, only fires after quiet period
-func scheduleHistorySyncWebhook(client *whatsmeow.Client, syncType string) {
+func scheduleHistorySyncWebhook(chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client, syncType string) {
 	historySyncDebounceMu.Lock()
 	defer historySyncDebounceMu.Unlock()
 
@@ -89,7 +96,17 @@ func scheduleHistorySyncWebhook(client *whatsmeow.Client, syncType string) {
 	// Schedule new webhook after delay
 	historySyncDebounceTimer = time.AfterFunc(historySyncDebounceDelay, func() {
 		log.Infof("History sync debounce complete, sending webhook")
+
+		// Apply cached push names to any chats that still have phone numbers as names
+		if chatStorageRepo != nil && client != nil && client.Store != nil && client.Store.ID != nil {
+			deviceJID := client.Store.ID.ToNonAD().String()
+			applyCachedPushNamesToChats(context.Background(), chatStorageRepo, deviceJID)
+		}
+
 		forwardHistorySyncCompleteToWebhook(context.Background(), client, syncType)
+
+		// Clear the push name cache after webhook is sent
+		clearPushNameCache()
 	})
 }
 
@@ -152,6 +169,13 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 		chatJID := jid.String()
 
 		displayName := conv.GetDisplayName()
+
+		// Try to get push name from cache (populated by PUSH_NAME sync)
+		// This handles the case where PUSH_NAME arrives before or concurrently with RECENT
+		cachedPushName := GetPushNameFromCache(jid.User)
+		if cachedPushName != "" && displayName == "" {
+			displayName = cachedPushName
+		}
 
 		// Get or create chat
 		chatName := chatStorageRepo.GetChatNameWithPushName(jid, chatJID, "", displayName)
@@ -303,6 +327,31 @@ func processPushNames(ctx context.Context, data *waHistorySync.HistorySync, chat
 		deviceID = client.Store.ID.ToNonAD().String()
 	}
 
+	// First pass: cache all push names by phone number for later use
+	pushNameCacheMu.Lock()
+	for _, pushname := range pushnames {
+		rawJIDStr := pushname.GetID()
+		name := pushname.GetPushname()
+
+		if rawJIDStr == "" || name == "" {
+			continue
+		}
+
+		// Parse JID to extract user (phone number)
+		jid, err := types.ParseJID(rawJIDStr)
+		if err != nil {
+			continue
+		}
+
+		// Cache by phone number (user part) for flexible lookup
+		if jid.User != "" {
+			pushNameCache[jid.User] = name
+			log.Debugf("Cached push name for %s: %s", jid.User, name)
+		}
+	}
+	pushNameCacheMu.Unlock()
+
+	// Second pass: update existing chats
 	for _, pushname := range pushnames {
 		rawJIDStr := pushname.GetID()
 		name := pushname.GetPushname()
@@ -317,28 +366,157 @@ func processPushNames(ctx context.Context, data *waHistorySync.HistorySync, chat
 			log.Warnf("Failed to parse JID %s in push names: %v", rawJIDStr, err)
 			continue
 		}
-		jid = NormalizeJIDFromLID(ctx, jid, client)
-		jidStr := jid.String()
 
-		// Check if chat exists (device-scoped to avoid cross-device data leak)
-		existingChat, err := chatStorageRepo.GetChatByDevice(deviceID, jidStr)
-		if err != nil || existingChat == nil {
-			// Chat doesn't exist yet, skip
+		// Try to find chat with multiple JID formats
+		var existingChat *domainChatStorage.Chat
+
+		// Try 1: Normalized JID
+		normalizedJID := NormalizeJIDFromLID(ctx, jid, client)
+		existingChat, _ = chatStorageRepo.GetChatByDevice(deviceID, normalizedJID.String())
+
+		// Try 2: Standard s.whatsapp.net format
+		if existingChat == nil && jid.User != "" {
+			standardJID := jid.User + "@s.whatsapp.net"
+			existingChat, _ = chatStorageRepo.GetChatByDevice(deviceID, standardJID)
+		}
+
+		// Try 3: Original JID format
+		if existingChat == nil {
+			existingChat, _ = chatStorageRepo.GetChatByDevice(deviceID, jid.String())
+		}
+
+		if existingChat == nil {
+			// Chat doesn't exist yet - name is cached for when chat is created
 			continue
 		}
 
-		// Update chat name if it's different
+		// Update chat name if it's different and current name looks like a phone number
 		if existingChat.Name != name {
-			existingChat.Name = name
-			if err := chatStorageRepo.StoreChat(existingChat); err != nil {
-				log.Warnf("Failed to update chat name for %s: %v", jidStr, err)
-			} else {
-				log.Debugf("Updated chat name for %s to %s", jidStr, name)
+			// Only update if current name is empty, a phone number, or the JID user part
+			if existingChat.Name == "" || existingChat.Name == jid.User || isPhoneNumber(existingChat.Name) {
+				existingChat.Name = name
+				if err := chatStorageRepo.StoreChat(existingChat); err != nil {
+					log.Warnf("Failed to update chat name for %s: %v", existingChat.JID, err)
+				} else {
+					log.Debugf("Updated chat name for %s to %s", existingChat.JID, name)
+				}
 			}
 		}
 	}
 
 	return nil
+}
+
+// isPhoneNumber checks if a string looks like a phone number (digits only, optionally with +)
+func isPhoneNumber(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, c := range s {
+		if c == '+' && i == 0 {
+			continue
+		}
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// GetPushNameFromCache retrieves a cached push name by phone number
+func GetPushNameFromCache(phoneNumber string) string {
+	pushNameCacheMu.RLock()
+	defer pushNameCacheMu.RUnlock()
+	return pushNameCache[phoneNumber]
+}
+
+// clearPushNameCache clears the push name cache after sync is complete
+func clearPushNameCache() {
+	pushNameCacheMu.Lock()
+	defer pushNameCacheMu.Unlock()
+	pushNameCache = make(map[string]string)
+	log.Debugf("Cleared push name cache")
+}
+
+// applyCachedPushNamesToChats applies any cached push names to chats that still have phone number names
+func applyCachedPushNamesToChats(ctx context.Context, chatStorageRepo domainChatStorage.IChatStorageRepository, deviceID string) {
+	pushNameCacheMu.RLock()
+	cacheSize := len(pushNameCache)
+	pushNameCacheMu.RUnlock()
+
+	if cacheSize == 0 {
+		return
+	}
+
+	log.Infof("Applying %d cached push names to chats", cacheSize)
+
+	// Get all chats for this device
+	filter := &domainChatStorage.ChatFilter{
+		DeviceID: deviceID,
+		Limit:    1000, // Process in batches if needed
+	}
+
+	chats, err := chatStorageRepo.GetChats(filter)
+	if err != nil {
+		log.Warnf("Failed to get chats for push name application: %v", err)
+		return
+	}
+
+	updated := 0
+	for _, chat := range chats {
+		// Extract phone number from JID
+		phoneNumber := extractPhoneFromJID(chat.JID)
+		if phoneNumber == "" {
+			continue
+		}
+
+		// Check if we have a cached push name for this number
+		pushName := GetPushNameFromCache(phoneNumber)
+		if pushName == "" {
+			continue
+		}
+
+		// Only update if current name looks like a phone number
+		if chat.Name != pushName && isPhoneNumber(chat.Name) {
+			chat.Name = pushName
+			if err := chatStorageRepo.StoreChat(chat); err != nil {
+				log.Warnf("Failed to apply push name to chat %s: %v", chat.JID, err)
+			} else {
+				updated++
+				log.Debugf("Applied push name to chat %s: %s", chat.JID, pushName)
+			}
+		}
+	}
+
+	if updated > 0 {
+		log.Infof("Updated %d chat names from push name cache", updated)
+	}
+}
+
+// extractPhoneFromJID extracts the phone number (user part) from a JID string
+func extractPhoneFromJID(jid string) string {
+	// JID format: phone@server or phone:device@server
+	atIdx := -1
+	colonIdx := -1
+	for i, c := range jid {
+		if c == '@' {
+			atIdx = i
+			break
+		}
+		if c == ':' {
+			colonIdx = i
+		}
+	}
+
+	if atIdx == -1 {
+		return jid // No @ found, return as is
+	}
+
+	if colonIdx != -1 && colonIdx < atIdx {
+		return jid[:colonIdx] // Return part before :
+	}
+
+	return jid[:atIdx] // Return part before @
 }
 
 // forwardHistorySyncCompleteToWebhook sends a webhook notification when history sync completes

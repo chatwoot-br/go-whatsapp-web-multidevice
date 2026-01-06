@@ -157,10 +157,24 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 	// Convert entities to domain objects
 	messageInfos := make([]domainChat.MessageInfo, 0, len(messages))
 	for _, message := range messages {
+		// Look up sender name from their individual chat or push name cache
+		senderName := ""
+		if message.Sender != "" && !message.IsFromMe {
+			// Try to find sender's individual chat to get their name
+			senderChat, _ := service.chatStorageRepo.GetChat(message.Sender)
+			if senderChat != nil && senderChat.Name != "" && !isPhoneNumberString(senderChat.Name) {
+				senderName = senderChat.Name
+			} else {
+				// Try push name cache as fallback
+				senderName = whatsapp.GetPushNameFromCache(extractUserFromJID(message.Sender))
+			}
+		}
+
 		messageInfo := domainChat.MessageInfo{
 			ID:         message.ID,
 			ChatJID:    message.ChatJID,
 			SenderJID:  message.Sender,
+			SenderName: senderName,
 			Content:    message.Content,
 			Timestamp:  message.Timestamp.Format(time.RFC3339),
 			IsFromMe:   message.IsFromMe,
@@ -357,4 +371,34 @@ func (service serviceChat) ArchiveChat(ctx context.Context, request domainChat.A
 	}).Info("Chat archive operation completed successfully")
 
 	return response, nil
+}
+
+// isPhoneNumberString checks if a string looks like a phone number
+func isPhoneNumberString(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, c := range s {
+		if c == '+' && i == 0 {
+			continue
+		}
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return len(s) >= 5 // Minimum phone number length
+}
+
+// extractUserFromJID extracts the phone number (user part) from a JID string
+func extractUserFromJID(jid string) string {
+	// JID format: phone@server or phone:device@server
+	for i, c := range jid {
+		if c == '@' {
+			return jid[:i]
+		}
+		if c == ':' {
+			return jid[:i]
+		}
+	}
+	return jid
 }
