@@ -1,6 +1,8 @@
 package rest
 
 import (
+	"net/url"
+
 	domainChat "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chat"
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp"
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
@@ -47,8 +49,9 @@ func (controller *Chat) ListChats(c *fiber.Ctx) error {
 func (controller *Chat) GetChatMessages(c *fiber.Ctx) error {
 	var request domainChat.GetChatMessagesRequest
 
-	// Parse path parameter
-	request.ChatJID = c.Params("chat_jid")
+	// Parse path parameter (URL-decode since Fiber doesn't auto-decode path params)
+	chatJID, _ := url.PathUnescape(c.Params("chat_jid"))
+	request.ChatJID = chatJID
 
 	// Parse query parameters
 	request.Limit = c.QueryInt("limit", 50)
@@ -84,8 +87,9 @@ func (controller *Chat) GetChatMessages(c *fiber.Ctx) error {
 func (controller *Chat) PinChat(c *fiber.Ctx) error {
 	var request domainChat.PinChatRequest
 
-	// Parse path parameter
-	request.ChatJID = c.Params("chat_jid")
+	// Parse path parameter (URL-decode since Fiber doesn't auto-decode path params)
+	chatJID, _ := url.PathUnescape(c.Params("chat_jid"))
+	request.ChatJID = chatJID
 
 	// Parse JSON body
 	if err := c.BodyParser(&request); err != nil {
@@ -111,8 +115,9 @@ func (controller *Chat) PinChat(c *fiber.Ctx) error {
 func (controller *Chat) SetDisappearingTimer(c *fiber.Ctx) error {
 	var request domainChat.SetDisappearingTimerRequest
 
-	// Parse path parameter
-	request.ChatJID = c.Params("chat_jid")
+	// Parse path parameter (URL-decode since Fiber doesn't auto-decode path params)
+	chatJID, _ := url.PathUnescape(c.Params("chat_jid"))
+	request.ChatJID = chatJID
 
 	// Parse JSON body
 	if err := c.BodyParser(&request); err != nil {
@@ -138,8 +143,9 @@ func (controller *Chat) SetDisappearingTimer(c *fiber.Ctx) error {
 func (controller *Chat) ArchiveChat(c *fiber.Ctx) error {
 	var request domainChat.ArchiveChatRequest
 
-	// Parse path parameter
-	request.ChatJID = c.Params("chat_jid")
+	// Parse path parameter (URL-decode since Fiber doesn't auto-decode path params)
+	chatJID, _ := url.PathUnescape(c.Params("chat_jid"))
+	request.ChatJID = chatJID
 
 	// Parse JSON body
 	if err := c.BodyParser(&request); err != nil {

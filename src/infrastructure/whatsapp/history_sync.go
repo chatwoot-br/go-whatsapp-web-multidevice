@@ -55,6 +55,12 @@ func handleHistorySync(ctx context.Context, evt *events.HistorySync, chatStorage
 			log.Errorf("Failed to process history sync to database: %v", err)
 		}
 	}
+
+	// Send webhook notification after history sync completes
+	// Use context.Background() because this runs async and the event context will be canceled
+	if len(config.WhatsappWebhook) > 0 {
+		go forwardHistorySyncCompleteToWebhook(context.Background(), client, evt.Data.GetSyncType().String())
+	}
 }
 
 // processHistorySync processes history sync data and stores messages in the database
@@ -303,4 +309,26 @@ func processPushNames(ctx context.Context, data *waHistorySync.HistorySync, chat
 	}
 
 	return nil
+}
+
+// forwardHistorySyncCompleteToWebhook sends a webhook notification when history sync completes
+func forwardHistorySyncCompleteToWebhook(ctx context.Context, client *whatsmeow.Client, syncType string) {
+	deviceID := ""
+	if client != nil && client.Store != nil && client.Store.ID != nil {
+		deviceJID := NormalizeJIDFromLID(ctx, client.Store.ID.ToNonAD(), client)
+		deviceID = deviceJID.ToNonAD().String()
+	}
+
+	payload := map[string]any{
+		"event":     "history_sync_complete",
+		"device_id": deviceID,
+		"payload": map[string]any{
+			"sync_type": syncType,
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	if err := forwardPayloadToConfiguredWebhooks(ctx, payload, "history_sync_complete"); err != nil {
+		log.Errorf("Failed to forward history_sync_complete webhook: %v", err)
+	}
 }
