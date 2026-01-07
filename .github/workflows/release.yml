@@ -4,10 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'       # upstream: v8.1.0
-      - 'v[0-9]+.[0-9]+.[0-9]+[+-]*'  # fork: v8.1.0+1 or v8.1.0-1
-    branches-ignore:
-      - '**'
+      - 'v*'
 
 jobs:
   build-linux-windows:
