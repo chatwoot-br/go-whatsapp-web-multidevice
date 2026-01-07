@@ -26,3 +26,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Updated GitHub Actions workflows to support fork versioning (v8.1.0+1 format)
 - Added chart-releaser workflow for Helm chart releases
+
