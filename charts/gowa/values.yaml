@@ -1,0 +1,180 @@
+# Default values for gowa (go-whatsapp-web-multidevice)
+# This is a YAML-formatted file.
+
+# replicaCount is the number of pod replicas (default 1 for SQLite)
+replicaCount: 1
+
+image:
+  # repository is the container image repository
+  repository: ghcr.io/chatwoot-br/go-whatsapp-web-multidevice
+  # pullPolicy is the image pull policy
+  pullPolicy: IfNotPresent
+  # tag overrides the image tag (default is the chart appVersion)
+  tag: ""
+
+# imagePullSecrets is the list of image pull secrets
+imagePullSecrets: []
+# nameOverride overrides the chart name
+nameOverride: ""
+# fullnameOverride overrides the full release name
+fullnameOverride: ""
+
+# mode is the application runtime mode: "rest" or "mcp"
+mode: rest
+
+serviceAccount:
+  # create specifies whether a service account should be created
+  create: true
+  # automount specifies whether to auto mount the service account token
+  automount: true
+  # annotations to add to the service account
+  annotations: {}
+  # name of the service account to use (generated if not set and create is true)
+  name: ""
+
+# podAnnotations are annotations to add to the pod
+podAnnotations: {}
+
+# podLabels are labels to add to the pod
+podLabels: {}
+
+podSecurityContext:
+  # fsGroup is the group ID for volume ownership
+  fsGroup: 1000
+
+securityContext:
+  # runAsNonRoot ensures the container runs as non-root
+  runAsNonRoot: true
+  # runAsUser is the user ID to run the container as
+  runAsUser: 1000
+  # runAsGroup is the group ID to run the container as
+  runAsGroup: 1000
+
+service:
+  # type is the Kubernetes service type
+  type: ClusterIP
+  # port is the service port (3000 for REST, 8080 for MCP)
+  port: 3000
+
+ingress:
+  # enabled specifies whether ingress should be created
+  enabled: false
+  # className is the ingress class name
+  className: ""
+  # annotations to add to the ingress
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: gowa.local
+      paths:
+        - path: /
+          pathType: Prefix
+  # tls is the TLS configuration for the ingress
+  tls: []
+  #  - secretName: gowa-tls
+  #    hosts:
+  #      - gowa.local
+
+persistence:
+  # enabled specifies whether persistence should be enabled
+  enabled: true
+  # storageClass is the storage class for the PVC (empty uses default)
+  storageClass: ""
+  # accessMode is the access mode for the PVC
+  accessMode: ReadWriteOnce
+  # size is the size of the PVC
+  size: 5Gi
+  # annotations to add to the PVC
+  annotations: {}
+
+# config contains non-sensitive application configuration
+config:
+  # port is the application port (APP_PORT)
+  port: "3000"
+  # host is the application bind address (APP_HOST)
+  host: "0.0.0.0"
+  # debug enables debug mode (APP_DEBUG)
+  debug: "false"
+  # os is the device name for WhatsApp connection (APP_OS)
+  os: "Chrome"
+  # basePath is the base path for the application (APP_BASE_PATH)
+  basePath: ""
+  # trustedProxies is the trusted proxy IP ranges (APP_TRUSTED_PROXIES)
+  trustedProxies: "0.0.0.0/0"
+
+# whatsapp contains WhatsApp-specific configuration
+whatsapp:
+  # autoReply is the auto-reply message (WHATSAPP_AUTO_REPLY)
+  autoReply: ""
+  # autoMarkRead enables auto-marking messages as read (WHATSAPP_AUTO_MARK_READ)
+  autoMarkRead: "false"
+  # autoDownloadMedia enables auto-downloading media (WHATSAPP_AUTO_DOWNLOAD_MEDIA)
+  autoDownloadMedia: "true"
+  # accountValidation enables account validation (WHATSAPP_ACCOUNT_VALIDATION)
+  accountValidation: "true"
+  # chatStorage enables chat history storage (WHATSAPP_CHAT_STORAGE)
+  chatStorage: "true"
+
+# webhook contains webhook configuration
+webhook:
+  # urls is the comma-separated list of webhook URLs (WHATSAPP_WEBHOOK)
+  urls: ""
+  # secret is the webhook signing secret (WHATSAPP_WEBHOOK_SECRET)
+  secret: ""
+  # insecureSkipVerify disables TLS verification (WHATSAPP_WEBHOOK_INSECURE_SKIP_VERIFY)
+  insecureSkipVerify: "false"
+  # events is the comma-separated list of webhook events (WHATSAPP_WEBHOOK_EVENTS)
+  events: "message,message.reaction,message.revoke,message.delete,call.offer,call.accept,call.reject,call.timeout,newsletter.message,group.join,group.leave,presence.update,message.history"
+
+# auth contains authentication configuration
+auth:
+  # basicAuth is the basic auth credentials (APP_BASIC_AUTH)
+  # Format: user1:pass1,user2:pass2
+  basicAuth: ""
+
+# database contains database configuration
+database:
+  # uri is the main database URI (DB_URI)
+  # SQLite: file:storages/whatsapp.db?_foreign_keys=on
+  # PostgreSQL: postgres://user:pass@host:5432/dbname?sslmode=disable
+  uri: "file:storages/whatsapp.db?_foreign_keys=on"
+  # keysUri is the encryption keys database URI (DB_KEYS_URI)
+  keysUri: "file::memory:?cache=shared&_foreign_keys=on"
+
+resources: {}
+  # limits:
+  #   cpu: 500m
+  #   memory: 512Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# livenessProbe is the liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# readinessProbe is the readiness probe configuration
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# nodeSelector is the node selector for pod assignment
+nodeSelector: {}
+
+# tolerations is the tolerations for pod assignment
+tolerations: []
+
+# affinity is the affinity rules for pod assignment
+affinity: {}

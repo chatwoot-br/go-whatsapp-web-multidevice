@@ -1,0 +1,16 @@
+apiVersion: v2
+name: gowa
+description: A Helm chart for deploying go-whatsapp-web-multidevice - WhatsApp Web API server
+type: application
+version: 0.1.0
+appVersion: "v8.1.0"
+keywords:
+  - whatsapp
+  - api
+  - webhook
+  - messaging
+home: https://github.com/chatwoot-br/go-whatsapp-web-multidevice
+sources:
+  - https://github.com/chatwoot-br/go-whatsapp-web-multidevice
+maintainers:
+  - name: chatwoot-br

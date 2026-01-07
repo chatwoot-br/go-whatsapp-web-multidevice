@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gowa.fullname" . }}
+  labels:
+    {{- include "gowa.labels" . | nindent 4 }}
+data:
+  APP_PORT: {{ .Values.config.port | quote }}
+  APP_HOST: {{ .Values.config.host | quote }}
+  APP_DEBUG: {{ .Values.config.debug | quote }}
+  APP_OS: {{ .Values.config.os | quote }}
+  APP_BASE_PATH: {{ .Values.config.basePath | quote }}
+  APP_TRUSTED_PROXIES: {{ .Values.config.trustedProxies | quote }}
+  WHATSAPP_AUTO_REPLY: {{ .Values.whatsapp.autoReply | quote }}
+  WHATSAPP_AUTO_MARK_READ: {{ .Values.whatsapp.autoMarkRead | quote }}
+  WHATSAPP_AUTO_DOWNLOAD_MEDIA: {{ .Values.whatsapp.autoDownloadMedia | quote }}
+  WHATSAPP_ACCOUNT_VALIDATION: {{ .Values.whatsapp.accountValidation | quote }}
+  WHATSAPP_CHAT_STORAGE: {{ .Values.whatsapp.chatStorage | quote }}
+  WHATSAPP_WEBHOOK_EVENTS: {{ .Values.webhook.events | quote }}
+  WHATSAPP_WEBHOOK_INSECURE_SKIP_VERIFY: {{ .Values.webhook.insecureSkipVerify | quote }}
