@@ -123,7 +123,7 @@ jobs:
           release:
             draft: false
             github:
-              owner: "aldinokemal"
+              owner: "${{ github.repository_owner }}"
               name: "go-whatsapp-web-multidevice"
           EOF
 
@@ -195,7 +195,7 @@ jobs:
           release:
             draft: false
             github:
-              owner: "aldinokemal"
+              owner: "${{ github.repository_owner }}"
               name: "go-whatsapp-web-multidevice"
           EOF
 
