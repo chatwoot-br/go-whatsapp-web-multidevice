@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -530,13 +531,21 @@ func (service serviceGroup) GroupInfo(ctx context.Context, request domainGroup.G
 
 	// Check cache first
 	if cached, ok := infoCache.GetGroupInfo(groupJID.String()); ok {
-		response.Data = *cached.Data
+		// Return cached error if present
+		if cached.ErrorMsg != "" {
+			return response, errors.New(cached.ErrorMsg)
+		}
+		if cached.Data != nil {
+			response.Data = *cached.Data
+		}
 		return response, nil
 	}
 
 	// Fetch group information from WhatsApp
 	groupInfo, err := client.GetGroupInfo(ctx, groupJID)
 	if err != nil {
+		// Cache the error to prevent repeated lookups
+		infoCache.SetGroupInfoError(groupJID.String(), err.Error())
 		return response, err
 	}
 

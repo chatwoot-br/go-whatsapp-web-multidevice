@@ -11,7 +11,7 @@ Implement short-term in-memory caching for info requests to reduce WhatsApp API 
 | Endpoint | Route | Cache Key | TTL |
 |----------|-------|-----------|-----|
 | User Info | `GET /user/info` | `userinfo:{phone}` | 30s |
-| User Avatar | `GET /user/avatar` | `avatar:{phone}:{preview}` | 60s |
+| User Avatar | `GET /user/avatar` | `avatar:{phone}:{preview}:{community}` | 60s |
 | Business Profile | `GET /user/business-profile` | `bizprofile:{phone}` | 60s |
 | Group Info | `GET /group/info` | `groupinfo:{groupJID}` | 30s |
 | Group Info from Link | `GET /group/info-from-link` | `grouplink:{linkHash}` | 60s |
@@ -47,6 +47,7 @@ func (c *Cache) Delete(key string)
 - Device-scoped caches (each device has its own cache)
 - Separate caches per info type with appropriate TTLs
 - Thread-safe operations
+- **Error caching**: Cache error responses (401, 403, 404) to prevent repeated lookups
 
 ### 3. Modify Usecase Functions
 Add cache check before WhatsApp API calls:
@@ -57,20 +58,25 @@ Add cache check before WhatsApp API calls:
 
 Pattern:
 ```go
-func (service serviceUser) Info(ctx context.Context, request domainUser.InfoRequest) (...) {
-    // 1. Check cache
-    if cached, ok := infocache.GetUserInfo(deviceID, request.Phone); ok {
+func (service serviceUser) Avatar(ctx context.Context, request domainUser.AvatarRequest) (...) {
+    // 1. Check cache (including cached errors)
+    if cached, ok := infoCache.GetUserAvatar(phone, isPreview, isCommunity); ok {
+        if cached.ErrorMsg != "" {
+            return response, errors.New(cached.ErrorMsg)
+        }
         return cached, nil
     }
 
     // 2. Call WhatsApp API
-    result, err := client.GetUserInfo(...)
+    result, err := client.GetProfilePictureInfo(...)
     if err != nil {
+        // 3. Cache the error to prevent repeated lookups
+        infoCache.SetUserAvatarError(phone, isPreview, isCommunity, err.Error())
         return response, err
     }
 
-    // 3. Store in cache
-    infocache.SetUserInfo(deviceID, request.Phone, result)
+    // 4. Store successful result in cache
+    infoCache.SetUserAvatar(phone, isPreview, isCommunity, result)
 
     return result, nil
 }
@@ -81,7 +87,7 @@ func (service serviceUser) Info(ctx context.Context, request domainUser.InfoRequ
 | File | Action |
 |------|--------|
 | `src/pkg/cache/cache.go` | Create - Generic TTL cache |
-| `src/infrastructure/whatsapp/info_cache.go` | Create - Info-specific caching |
+| `src/infrastructure/whatsapp/info_cache.go` | Create - Info-specific caching with error support |
 | `src/usecase/user.go` | Modify - Add cache to Info, Avatar, BusinessProfile |
 | `src/usecase/group.go` | Modify - Add cache to GroupInfo, GetGroupInfoFromLink |
 
@@ -97,12 +103,39 @@ const (
 )
 ```
 
+## Error Caching
+
+**Problem**: Without error caching, when WhatsApp returns errors like:
+- 401 "not-authorized" (hidden profile picture)
+- 404 "item-not-found" (no profile picture)
+- 403 "forbidden" (not participating in group)
+
+The code returns early without caching, causing repeated API calls for the same failed request.
+
+**Solution**: Cache error responses with the same TTL as successful responses.
+
+```go
+// Cache result structs include error field
+type UserAvatarResult struct {
+    URL      string
+    ID       string
+    Type     string
+    HasURL   bool
+    ErrorMsg string // Cached error message
+}
+
+type GroupInfoResult struct {
+    Data     *types.GroupInfo
+    ErrorMsg string // Cached error message
+}
+```
+
 ## Verification
 
 1. **Build**: `go build ./...`
-2. **Test**: Call `/group/info` rapidly 5+ times - should only hit WhatsApp once
-3. **Check logs**: Should see cache hits after first request
-4. **Verify TTL**: Wait 30+ seconds, call again - should hit WhatsApp API
+2. **Test**: Call `/user/avatar` for a user with hidden profile - should only hit WhatsApp once
+3. **Check logs**: Should see `Cache HIT` and `Cache SET (error)` messages
+4. **Verify TTL**: Wait 60+ seconds, call again - should hit WhatsApp API
 
 ## Implementation Checklist
 
@@ -113,6 +146,8 @@ const (
 - [x] Add caching to `BusinessProfile()` in user.go
 - [x] Add caching to `GroupInfo()` in group.go
 - [x] Add caching to `GetGroupInfoFromLink()` in group.go
+- [x] Add error caching for Avatar (401, 404 errors)
+- [x] Add error caching for GroupInfo (403 errors)
 - [x] Build and verify no compilation errors
 - [x] Run tests
 - [ ] Manual testing with debug logs

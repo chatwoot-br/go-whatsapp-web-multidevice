@@ -130,6 +130,10 @@ func (service serviceUser) Avatar(ctx context.Context, request domainUser.Avatar
 
 	// Check cache first
 	if cached, ok := infoCache.GetUserAvatar(request.Phone, request.IsPreview, isCommunity); ok {
+		// Return cached error if present
+		if cached.ErrorMsg != "" {
+			return response, errors.New(cached.ErrorMsg)
+		}
 		response.URL = cached.URL
 		response.ID = cached.ID
 		response.Type = cached.Type
@@ -163,9 +167,13 @@ func (service serviceUser) Avatar(ctx context.Context, request domainUser.Avatar
 				if avatarCtx2.Err() == context.DeadlineExceeded {
 					return response, pkgError.ContextError("Error timeout get avatar!")
 				}
+				// Cache the error to prevent repeated lookups
+				infoCache.SetUserAvatarError(request.Phone, request.IsPreview, isCommunity, err.Error())
 				return response, err
 			}
 		} else {
+			// Cache the error to prevent repeated lookups
+			infoCache.SetUserAvatarError(request.Phone, request.IsPreview, isCommunity, err.Error())
 			return response, err
 		}
 	}

@@ -108,10 +108,11 @@ func (ic *InfoCache) SetUserInfo(phone string, data map[types.JID]types.UserInfo
 
 // UserAvatarResult holds cached avatar data
 type UserAvatarResult struct {
-	URL    string
-	ID     string
-	Type   string
-	HasURL bool
+	URL      string
+	ID       string
+	Type     string
+	HasURL   bool
+	ErrorMsg string // Cached error message (e.g., "hidden profile picture")
 }
 
 // GetUserAvatar retrieves cached user avatar
@@ -137,6 +138,16 @@ func (ic *InfoCache) SetUserAvatar(phone string, isPreview bool, isCommunity boo
 		HasURL: hasURL,
 	})
 	logrus.Debugf("Cache SET for avatar: %s", phone)
+}
+
+// SetUserAvatarError stores an avatar error in cache to prevent repeated lookups
+func (ic *InfoCache) SetUserAvatarError(phone string, isPreview bool, isCommunity bool, errorMsg string) {
+	key := fmt.Sprintf("avatar:%s:%v:%v", phone, isPreview, isCommunity)
+	ic.userAvatar.Set(key, &UserAvatarResult{
+		HasURL:   false,
+		ErrorMsg: errorMsg,
+	})
+	logrus.Debugf("Cache SET (error) for avatar: %s - %s", phone, errorMsg)
 }
 
 // BusinessProfile cache methods
@@ -170,7 +181,8 @@ func (ic *InfoCache) SetBusinessProfile(phone string, data any) {
 
 // GroupInfoResult holds cached group info data
 type GroupInfoResult struct {
-	Data *types.GroupInfo
+	Data     *types.GroupInfo
+	ErrorMsg string // Cached error message (e.g., "not participating in group")
 }
 
 // GetGroupInfo retrieves cached group info
@@ -191,6 +203,13 @@ func (ic *InfoCache) SetGroupInfo(groupJID string, data *types.GroupInfo) {
 	key := fmt.Sprintf("groupinfo:%s", groupJID)
 	ic.groupInfo.Set(key, &GroupInfoResult{Data: data})
 	logrus.Debugf("Cache SET for group info: %s", groupJID)
+}
+
+// SetGroupInfoError stores a group info error in cache to prevent repeated lookups
+func (ic *InfoCache) SetGroupInfoError(groupJID string, errorMsg string) {
+	key := fmt.Sprintf("groupinfo:%s", groupJID)
+	ic.groupInfo.Set(key, &GroupInfoResult{ErrorMsg: errorMsg})
+	logrus.Debugf("Cache SET (error) for group info: %s - %s", groupJID, errorMsg)
 }
 
 // GroupLinkInfo cache methods
