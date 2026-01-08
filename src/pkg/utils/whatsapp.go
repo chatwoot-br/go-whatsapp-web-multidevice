@@ -651,7 +651,7 @@ func IsOnWhatsapp(client *whatsmeow.Client, jid string) bool {
 	return true
 }
 
-// ValidateJidWithLogin validates JID with login check
+// ValidateJidWithLogin validates JID with login check and resolves LID if available
 func ValidateJidWithLogin(client *whatsmeow.Client, jid string) (types.JID, error) {
 	MustLogin(client)
 
@@ -659,7 +659,23 @@ func ValidateJidWithLogin(client *whatsmeow.Client, jid string) (types.JID, erro
 		return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on whatsapp", jid))
 	}
 
-	return ParseJID(jid)
+	phoneJID, err := ParseJID(jid)
+	if err != nil {
+		return types.JID{}, err
+	}
+
+	// Check if we have a LID mapping for this phone number
+	// This ensures messages are sent to the correct contact when LID is known
+	if client.Store != nil && client.Store.LIDs != nil {
+		ctx := context.Background()
+		lid, err := client.Store.LIDs.GetLIDForPN(ctx, phoneJID)
+		if err == nil && !lid.IsEmpty() {
+			logrus.Debugf("Using LID %s for phone number %s", lid.String(), phoneJID.String())
+			return lid, nil
+		}
+	}
+
+	return phoneJID, nil
 }
 
 // MustLogin ensures the WhatsApp client is logged in
