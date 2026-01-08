@@ -38,6 +38,15 @@ func (service serviceUser) Info(ctx context.Context, request domainUser.InfoRequ
 		return response, pkgError.ErrWaCLI
 	}
 
+	// Get device-scoped cache
+	deviceID := getDeviceIDFromContext(ctx)
+	infoCache := whatsapp.GetInfoCache(deviceID)
+
+	// Check cache first
+	if cached, ok := infoCache.GetUserInfo(request.Phone); ok {
+		return buildUserInfoResponse(cached.Data), nil
+	}
+
 	var jids []types.JID
 	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
 	if err != nil {
@@ -50,6 +59,23 @@ func (service serviceUser) Info(ctx context.Context, request domainUser.InfoRequ
 		return response, err
 	}
 
+	// Store in cache
+	infoCache.SetUserInfo(request.Phone, resp)
+
+	return buildUserInfoResponse(resp), nil
+}
+
+// getDeviceIDFromContext extracts device ID from context for cache scoping
+func getDeviceIDFromContext(ctx context.Context) string {
+	if inst, ok := whatsapp.DeviceFromContext(ctx); ok && inst != nil {
+		return inst.ID()
+	}
+	return "default"
+}
+
+// buildUserInfoResponse converts raw user info to response format
+func buildUserInfoResponse(resp map[types.JID]types.UserInfo) domainUser.InfoResponse {
+	var response domainUser.InfoResponse
 	for _, userInfo := range resp {
 		var device []domainUser.InfoResponseDataDevice
 		for _, j := range userInfo.Devices {
@@ -72,8 +98,7 @@ func (service serviceUser) Info(ctx context.Context, request domainUser.InfoRequ
 		}
 		response.Data = append(response.Data, data)
 	}
-
-	return response, nil
+	return response
 }
 
 func (service serviceUser) Avatar(ctx context.Context, request domainUser.AvatarRequest) (response domainUser.AvatarResponse, err error) {
@@ -97,6 +122,21 @@ func (service serviceUser) Avatar(ctx context.Context, request domainUser.Avatar
 	isCommunity := request.IsCommunity
 	if dataWaRecipient.Server == types.DefaultUserServer {
 		isCommunity = false
+	}
+
+	// Get device-scoped cache
+	deviceID := getDeviceIDFromContext(ctx)
+	infoCache := whatsapp.GetInfoCache(deviceID)
+
+	// Check cache first
+	if cached, ok := infoCache.GetUserAvatar(request.Phone, request.IsPreview, isCommunity); ok {
+		response.URL = cached.URL
+		response.ID = cached.ID
+		response.Type = cached.Type
+		if !cached.HasURL {
+			return response, errors.New("no avatar found")
+		}
+		return response, nil
 	}
 
 	avatarCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -131,8 +171,13 @@ func (service serviceUser) Avatar(ctx context.Context, request domainUser.Avatar
 	}
 
 	if pic == nil {
+		// Cache the "no avatar" result to prevent repeated lookups
+		infoCache.SetUserAvatar(request.Phone, request.IsPreview, isCommunity, "", "", "", false)
 		return response, errors.New("no avatar found")
 	}
+
+	// Store in cache
+	infoCache.SetUserAvatar(request.Phone, request.IsPreview, isCommunity, pic.URL, pic.ID, pic.Type, true)
 
 	response.URL = pic.URL
 	response.ID = pic.ID
@@ -319,6 +364,17 @@ func (service serviceUser) BusinessProfile(ctx context.Context, request domainUs
 		return response, err
 	}
 
+	// Get device-scoped cache
+	deviceID := getDeviceIDFromContext(ctx)
+	infoCache := whatsapp.GetInfoCache(deviceID)
+
+	// Check cache first
+	if cached, ok := infoCache.GetBusinessProfile(request.Phone); ok {
+		if cachedResp, ok := cached.Data.(domainUser.BusinessProfileResponse); ok {
+			return cachedResp, nil
+		}
+	}
+
 	profile, err := client.GetBusinessProfile(ctx, dataWaRecipient)
 	if err != nil {
 		return response, err
@@ -356,6 +412,9 @@ func (service serviceUser) BusinessProfile(ctx context.Context, request domainUs
 			CloseTime: utils.FormatBusinessHourTime(hours.CloseTime),
 		})
 	}
+
+	// Store in cache
+	infoCache.SetBusinessProfile(request.Phone, response)
 
 	return response, nil
 }

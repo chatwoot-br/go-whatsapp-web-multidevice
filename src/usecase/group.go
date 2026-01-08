@@ -100,6 +100,25 @@ func (service serviceGroup) GetGroupInfoFromLink(ctx context.Context, request do
 	}
 	utils.MustLogin(client)
 
+	// Get device-scoped cache
+	deviceID := getGroupDeviceIDFromContext(ctx)
+	infoCache := whatsapp.GetInfoCache(deviceID)
+
+	// Check cache first
+	if cached, ok := infoCache.GetGroupLinkInfo(request.Link); ok {
+		return domainGroup.GetGroupInfoFromLinkResponse{
+			GroupID:          cached.GroupID,
+			Name:             cached.Name,
+			Topic:            cached.Topic,
+			CreatedAt:        cached.CreatedAt,
+			ParticipantCount: cached.ParticipantCount,
+			IsLocked:         cached.IsLocked,
+			IsAnnounce:       cached.IsAnnounce,
+			IsEphemeral:      cached.IsEphemeral,
+			Description:      cached.Description,
+		}, nil
+	}
+
 	groupInfo, err := client.GetGroupInfoFromLink(ctx, request.Link)
 	if err != nil {
 		return response, err
@@ -116,6 +135,19 @@ func (service serviceGroup) GetGroupInfoFromLink(ctx context.Context, request do
 		IsEphemeral:      groupInfo.IsEphemeral,
 		Description:      groupInfo.Topic, // Topic serves as description
 	}
+
+	// Store in cache
+	infoCache.SetGroupLinkInfo(request.Link, &whatsapp.GroupLinkInfoResult{
+		GroupID:          response.GroupID,
+		Name:             response.Name,
+		Topic:            response.Topic,
+		CreatedAt:        response.CreatedAt,
+		ParticipantCount: response.ParticipantCount,
+		IsLocked:         response.IsLocked,
+		IsAnnounce:       response.IsAnnounce,
+		IsEphemeral:      response.IsEphemeral,
+		Description:      response.Description,
+	})
 
 	return response, nil
 }
@@ -492,15 +524,26 @@ func (service serviceGroup) GroupInfo(ctx context.Context, request domainGroup.G
 		return response, err
 	}
 
+	// Get device-scoped cache
+	deviceID := getGroupDeviceIDFromContext(ctx)
+	infoCache := whatsapp.GetInfoCache(deviceID)
+
+	// Check cache first
+	if cached, ok := infoCache.GetGroupInfo(groupJID.String()); ok {
+		response.Data = *cached.Data
+		return response, nil
+	}
+
 	// Fetch group information from WhatsApp
 	groupInfo, err := client.GetGroupInfo(ctx, groupJID)
 	if err != nil {
 		return response, err
 	}
 
-	// Map the response
+	// Map the response and store in cache
 	if groupInfo != nil {
 		response.Data = *groupInfo
+		infoCache.SetGroupInfo(groupJID.String(), groupInfo)
 	}
 
 	return response, nil
@@ -533,4 +576,12 @@ func (service serviceGroup) GetGroupInviteLink(ctx context.Context, request doma
 	}
 
 	return response, nil
+}
+
+// getGroupDeviceIDFromContext extracts device ID from context for cache scoping
+func getGroupDeviceIDFromContext(ctx context.Context) string {
+	if inst, ok := whatsapp.DeviceFromContext(ctx); ok && inst != nil {
+		return inst.ID()
+	}
+	return "default"
 }
