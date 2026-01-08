@@ -12,14 +12,15 @@ includes event data in JSON format and security headers for verification.
 
 The following events can be received via webhook:
 
-| Event                | Description                                             |
-|----------------------|---------------------------------------------------------|
-| `message`            | Text, media, contact, location, and other message types |
-| `message.reaction`   | Emoji reactions to messages                             |
-| `message.revoked`    | Deleted/revoked messages                                |
-| `message.edited`     | Edited messages                                         |
-| `message.ack`        | Delivery and read receipts                              |
-| `group.participants` | Group member join/leave/promote/demote events           |
+| Event                   | Description                                             |
+|-------------------------|---------------------------------------------------------|
+| `message`               | Text, media, contact, location, and other message types |
+| `message.reaction`      | Emoji reactions to messages                             |
+| `message.revoked`       | Deleted/revoked messages                                |
+| `message.edited`        | Edited messages                                         |
+| `message.ack`           | Delivery and read receipts                              |
+| `group.participants`    | Group member join/leave/promote/demote events           |
+| `history_sync_complete` | Triggered after WhatsApp history sync completes         |
 
 ## Event Filtering
 

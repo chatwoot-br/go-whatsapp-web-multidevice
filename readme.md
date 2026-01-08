@@ -118,14 +118,15 @@ Download:
 
   **Available Webhook Events:**
 
-  | Event                | Description                                   |
-  |----------------------|-----------------------------------------------|
-  | `message`            | Text, media, contact, location messages       |
-  | `message.reaction`   | Emoji reactions to messages                   |
-  | `message.revoked`    | Deleted/revoked messages                      |
-  | `message.edited`     | Edited messages                               |
-  | `message.ack`        | Delivery and read receipts                    |
-  | `group.participants` | Group member join/leave/promote/demote events |
+  | Event                   | Description                                     |
+  |-------------------------|-------------------------------------------------|
+  | `message`               | Text, media, contact, location messages         |
+  | `message.reaction`      | Emoji reactions to messages                     |
+  | `message.revoked`       | Deleted/revoked messages                        |
+  | `message.edited`        | Edited messages                                 |
+  | `message.ack`           | Delivery and read receipts                      |
+  | `group.participants`    | Group member join/leave/promote/demote events   |
+  | `history_sync_complete` | Triggered after WhatsApp history sync completes |
 
   If not configured (empty), all events will be forwarded.
 - **Webhook TLS Configuration**

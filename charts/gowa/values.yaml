@@ -125,7 +125,8 @@ webhook:
   # insecureSkipVerify disables TLS verification (WHATSAPP_WEBHOOK_INSECURE_SKIP_VERIFY)
   insecureSkipVerify: "false"
   # events is the comma-separated list of webhook events (WHATSAPP_WEBHOOK_EVENTS)
-  events: "message,message.reaction,message.revoke,message.delete,call.offer,call.accept,call.reject,call.timeout,newsletter.message,group.join,group.leave,presence.update,message.history"
+  # Leave empty to forward ALL events to webhook (recommended for Chatwoot integration)
+  events: ""
 
 # auth contains authentication configuration
 auth:
