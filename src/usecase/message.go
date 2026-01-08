@@ -92,7 +92,9 @@ func (service serviceMessage) ReactMessage(ctx context.Context, request domainMe
 			SenderTimestampMS: proto.Int64(time.Now().UnixMilli()),
 		},
 	}
-	ts, err := client.SendMessage(ctx, dataWaRecipient, msg)
+	// Resolve to LID for sending to ensure correct delivery
+	sendJID := utils.ResolveJIDForSend(ctx, client, dataWaRecipient)
+	ts, err := client.SendMessage(ctx, sendJID, msg)
 	if err != nil {
 		return response, err
 	}
@@ -117,7 +119,9 @@ func (service serviceMessage) RevokeMessage(ctx context.Context, request domainM
 		return response, err
 	}
 
-	ts, err := client.SendMessage(ctx, dataWaRecipient, client.BuildRevoke(dataWaRecipient, types.EmptyJID, request.MessageID))
+	// Resolve to LID for sending to ensure correct delivery
+	sendJID := utils.ResolveJIDForSend(ctx, client, dataWaRecipient)
+	ts, err := client.SendMessage(ctx, sendJID, client.BuildRevoke(sendJID, types.EmptyJID, request.MessageID))
 	if err != nil {
 		return response, err
 	}
@@ -183,7 +187,9 @@ func (service serviceMessage) UpdateMessage(ctx context.Context, request domainM
 	}
 
 	msg := &waE2E.Message{Conversation: proto.String(request.Message)}
-	ts, err := client.SendMessage(ctx, dataWaRecipient, client.BuildEdit(dataWaRecipient, request.MessageID, msg))
+	// Resolve to LID for sending to ensure correct delivery
+	sendJID := utils.ResolveJIDForSend(ctx, client, dataWaRecipient)
+	ts, err := client.SendMessage(ctx, sendJID, client.BuildEdit(sendJID, request.MessageID, msg))
 	if err != nil {
 		return response, err
 	}

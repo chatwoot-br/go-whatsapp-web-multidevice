@@ -651,7 +651,7 @@ func IsOnWhatsapp(client *whatsmeow.Client, jid string) bool {
 	return true
 }
 
-// ValidateJidWithLogin validates JID with login check
+// ValidateJidWithLogin validates JID with login check (returns phone JID)
 func ValidateJidWithLogin(client *whatsmeow.Client, jid string) (types.JID, error) {
 	MustLogin(client)
 
@@ -660,6 +660,35 @@ func ValidateJidWithLogin(client *whatsmeow.Client, jid string) (types.JID, erro
 	}
 
 	return ParseJID(jid)
+}
+
+// ResolveJIDForSend resolves a JID for sending messages, using LID when available.
+// This ensures messages are delivered to the correct contact even if their phone number changed.
+// Use this ONLY for client.SendMessage operations, not for comparisons or app state.
+func ResolveJIDForSend(ctx context.Context, client *whatsmeow.Client, phoneJID types.JID) types.JID {
+	// Only resolve LID for individual users, not groups or other types
+	if phoneJID.Server != types.DefaultUserServer {
+		return phoneJID
+	}
+
+	// Safety check
+	if client == nil || client.Store == nil || client.Store.LIDs == nil {
+		return phoneJID
+	}
+
+	// Attempt to get the LID for this phone number
+	lid, err := client.Store.LIDs.GetLIDForPN(ctx, phoneJID)
+	if err != nil {
+		logrus.Debugf("No LID mapping for %s: %v", phoneJID.String(), err)
+		return phoneJID
+	}
+
+	if !lid.IsEmpty() {
+		logrus.Debugf("Resolved phone %s to LID %s for sending", phoneJID.String(), lid.String())
+		return lid
+	}
+
+	return phoneJID
 }
 
 // MustLogin ensures the WhatsApp client is logged in

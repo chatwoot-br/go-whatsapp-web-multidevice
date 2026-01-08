@@ -87,10 +87,13 @@ func handleAutoReply(ctx context.Context, evt *events.Message, chatStorageRepo d
 	// Format recipient JID
 	recipientJID := utils.FormatJID(evt.Info.Sender.String())
 
+	// Resolve to LID for sending to ensure correct delivery
+	sendJID := utils.ResolveJIDForSend(ctx, client, recipientJID)
+
 	// Send the auto-reply message
 	response, err := client.SendMessage(
 		ctx,
-		recipientJID,
+		sendJID,
 		&waE2E.Message{Conversation: proto.String(config.WhatsappAutoReplyMessage)},
 	)
 

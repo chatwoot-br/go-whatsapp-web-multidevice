@@ -52,7 +52,11 @@ func NewSendService(appService app.IAppUsecase, chatStorageRepo domainChatStorag
 
 // wrapSendMessage wraps the message sending process with message ID saving
 func (service serviceSend) wrapSendMessage(ctx context.Context, client *whatsmeow.Client, recipient types.JID, msg *waE2E.Message, content string) (whatsmeow.SendResponse, error) {
-	ts, err := client.SendMessage(ctx, recipient, msg)
+	// Resolve recipient to LID for sending (ensures correct delivery when LID is known)
+	// Keep original recipient for storage to maintain consistency with phone JID format
+	sendJID := utils.ResolveJIDForSend(ctx, client, recipient)
+
+	ts, err := client.SendMessage(ctx, sendJID, msg)
 	if err != nil {
 		return whatsmeow.SendResponse{}, err
 	}
@@ -65,6 +69,7 @@ func (service serviceSend) wrapSendMessage(ctx context.Context, client *whatsmeo
 
 	// Store message asynchronously with timeout
 	// Use a goroutine to avoid blocking the send operation
+	// Note: We store with the original phone JID (recipient), not the LID (sendJID)
 	go func() {
 		storeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
