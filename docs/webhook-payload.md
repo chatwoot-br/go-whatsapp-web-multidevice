@@ -358,7 +358,8 @@ Triggered when users are demoted from admin.
 ### Image Message
 
 When `WHATSAPP_AUTO_DOWNLOAD_MEDIA` is enabled, media is downloaded and `image` contains the file path.
-When disabled, `image` contains an object with the URL.
+If the image has a caption, it's provided as a separate `caption` field.
+When disabled, `image` contains an object with the URL and caption.
 
 ```json
 {
@@ -370,7 +371,8 @@ When disabled, `image` contains an object with the URL.
     "from": "628123456789@s.whatsapp.net",
     "from_name": "John Doe",
     "timestamp": "2025-07-13T11:05:51Z",
-    "image": "statics/media/1752404751-ad9e37ac-c658-4fe5-8d25-ba4a3f4d58fd.jpeg"
+    "image": "statics/media/1752404751-ad9e37ac-c658-4fe5-8d25-ba4a3f4d58fd.jpeg",
+    "caption": "Check this out!"
   }
 }
 ```
@@ -397,6 +399,8 @@ With auto-download disabled:
 
 ### Video Message
 
+Video messages can also have captions, provided as a separate `caption` field when auto-downloading.
+
 ```json
 {
   "event": "message",
@@ -407,7 +411,8 @@ With auto-download disabled:
     "from": "628123456789@s.whatsapp.net",
     "from_name": "John Doe",
     "timestamp": "2025-07-13T11:07:24Z",
-    "video": "statics/media/1752404845-b9393cd1-8546-4df9-8a60-ee3276036aba.mp4"
+    "video": "statics/media/1752404845-b9393cd1-8546-4df9-8a60-ee3276036aba.mp4",
+    "caption": "Watch this video!"
   }
 }
 ```
