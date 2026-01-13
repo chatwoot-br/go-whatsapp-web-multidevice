@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v8.1.0+3] - 2026-01-09
+## [v8.1.0+3] - 2026-01-13
+
+### Added
+- feat(proxy): add SOCKS5/HTTP/HTTPS proxy support for WhatsApp connections
+- feat(proxy): display external proxy IP in device card UI
 
 ### Fixed
 - fix(webhook): include caption in payload when auto-downloading media (image, video, video_note)
