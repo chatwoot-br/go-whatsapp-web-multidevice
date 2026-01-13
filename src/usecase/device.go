@@ -158,6 +158,7 @@ func convertInstance(inst *whatsapp.DeviceInstance) domainDevice.Device {
 		DisplayName: inst.DisplayName(),
 		State:       state,
 		JID:         inst.JID(),
+		ProxyIP:     inst.FetchProxyIP(),
 		CreatedAt:   inst.CreatedAt(),
 	}
 }

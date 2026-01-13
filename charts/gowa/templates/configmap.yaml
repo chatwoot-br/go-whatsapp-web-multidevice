@@ -18,3 +18,8 @@ data:
   WHATSAPP_CHAT_STORAGE: {{ .Values.whatsapp.chatStorage | quote }}
   WHATSAPP_WEBHOOK_EVENTS: {{ .Values.webhook.events | quote }}
   WHATSAPP_WEBHOOK_INSECURE_SKIP_VERIFY: {{ .Values.webhook.insecureSkipVerify | quote }}
+  {{- if .Values.whatsapp.proxy.url }}
+  WHATSAPP_PROXY_NO_WEBSOCKET: {{ .Values.whatsapp.proxy.noWebsocket | quote }}
+  WHATSAPP_PROXY_ONLY_LOGIN: {{ .Values.whatsapp.proxy.onlyLogin | quote }}
+  WHATSAPP_PROXY_NO_MEDIA: {{ .Values.whatsapp.proxy.noMedia | quote }}
+  {{- end }}

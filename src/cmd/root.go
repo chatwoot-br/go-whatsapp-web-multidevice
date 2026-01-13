@@ -140,6 +140,20 @@ func initEnvConfig() {
 	if viper.IsSet("whatsapp_account_validation") {
 		config.WhatsappAccountValidation = viper.GetBool("whatsapp_account_validation")
 	}
+
+	// WhatsApp Proxy settings
+	if envProxyURL := viper.GetString("whatsapp_proxy_url"); envProxyURL != "" {
+		config.WhatsappProxyURL = envProxyURL
+	}
+	if viper.IsSet("whatsapp_proxy_no_websocket") {
+		config.WhatsappProxyNoWebsocket = viper.GetBool("whatsapp_proxy_no_websocket")
+	}
+	if viper.IsSet("whatsapp_proxy_only_login") {
+		config.WhatsappProxyOnlyLogin = viper.GetBool("whatsapp_proxy_only_login")
+	}
+	if viper.IsSet("whatsapp_proxy_no_media") {
+		config.WhatsappProxyNoMedia = viper.GetBool("whatsapp_proxy_no_media")
+	}
 }
 
 func initFlags() {
@@ -251,6 +265,32 @@ func initFlags() {
 		"account-validation", "",
 		config.WhatsappAccountValidation,
 		`enable or disable account validation --account-validation <true/false> | example: --account-validation=true`,
+	)
+
+	// WhatsApp Proxy flags
+	rootCmd.PersistentFlags().StringVarP(
+		&config.WhatsappProxyURL,
+		"whatsapp-proxy-url", "",
+		config.WhatsappProxyURL,
+		`proxy URL for WhatsApp connections (http://, https://, socks5://) --whatsapp-proxy-url <string> | example: --whatsapp-proxy-url="socks5://user:pass@proxy:1080"`,
+	)
+	rootCmd.PersistentFlags().BoolVarP(
+		&config.WhatsappProxyNoWebsocket,
+		"whatsapp-proxy-no-websocket", "",
+		config.WhatsappProxyNoWebsocket,
+		`don't use proxy for websocket connections --whatsapp-proxy-no-websocket <true/false> | example: --whatsapp-proxy-no-websocket=true`,
+	)
+	rootCmd.PersistentFlags().BoolVarP(
+		&config.WhatsappProxyOnlyLogin,
+		"whatsapp-proxy-only-login", "",
+		config.WhatsappProxyOnlyLogin,
+		`use proxy only for pre-login websocket --whatsapp-proxy-only-login <true/false> | example: --whatsapp-proxy-only-login=true`,
+	)
+	rootCmd.PersistentFlags().BoolVarP(
+		&config.WhatsappProxyNoMedia,
+		"whatsapp-proxy-no-media", "",
+		config.WhatsappProxyNoMedia,
+		`don't use proxy for media uploads/downloads --whatsapp-proxy-no-media <true/false> | example: --whatsapp-proxy-no-media=true`,
 	)
 }
 

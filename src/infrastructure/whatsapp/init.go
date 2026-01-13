@@ -107,6 +107,20 @@ func InitWaCLI(ctx context.Context, storeContainer, keysStoreContainer *sqlstore
 	client.EnableAutoReconnect = true
 	client.AutoTrustIdentity = true
 
+	// Configure proxy if specified
+	if config.WhatsappProxyURL != "" {
+		proxyOpts := whatsmeow.SetProxyOptions{
+			NoWebsocket: config.WhatsappProxyNoWebsocket,
+			OnlyLogin:   config.WhatsappProxyOnlyLogin,
+			NoMedia:     config.WhatsappProxyNoMedia,
+		}
+		if err := client.SetProxyAddress(config.WhatsappProxyURL, proxyOpts); err != nil {
+			log.Warnf("Failed to set proxy: %v", err)
+		} else {
+			log.Infof("Proxy configured: %s", config.WhatsappProxyURL)
+		}
+	}
+
 	deviceRepo := newDeviceChatStorage(instanceID, chatStorageRepo)
 	instance := NewDeviceInstance(instanceID, client, deviceRepo)
 

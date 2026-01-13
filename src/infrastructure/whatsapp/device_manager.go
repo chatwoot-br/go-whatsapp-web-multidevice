@@ -461,6 +461,20 @@ func (m *DeviceManager) EnsureClient(ctx context.Context, deviceID string) (*Dev
 	client.EnableAutoReconnect = true
 	client.AutoTrustIdentity = true
 
+	// Configure proxy if specified
+	if config.WhatsappProxyURL != "" {
+		proxyOpts := whatsmeow.SetProxyOptions{
+			NoWebsocket: config.WhatsappProxyNoWebsocket,
+			OnlyLogin:   config.WhatsappProxyOnlyLogin,
+			NoMedia:     config.WhatsappProxyNoMedia,
+		}
+		if err := client.SetProxyAddress(config.WhatsappProxyURL, proxyOpts); err != nil {
+			logrus.Warnf("[DEVICE_MANAGER] Failed to set proxy for device %s: %v", deviceID, err)
+		} else {
+			logrus.Infof("[DEVICE_MANAGER] Proxy configured for device %s: %s", deviceID, config.WhatsappProxyURL)
+		}
+	}
+
 	repo := inst.GetChatStorage()
 	if repo == nil {
 		repo = newDeviceChatStorage(deviceID, m.storage)

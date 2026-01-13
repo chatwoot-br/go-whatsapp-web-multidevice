@@ -90,6 +90,10 @@ The following table lists the configurable parameters of the Gowa chart and thei
 | `whatsapp.autoDownloadMedia` | Auto-download media | `"true"` |
 | `whatsapp.accountValidation` | Account validation | `"true"` |
 | `whatsapp.chatStorage` | Chat history storage | `"true"` |
+| `whatsapp.proxy.url` | Proxy URL (http://, https://, socks5://) | `""` |
+| `whatsapp.proxy.noWebsocket` | Don't use proxy for websocket | `"false"` |
+| `whatsapp.proxy.onlyLogin` | Use proxy only for pre-login | `"false"` |
+| `whatsapp.proxy.noMedia` | Don't use proxy for media | `"false"` |
 
 ### Webhook Configuration
 
@@ -168,6 +172,21 @@ helm install gowa ./charts/gowa \
 helm install gowa ./charts/gowa \
   --set mode=mcp \
   --set service.port=8080
+```
+
+### With Proxy (SOCKS5)
+
+```bash
+helm install gowa ./charts/gowa \
+  --set whatsapp.proxy.url=socks5://user:pass@proxy.example.com:1080
+```
+
+### With Proxy (HTTP) - Media Direct
+
+```bash
+helm install gowa ./charts/gowa \
+  --set whatsapp.proxy.url=http://proxy.example.com:8080 \
+  --set whatsapp.proxy.noMedia=true
 ```
 
 ## Upgrading

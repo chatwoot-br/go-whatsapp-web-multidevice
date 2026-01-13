@@ -116,6 +116,19 @@ whatsapp:
   # chatStorage enables chat history storage (WHATSAPP_CHAT_STORAGE)
   chatStorage: "true"
 
+  # proxy contains proxy configuration for WhatsApp connections
+  proxy:
+    # url is the proxy URL (WHATSAPP_PROXY_URL)
+    # Supports http://, https://, socks5://
+    # Example: socks5://user:pass@proxy.example.com:1080
+    url: ""
+    # noWebsocket disables proxy for websocket connections (WHATSAPP_PROXY_NO_WEBSOCKET)
+    noWebsocket: "false"
+    # onlyLogin uses proxy only for pre-login websocket (WHATSAPP_PROXY_ONLY_LOGIN)
+    onlyLogin: "false"
+    # noMedia disables proxy for media uploads/downloads (WHATSAPP_PROXY_NO_MEDIA)
+    noMedia: "false"
+
 # webhook contains webhook configuration
 webhook:
   # urls is the comma-separated list of webhook URLs (WHATSAPP_WEBHOOK)

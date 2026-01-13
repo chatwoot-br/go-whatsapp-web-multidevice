@@ -175,6 +175,7 @@ export default {
                             <div class="description">
                                 <span>State: {{ dev.state || 'unknown' }}</span>
                                 <span v-if="dev.jid"> · JID: {{ dev.jid }}</span>
+                                <span v-if="dev.proxy_ip"> · IP: {{ dev.proxy_ip }}</span>
                             </div>
                         </div>
                         <div class="right floated content">

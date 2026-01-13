@@ -1,12 +1,20 @@
 package whatsapp
 
 import (
+	"context"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
 	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
 	domainDevice "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/device"
 	"go.mau.fi/whatsmeow"
+	"golang.org/x/net/proxy"
 )
 
 // DeviceInstance bundles a WhatsApp client with device metadata and scoped storage.
@@ -19,6 +27,7 @@ type DeviceInstance struct {
 	displayName     string
 	phoneNumber     string
 	jid             string
+	proxyIP         string
 	createdAt       time.Time
 	onLoggedOut     func(deviceID string) // Callback for remote logout cleanup
 }
@@ -170,4 +179,108 @@ func (d *DeviceInstance) TriggerLoggedOut() {
 	if callback != nil {
 		callback(deviceID)
 	}
+}
+
+// ProxyIP returns the cached external IP address when using a proxy.
+func (d *DeviceInstance) ProxyIP() string {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.proxyIP
+}
+
+// FetchProxyIP fetches the external IP address through the configured proxy.
+// Returns empty string if no proxy is configured or if the lookup fails.
+func (d *DeviceInstance) FetchProxyIP() string {
+	if config.WhatsappProxyURL == "" {
+		return ""
+	}
+
+	// Check cache first
+	d.mu.RLock()
+	if d.proxyIP != "" {
+		ip := d.proxyIP
+		d.mu.RUnlock()
+		return ip
+	}
+	d.mu.RUnlock()
+
+	// Create HTTP client with proxy
+	httpClient, err := createProxyHTTPClient(config.WhatsappProxyURL)
+	if err != nil {
+		return ""
+	}
+
+	// Fetch external IP from ipify
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.ipify.org", nil)
+	if err != nil {
+		return ""
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+
+	ip := strings.TrimSpace(string(body))
+
+	// Cache the result
+	d.mu.Lock()
+	d.proxyIP = ip
+	d.mu.Unlock()
+
+	return ip
+}
+
+// createProxyHTTPClient creates an HTTP client configured to use the specified proxy.
+func createProxyHTTPClient(proxyURL string) (*http.Client, error) {
+	parsedURL, err := url.Parse(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+
+	var transport *http.Transport
+
+	switch parsedURL.Scheme {
+	case "socks5":
+		// SOCKS5 proxy
+		auth := &proxy.Auth{}
+		if parsedURL.User != nil {
+			auth.User = parsedURL.User.Username()
+			auth.Password, _ = parsedURL.User.Password()
+		}
+
+		dialer, err := proxy.SOCKS5("tcp", parsedURL.Host, auth, proxy.Direct)
+		if err != nil {
+			return nil, err
+		}
+
+		transport = &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.Dial(network, addr)
+			},
+		}
+
+	case "http", "https":
+		// HTTP proxy
+		transport = &http.Transport{
+			Proxy: http.ProxyURL(parsedURL),
+		}
+
+	default:
+		return nil, nil
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   10 * time.Second,
+	}, nil
 }
