@@ -177,8 +177,16 @@ func buildEventPayload(ctx context.Context, client *whatsmeow.Client, evt *event
 }
 
 func buildFromFields(ctx context.Context, client *whatsmeow.Client, evt *events.Message, payload map[string]any) {
-	// Always set chat_id from evt.Info.Chat (works for both private and group)
-	payload["chat_id"] = evt.Info.Chat.ToNonAD().String()
+	// Save original LID if chat was @lid (for reference/debugging)
+	chatJID := evt.Info.Chat
+	if chatJID.Server == "lid" {
+		payload["chat_lid"] = chatJID.ToNonAD().String()
+	}
+
+	// Normalize chat JID (convert LID to phone number if known)
+	// This ensures Chatwoot can match contacts by phone number
+	normalizedChatJID := NormalizeJIDFromLID(ctx, chatJID, client)
+	payload["chat_id"] = normalizedChatJID.ToNonAD().String()
 
 	// Try to get from_lid from sender
 	senderJID := evt.Info.Sender
