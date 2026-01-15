@@ -18,6 +18,7 @@ import (
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // DeviceManager keeps a registry of active device instances.
@@ -594,6 +595,21 @@ func configureDeviceProps() {
 	osName := fmt.Sprintf("%s %s", config.AppOs, config.AppVersion)
 	store.DeviceProps.PlatformType = &config.AppPlatform
 	store.DeviceProps.Os = &osName
+
+	// Phase 1: Enable maximum history sync on initial pairing
+	// This requests up to 1 year of history instead of default 3 months
+	// Only affects NEW device pairings - existing devices need re-pairing
+	store.DeviceProps.RequireFullSync = proto.Bool(true)
+
+	// Enable ON_DEMAND history sync capability (experimental)
+	// These flags may enable the server to respond to BuildHistorySyncRequest() calls
+	// See: https://github.com/tulir/whatsmeow/issues/654
+	if store.DeviceProps.HistorySyncConfig != nil {
+		store.DeviceProps.HistorySyncConfig.OnDemandReady = proto.Bool(true)
+		store.DeviceProps.HistorySyncConfig.CompleteOnDemandReady = proto.Bool(true)
+	}
+
+	logrus.Info("[DEVICE_PROPS] Configured: RequireFullSync=true, OnDemandReady=true")
 }
 
 // StoreInfo returns configured store URIs for observability.
