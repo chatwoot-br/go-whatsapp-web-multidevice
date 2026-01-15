@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.1.0+4] - 2026-01-15
+
+### Added
+- feat(whatsapp): enable full history sync and ON_DEMAND capability
+- feat(whatsapp): handle unavailable messages from linked devices
+- feat(whatsapp): process ON_DEMAND history sync responses
+- feat: add logs directory to .gitignore and create .keep file
+
+### Fixed
+- fix(whatsapp): normalize chat_id from LID to phone number in webhook
+
+### Changed
+- chore: update dependencies for go.mau.fi/whatsmeow and golang.org/x packages
+
 ## [v8.1.0+3] - 2026-01-13
 
 ### Added
