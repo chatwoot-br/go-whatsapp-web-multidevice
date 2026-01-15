@@ -14,6 +14,7 @@ import (
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
+	"go.mau.fi/whatsmeow/proto/waWeb"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
@@ -123,6 +124,10 @@ func processHistorySync(ctx context.Context, data *waHistorySync.HistorySync, ch
 	case waHistorySync.HistorySync_INITIAL_BOOTSTRAP, waHistorySync.HistorySync_RECENT:
 		// Process conversation messages
 		return processConversationMessages(ctx, data, chatStorageRepo, client)
+	case waHistorySync.HistorySync_ON_DEMAND:
+		// Process ON_DEMAND history sync (response to BuildHistorySyncRequest)
+		// This is experimental - may not receive responses due to WhatsApp protocol limitations
+		return processOnDemandHistorySync(ctx, data, chatStorageRepo, client)
 	case waHistorySync.HistorySync_PUSH_NAME:
 		// Process push names to update chat names
 		return processPushNames(ctx, data, chatStorageRepo, client)
@@ -308,6 +313,107 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 	}
 
 	return nil
+}
+
+// processOnDemandHistorySync processes ON_DEMAND history sync responses
+// This is triggered when we request history for a specific chat (e.g., after receiving unavailable messages)
+// ON_DEMAND messages are also forwarded to webhooks individually since they represent "new" messages
+// that weren't received in real-time.
+// Note: This may rarely be called due to WhatsApp protocol limitations (issue #654)
+func processOnDemandHistorySync(ctx context.Context, data *waHistorySync.HistorySync, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client) error {
+	conversations := data.GetConversations()
+	log.Infof("[ON_DEMAND] Processing ON_DEMAND history sync with %d conversations", len(conversations))
+
+	// First, store messages in database using existing logic
+	if err := processConversationMessages(ctx, data, chatStorageRepo, client); err != nil {
+		log.Errorf("[ON_DEMAND] Failed to store messages: %v", err)
+		// Continue to forward to webhook even if storage fails
+	}
+
+	// Forward individual messages to webhook (only for ON_DEMAND)
+	// This is important because these messages were previously unavailable
+	if len(config.WhatsappWebhook) > 0 {
+		deviceID := ""
+		if client != nil && client.Store != nil && client.Store.ID != nil {
+			deviceJID := NormalizeJIDFromLID(ctx, client.Store.ID.ToNonAD(), client)
+			deviceID = deviceJID.ToNonAD().String()
+		}
+
+		messageCount := 0
+		for _, conv := range conversations {
+			for _, histMsg := range conv.GetMessages() {
+				if histMsg == nil || histMsg.Message == nil {
+					continue
+				}
+				forwardOnDemandMessageToWebhook(ctx, histMsg.Message, deviceID, client)
+				messageCount++
+			}
+		}
+		log.Infof("[ON_DEMAND] Forwarded %d messages to webhook", messageCount)
+	}
+
+	return nil
+}
+
+// forwardOnDemandMessageToWebhook forwards an ON_DEMAND history sync message to configured webhooks
+// These are messages that were previously unavailable (from other linked devices)
+func forwardOnDemandMessageToWebhook(ctx context.Context, msg *waWeb.WebMessageInfo, deviceID string, client *whatsmeow.Client) {
+	msgKey := msg.GetKey()
+	if msgKey == nil {
+		return
+	}
+
+	messageID := msgKey.GetID()
+	if messageID == "" {
+		return
+	}
+
+	// Extract message content
+	content := utils.ExtractMessageTextFromProto(msg.GetMessage())
+
+	// Skip empty messages
+	if content == "" {
+		return
+	}
+
+	// Parse and normalize the chat JID
+	chatJID := msgKey.GetRemoteJID()
+	if jid, err := types.ParseJID(chatJID); err == nil {
+		normalizedJID := NormalizeJIDFromLID(ctx, jid, client)
+		chatJID = normalizedJID.String()
+	}
+
+	// Determine sender
+	sender := chatJID
+	if msgKey.GetFromMe() && client != nil && client.Store != nil && client.Store.ID != nil {
+		sender = client.Store.ID.ToNonAD().String()
+	} else if participant := msgKey.GetParticipant(); participant != "" {
+		if jid, err := types.ParseJID(participant); err == nil {
+			normalizedJID := NormalizeJIDFromLID(ctx, jid, client)
+			sender = normalizedJID.String()
+		}
+	}
+
+	payload := map[string]any{
+		"event":     "message",
+		"device_id": deviceID,
+		"payload": map[string]any{
+			"id":                messageID,
+			"from":              chatJID,
+			"sender":            sender,
+			"body":              content,
+			"timestamp":         time.Unix(int64(msg.GetMessageTimestamp()), 0).Format(time.RFC3339),
+			"is_from_me":        msgKey.GetFromMe(),
+			"from_history_sync": true,
+			"sync_type":         "ON_DEMAND",
+		},
+	}
+
+	if err := forwardPayloadToConfiguredWebhooks(ctx, payload, "on_demand_message"); err != nil {
+		log.Errorf("[ON_DEMAND] Failed to forward message %s to webhook: %v", messageID, err)
+	} else {
+		log.Debugf("[ON_DEMAND] Forwarded message %s to webhook", messageID)
+	}
 }
 
 // processPushNames processes push names from history sync to update chat names
