@@ -1,6 +1,6 @@
 # ISSUE-001: Messages from Other Linked Devices Not Synced
 
-## Status: Open (Protocol Limitation)
+## Status: Open (Protocol Limitation - Mitigations Implemented)
 
 ## Summary
 Messages sent from another WhatsApp Web linked device (e.g., browser WhatsApp Web) do not arrive in go-whatsapp-web-multidevice, preventing them from being forwarded to Chatwoot webhooks.
@@ -8,8 +8,9 @@ Messages sent from another WhatsApp Web linked device (e.g., browser WhatsApp We
 ## Environment
 - **go-whatsapp-web-multidevice**: v4.9.1+2
 - **whatsmeow**: v0.0.0-20251217143725-11cf47c62d32
-- **Connected phone**: 552140402221
-- **Other linked device**: WhatsApp Web (device 23 at `174852883411040:23@lid`)
+- **Test device (go-whatsapp)**: 5521995539939 (device 24)
+- **Other linked device**: WhatsApp Web "ChatWoot (DEV)" (device 23 at `186234680901688:23@lid`)
+- **Recipient phone**: 5521998762522
 
 ## Problem Description
 
@@ -21,17 +22,50 @@ When a message is sent from another WhatsApp Web session (not go-whatsapp), the 
 3. The phone acknowledges the request but **never returns the actual message content**
 4. The message is effectively lost and never forwarded to Chatwoot
 
-### Log Evidence
+### Log Evidence (2026-01-15)
+
+**Scenario**: Message sent from WhatsApp Web "ChatWoot (DEV)" (device 23) to contact 5521998762522
+
 ```
-13:43:01.353 <message from="174852883411040:23@lid" id="3EB0625526AA1D1CF5DA54" ...>
+18:11:41.725 <message from="186234680901688:23@lid" id="3EB03C6D5393C95EA743D2"
+             notify="ChatWoot (DEV)" recipient="151474956939293@lid" type="text">
                <unavailable/>
              </message>
-13:43:01.353 [WARN] Unavailable message 3EB0625526AA1D1CF5DA54
-13:43:01.376 [SEND] Peer request to phone (BuildUnavailableMessageRequest)
-13:43:01.701 <ack class="message" ...>  ← Phone acknowledges
-13:43:10.145 <receipt type="peer_msg">  ← Phone sends receipt
-❌ NO message content ever returned
+
+18:11:41.725 [WARN] Unavailable message 3EB03C6D5393C95EA743D2 from 186234680901688:23@lid
+             in 151474956939293@lid (type: "")
+
+18:11:41.725 [WARN] [UNAVAILABLE_MSG] Message 3EB03C6D5393C95EA743D2 from 186234680901688:23@lid
+             in chat 151474956939293@lid is unavailable (from another linked device)
+
+18:11:41.725 [INFO] [HISTORY_SYNC] Requesting ON_DEMAND history for chat 151474956939293@lid
+             due to unavailable message 3EB03C6D5393C95EA743D2
+
+18:11:41.846 Requested message 3EB03C6D5393C95EA743D2 from phone
+
+18:11:41.964 [INFO] [HISTORY_SYNC] Sent ON_DEMAND request for chat 151474956939293@lid
+             (response may not arrive - protocol limitation)
+
+18:11:42.358 <receipt from="151474956939293@lid" id="3EB03C6D5393C95EA743D2" type="read"/>
+             ← Delivery/read receipts arrive, but message content NEVER arrives
 ```
+
+**Key observation**: The message was marked as delivered and read (receipts arrived), but the actual content was **never received**.
+
+### Reconnect Does NOT Fetch Missing Messages
+
+When user clicks "Reconnect" from Chatwoot UI, history sync is NOT triggered:
+
+```
+18:18:55 | POST | /devices/5521995539939/reconnect   ← User clicked "Reconnect"
+18:18:57.893 <ib from="s.whatsapp.net"><offline count="0"/></ib>  ← Server: NO offline messages!
+```
+
+| Scenario | History Sync? | What Server Returns |
+|----------|---------------|---------------------|
+| **Initial QR pairing** | ✅ Yes | RECENT, FULL, PUSH_NAME syncs |
+| **Reconnect** | ❌ No | `<offline count="0"/>` |
+| **WebSocket auto-reconnect** | ❌ No | `<offline count="0"/>` |
 
 ### Expected Behavior
 Messages sent from any linked device should be received and forwarded to configured webhooks.
@@ -54,6 +88,8 @@ From [WhatsApp Help Center](https://faq.whatsapp.com/653480766448040):
 3. **History Sync Only at Pairing**: Full message history is only synced during initial QR code pairing. Reconnections receive `<offline count="0"/>` - no offline messages.
 
 4. **ON_DEMAND History Sync Unreliable**: `BuildHistorySyncRequest()` for on-demand history fetching doesn't receive responses ([whatsmeow Issue #654](https://github.com/tulir/whatsmeow/issues/654)).
+
+5. **DeviceProps Only at Registration**: `RequireFullSync` and `OnDemandReady` flags are only sent during device registration (QR pairing), not on reconnection.
 
 ## Research Findings
 
@@ -106,30 +142,56 @@ func (device *Device) getLoginPayload() *waWa6.ClientPayload {
 ### Severity
 **Medium-High**: Messages are silently lost, potentially causing missed customer inquiries.
 
-## Potential Mitigations
+## Implemented Mitigations
 
-### Implemented/Possible Solutions
+### Phase 1: Enable Maximum Initial History Sync ✅
+**Commit**: `74afcdb` - `feat(whatsapp): enable full history sync and ON_DEMAND capability`
 
-| Solution | Feasibility | Notes |
-|----------|-------------|-------|
-| Enable `RequireFullSync=true` on pairing | ✅ Works | Only affects initial pairing, gets more history |
-| Enable `OnDemandReady` flags | ❓ Untested | May enable ON_DEMAND responses |
-| Request ON_DEMAND history on unavailable | ⚠️ Unreliable | Issue #654 suggests this doesn't work |
-| Force re-pairing to refresh history | ✅ Works | Poor UX, loses current session |
-| Document limitation | ✅ Feasible | Users should be aware |
+**File**: `src/infrastructure/whatsapp/device_manager.go`
+```go
+store.DeviceProps.RequireFullSync = proto.Bool(true)
+store.DeviceProps.HistorySyncConfig.OnDemandReady = proto.Bool(true)
+store.DeviceProps.HistorySyncConfig.CompleteOnDemandReady = proto.Bool(true)
+```
+**Impact**: Only affects NEW device pairings. Gets up to 1 year of history vs default 3 months.
 
-### Recommended Approach
-See [Plan: sync-messages-from-linked-devices.md](../plans/sync-messages-from-linked-devices.md) for detailed implementation plan.
+### Phase 2-3: Handle Unavailable Messages ✅
+**Commit**: `73be9eb` - `feat(whatsapp): handle unavailable messages from linked devices`
+
+**File**: `src/infrastructure/whatsapp/event_handler.go`
+- Added `events.UndecryptableMessage` handler
+- Logs unavailable messages with `[UNAVAILABLE_MSG]` prefix
+- Requests ON_DEMAND history sync with 30-second cooldown
+
+### Phase 4: Process ON_DEMAND Responses ✅
+**Commit**: `cebd4bf` - `feat(whatsapp): process ON_DEMAND history sync responses`
+
+**File**: `src/infrastructure/whatsapp/history_sync.go`
+- Added `ON_DEMAND` case to history sync processing
+- Forwards ON_DEMAND messages to webhooks with `from_history_sync: true`
+
+### Mitigation Results
+
+| Mitigation | Status | Result |
+|------------|--------|--------|
+| `RequireFullSync=true` | ✅ Implemented | Works for new pairings |
+| `OnDemandReady` flags | ✅ Implemented | No response received (as expected) |
+| ON_DEMAND request on unavailable | ✅ Implemented | Request sent, no response received |
+| Detect & log unavailable messages | ✅ Implemented | Working - see logs above |
+
+**Conclusion**: All mitigations implemented, but ON_DEMAND responses do not arrive due to WhatsApp protocol limitations. This confirms the issue is **not fixable** without changes to WhatsApp's protocol.
 
 ## Workarounds for Users
 
 1. **Use only go-whatsapp for sending**: Don't use other WhatsApp Web sessions for the connected number
 2. **Re-pair periodically**: Disconnect and re-scan QR code to get fresh history sync
-3. **Use phone app**: Messages sent from the phone app are properly synced
+3. **Use phone app**: Messages sent from the phone app are properly synced to all devices
+4. **Single WhatsApp Web session**: If using go-whatsapp as primary, avoid opening WhatsApp Web in browser
 
 ## Related Files
-- `src/infrastructure/whatsapp/event_handler.go` - Event handling
-- `src/infrastructure/whatsapp/history_sync.go` - History sync processing
+- `src/infrastructure/whatsapp/device_manager.go` - DeviceProps configuration
+- `src/infrastructure/whatsapp/event_handler.go` - UndecryptableMessage handler
+- `src/infrastructure/whatsapp/history_sync.go` - History sync processing, ON_DEMAND handling
 - `go.mau.fi/whatsmeow/retry.go` - Message retry logic
 - `go.mau.fi/whatsmeow/store/clientpayload.go` - Device registration
 
@@ -143,3 +205,9 @@ See [Plan: sync-messages-from-linked-devices.md](../plans/sync-messages-from-lin
 - **2025-01-15**: Issue identified during Chatwoot integration debugging
 - **2025-01-15**: Root cause analysis completed
 - **2025-01-15**: Confirmed as WhatsApp protocol limitation (not fixable)
+- **2026-01-15**: Phase 1-4 mitigations implemented
+- **2026-01-15**: Log investigation confirmed:
+  - Unavailable messages correctly detected and logged
+  - ON_DEMAND requests sent but no response received
+  - Reconnect returns `<offline count="0"/>` - no history sync on reconnect
+  - Protocol limitation confirmed - messages from other linked devices cannot be synced
