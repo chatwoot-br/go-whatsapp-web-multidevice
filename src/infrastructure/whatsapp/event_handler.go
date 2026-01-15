@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
@@ -55,6 +56,8 @@ func handler(ctx context.Context, instance *DeviceInstance, rawEvt any) {
 		handleAppState(ctx, evt)
 	case *events.GroupInfo:
 		handleGroupInfo(ctx, evt, instance.JID(), client)
+	case *events.UndecryptableMessage:
+		handleUndecryptableMessage(ctx, evt, client)
 	}
 
 	instance.UpdateStateFromClient()
@@ -255,4 +258,72 @@ func handleGroupInfo(ctx context.Context, evt *events.GroupInfo, deviceID string
 			}
 		}(evt, client)
 	}
+}
+
+// Phase 2: Handle undecryptable/unavailable messages from other linked devices
+// This happens when another WhatsApp Web session sends a message - we receive <unavailable/>
+// instead of the actual content. whatsmeow automatically requests the content, but the phone
+// typically doesn't return it (WhatsApp protocol limitation).
+
+var (
+	unavailableChats    = make(map[string]time.Time)
+	unavailableChatsMu  sync.RWMutex
+	historySyncCooldown = 30 * time.Second
+)
+
+func handleUndecryptableMessage(ctx context.Context, evt *events.UndecryptableMessage, client *whatsmeow.Client) {
+	if evt == nil {
+		return
+	}
+
+	// Log the unavailable message for debugging
+	if evt.IsUnavailable {
+		log.Warnf("[UNAVAILABLE_MSG] Message %s from %s in chat %s is unavailable (from another linked device)",
+			evt.Info.ID, evt.Info.Sender.String(), evt.Info.Chat.String())
+
+		// Attempt to request history sync for this chat (experimental - may not work per whatsmeow #654)
+		requestHistorySyncForChat(ctx, client, evt.Info)
+	} else {
+		log.Warnf("[UNDECRYPTABLE_MSG] Message %s from %s could not be decrypted (DecryptFailMode: %v)",
+			evt.Info.ID, evt.Info.Sender.String(), evt.DecryptFailMode)
+	}
+}
+
+// requestHistorySyncForChat attempts to request ON_DEMAND history sync for a chat
+// when we receive an unavailable message. This is experimental and may not work
+// due to WhatsApp protocol limitations (see whatsmeow issue #654).
+func requestHistorySyncForChat(ctx context.Context, client *whatsmeow.Client, msgInfo types.MessageInfo) {
+	if client == nil || client.Store == nil || client.Store.ID == nil {
+		return
+	}
+
+	chatJID := msgInfo.Chat.String()
+
+	// Check cooldown to prevent spamming history sync requests
+	unavailableChatsMu.Lock()
+	lastRequest, exists := unavailableChats[chatJID]
+	if exists && time.Since(lastRequest) < historySyncCooldown {
+		unavailableChatsMu.Unlock()
+		log.Debugf("[HISTORY_SYNC] Skipping request for %s (cooldown active)", chatJID)
+		return
+	}
+	unavailableChats[chatJID] = time.Now()
+	unavailableChatsMu.Unlock()
+
+	log.Infof("[HISTORY_SYNC] Requesting ON_DEMAND history for chat %s due to unavailable message %s", chatJID, msgInfo.ID)
+
+	// Request history sync in background
+	go func() {
+		reqCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// BuildHistorySyncRequest creates a peer message to request history for a specific chat
+		msg := client.BuildHistorySyncRequest(&msgInfo, 50)
+		_, err := client.SendMessage(reqCtx, client.Store.ID.ToNonAD(), msg, whatsmeow.SendRequestExtra{Peer: true})
+		if err != nil {
+			log.Errorf("[HISTORY_SYNC] Failed to request history for chat %s: %v", chatJID, err)
+		} else {
+			log.Infof("[HISTORY_SYNC] Sent ON_DEMAND request for chat %s (response may not arrive - protocol limitation)", chatJID)
+		}
+	}()
 }
