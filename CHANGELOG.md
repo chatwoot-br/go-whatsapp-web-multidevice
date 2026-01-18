@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.1.0+6] - 2026-01-18
+
+### Fixed
+- fix(history-sync): resolve LID duplicate chats and context cancellation
+  - Add dedicated context with 5s timeout for LID resolution to prevent context cancellation errors
+  - Add NormalizeJIDFromLIDWithContext helper for isolated LID lookups
+  - Add MergeLIDChat to chatstorage for deduplicating chats with same sender but different JID formats
+  - Add post-sync deduplication to merge LID chats after history sync
+
 ## [v8.1.0+5] - 2026-01-17
 
 ### Fixed
