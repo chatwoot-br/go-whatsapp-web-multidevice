@@ -170,7 +170,7 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 		}
 
 		// Normalize JID (convert @lid to @s.whatsapp.net if possible)
-		jid = NormalizeJIDFromLID(ctx, jid, client)
+		jid = NormalizeJIDFromLIDWithContext(jid, client)
 		chatJID := jid.String()
 
 		displayName := conv.GetDisplayName()
@@ -240,7 +240,7 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 					// For group messages, participant contains the actual sender
 					if senderJID, err := types.ParseJID(participant); err == nil {
 						// Normalize sender JID (convert @lid to @s.whatsapp.net if possible)
-						senderJID = NormalizeJIDFromLID(ctx, senderJID, client)
+						senderJID = NormalizeJIDFromLIDWithContext(senderJID, client)
 						sender = senderJID.ToNonAD().String() // Use full JID format for consistency
 					} else {
 						// Fallback to participant string, but ensure it's not empty
