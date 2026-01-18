@@ -336,7 +336,7 @@ func processOnDemandHistorySync(ctx context.Context, data *waHistorySync.History
 	if len(config.WhatsappWebhook) > 0 {
 		deviceID := ""
 		if client != nil && client.Store != nil && client.Store.ID != nil {
-			deviceJID := NormalizeJIDFromLID(ctx, client.Store.ID.ToNonAD(), client)
+			deviceJID := NormalizeJIDFromLIDWithContext(client.Store.ID.ToNonAD(), client)
 			deviceID = deviceJID.ToNonAD().String()
 		}
 
@@ -380,7 +380,7 @@ func forwardOnDemandMessageToWebhook(ctx context.Context, msg *waWeb.WebMessageI
 	// Parse and normalize the chat JID
 	chatJID := msgKey.GetRemoteJID()
 	if jid, err := types.ParseJID(chatJID); err == nil {
-		normalizedJID := NormalizeJIDFromLID(ctx, jid, client)
+		normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
 		chatJID = normalizedJID.String()
 	}
 
@@ -390,7 +390,7 @@ func forwardOnDemandMessageToWebhook(ctx context.Context, msg *waWeb.WebMessageI
 		sender = client.Store.ID.ToNonAD().String()
 	} else if participant := msgKey.GetParticipant(); participant != "" {
 		if jid, err := types.ParseJID(participant); err == nil {
-			normalizedJID := NormalizeJIDFromLID(ctx, jid, client)
+			normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
 			sender = normalizedJID.String()
 		}
 	}
@@ -478,7 +478,7 @@ func processPushNames(ctx context.Context, data *waHistorySync.HistorySync, chat
 		var existingChat *domainChatStorage.Chat
 
 		// Try 1: Normalized JID
-		normalizedJID := NormalizeJIDFromLID(ctx, jid, client)
+		normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
 		existingChat, _ = chatStorageRepo.GetChatByDevice(deviceID, normalizedJID.String())
 
 		// Try 2: Standard s.whatsapp.net format
@@ -680,7 +680,7 @@ func extractPhoneFromJID(jid string) string {
 func forwardHistorySyncCompleteToWebhook(ctx context.Context, client *whatsmeow.Client, syncType string) {
 	deviceID := ""
 	if client != nil && client.Store != nil && client.Store.ID != nil {
-		deviceJID := NormalizeJIDFromLID(ctx, client.Store.ID.ToNonAD(), client)
+		deviceJID := NormalizeJIDFromLIDWithContext(client.Store.ID.ToNonAD(), client)
 		deviceID = deviceJID.ToNonAD().String()
 	}
 
