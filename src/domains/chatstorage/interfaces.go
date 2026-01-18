@@ -42,6 +42,10 @@ type IChatStorageRepository interface {
 	TruncateAllDataWithLogging(logPrefix string) error
 	DeleteDeviceData(deviceID string) error
 
+	// LID deduplication
+	MergeLIDChat(deviceID, lidJID, phoneJID string) error
+	GetLIDChats(deviceID string) ([]*Chat, error)
+
 	// Device registry operations
 	SaveDeviceRecord(record *DeviceRecord) error
 	ListDeviceRecords() ([]*DeviceRecord, error)
