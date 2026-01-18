@@ -102,6 +102,7 @@ func scheduleHistorySyncWebhook(chatStorageRepo domainChatStorage.IChatStorageRe
 		if chatStorageRepo != nil && client != nil && client.Store != nil && client.Store.ID != nil {
 			deviceJID := client.Store.ID.ToNonAD().String()
 			applyCachedPushNamesToChats(context.Background(), chatStorageRepo, deviceJID)
+			deduplicateLIDChats(context.Background(), chatStorageRepo, client, deviceJID)
 		}
 
 		forwardHistorySyncCompleteToWebhook(context.Background(), client, syncType)
@@ -596,6 +597,56 @@ func applyCachedPushNamesToChats(ctx context.Context, chatStorageRepo domainChat
 
 	if updated > 0 {
 		log.Infof("Updated %d chat names from push name cache", updated)
+	}
+}
+
+// deduplicateLIDChats finds and merges LID-based chats that have phone number mappings
+func deduplicateLIDChats(ctx context.Context, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client, deviceID string) {
+	if chatStorageRepo == nil || client == nil {
+		return
+	}
+
+	// Get all LID-based chats
+	lidChats, err := chatStorageRepo.GetLIDChats(deviceID)
+	if err != nil {
+		log.Warnf("Failed to get LID chats for deduplication: %v", err)
+		return
+	}
+
+	if len(lidChats) == 0 {
+		return
+	}
+
+	log.Infof("Found %d LID-based chats to check for deduplication", len(lidChats))
+
+	merged := 0
+	for _, chat := range lidChats {
+		// Parse the LID JID
+		lidJID, err := types.ParseJID(chat.JID)
+		if err != nil {
+			log.Warnf("Failed to parse LID JID %s: %v", chat.JID, err)
+			continue
+		}
+
+		// Try to resolve to phone number
+		phoneJID := NormalizeJIDFromLIDWithContext(lidJID, client)
+
+		// If resolution succeeded (different JID returned)
+		if phoneJID.Server != "lid" {
+			phoneJIDStr := phoneJID.String()
+
+			// Attempt to merge
+			if err := chatStorageRepo.MergeLIDChat(deviceID, chat.JID, phoneJIDStr); err != nil {
+				log.Warnf("Failed to merge LID chat %s into %s: %v", chat.JID, phoneJIDStr, err)
+			} else {
+				merged++
+				log.Debugf("Merged LID chat %s into %s", chat.JID, phoneJIDStr)
+			}
+		}
+	}
+
+	if merged > 0 {
+		log.Infof("Deduplicated %d LID-based chats", merged)
 	}
 }
 
