@@ -342,7 +342,7 @@ func (suite *UtilsTestSuite) TestDownloadImageFromURLEdgeCases() {
 
 	_, _, err := utils.DownloadImageFromURL(server.URL)
 	assert.Error(suite.T(), err)
-	assert.Contains(suite.T(), err.Error(), "invalid content type")
+	assert.Contains(suite.T(), err.Error(), "unsupported image type")
 
 	// Test HTTP error status
 	errorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -354,7 +354,7 @@ func (suite *UtilsTestSuite) TestDownloadImageFromURLEdgeCases() {
 	assert.Error(suite.T(), err)
 	assert.Contains(suite.T(), err.Error(), "HTTP request failed")
 
-	// Test unsupported file extension
+	// Test unsupported image MIME type
 	extServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/image.gif" {
 			w.Header().Set("Content-Type", "image/gif")
@@ -365,7 +365,7 @@ func (suite *UtilsTestSuite) TestDownloadImageFromURLEdgeCases() {
 
 	_, _, err = utils.DownloadImageFromURL(extServer.URL + "/image.gif")
 	assert.Error(suite.T(), err)
-	assert.Contains(suite.T(), err.Error(), "unsupported file type")
+	assert.Contains(suite.T(), err.Error(), "unsupported image type")
 
 	// Test valid image extensions
 	validExtServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -401,6 +401,43 @@ func (suite *UtilsTestSuite) TestDownloadImageFromURLEdgeCases() {
 	data, filename, err = utils.DownloadImageFromURL(validExtServer.URL + "/test.jpg?v=1&size=large")
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), "test.jpg", filename)
+
+	// Test S3-style URL without file extension (derives extension from Content-Type)
+	s3Server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate S3 presigned URL path (random key, no extension)
+		if strings.HasPrefix(r.URL.Path, "/bucket/") {
+			w.Header().Set("Content-Type", "image/png")
+			w.Write([]byte("s3 image data"))
+		}
+	}))
+	defer s3Server.Close()
+
+	data, filename, err = utils.DownloadImageFromURL(s3Server.URL + "/bucket/rptnjp5fjmnjaawhfbe995pxd5hs")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "rptnjp5fjmnjaawhfbe995pxd5hs.png", filename)
+	assert.Equal(suite.T(), []byte("s3 image data"), data)
+
+	// Test S3-style URL with JPEG content type
+	s3JpegServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Write([]byte("jpeg data"))
+	}))
+	defer s3JpegServer.Close()
+
+	data, filename, err = utils.DownloadImageFromURL(s3JpegServer.URL + "/bucket/randomkey123")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "randomkey123.jpg", filename)
+
+	// Test S3-style URL with WebP content type
+	s3WebpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/webp")
+		w.Write([]byte("webp data"))
+	}))
+	defer s3WebpServer.Close()
+
+	data, filename, err = utils.DownloadImageFromURL(s3WebpServer.URL + "/bucket/anotherkey456")
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "anotherkey456.webp", filename)
 }
 
 func (suite *UtilsTestSuite) TestDownloadAudioFromURL() {

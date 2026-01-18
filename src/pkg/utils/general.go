@@ -252,30 +252,37 @@ func DownloadImageFromURL(url string) ([]byte, string, error) {
 		return nil, "", fmt.Errorf("HTTP request failed with status: %s", response.Status)
 	}
 
-	contentType := response.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "image/") {
-		return nil, "", fmt.Errorf("invalid content type: %s", contentType)
+	// Extract MIME type without parameters (e.g., "image/png; charset=utf-8" -> "image/png")
+	contentType := strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0])
+
+	// Map allowed MIME types to file extensions
+	mimeToExt := map[string]string{
+		"image/jpeg": ".jpg",
+		"image/jpg":  ".jpg",
+		"image/png":  ".png",
+		"image/webp": ".webp",
 	}
+
+	extension, ok := mimeToExt[contentType]
+	if !ok {
+		return nil, "", fmt.Errorf("unsupported image type: %s", contentType)
+	}
+
 	// Check content length if available
 	if contentLength := response.ContentLength; contentLength > int64(config.WhatsappSettingMaxImageSize) {
 		return nil, "", fmt.Errorf("image size %d exceeds maximum allowed size %d", contentLength, config.WhatsappSettingMaxImageSize)
 	}
 	// Limit the size from config
 	reader := io.LimitReader(response.Body, int64(config.WhatsappSettingMaxImageSize))
+
 	// Extract the file name from the URL and remove query parameters if present
 	segments := strings.Split(url, "/")
 	fileName := segments[len(segments)-1]
 	fileName = strings.Split(fileName, "?")[0]
-	// Check if the file extension is supported
-	allowedExtensions := map[string]bool{
-		".jpg":  true,
-		".jpeg": true,
-		".png":  true,
-		".webp": true,
-	}
-	extension := strings.ToLower(filepath.Ext(fileName))
-	if !allowedExtensions[extension] {
-		return nil, "", fmt.Errorf("unsupported file type: %s", extension)
+
+	// Add extension if filename doesn't have one (common for S3 presigned URLs)
+	if filepath.Ext(fileName) == "" {
+		fileName = fileName + extension
 	}
 	imageData, err := io.ReadAll(reader)
 	if err != nil {
