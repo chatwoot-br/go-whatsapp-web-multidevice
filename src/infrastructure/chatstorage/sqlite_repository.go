@@ -959,6 +959,129 @@ func (r *SQLiteRepository) StoreSentMessageWithContext(ctx context.Context, mess
 	return r.StoreMessage(message)
 }
 
+// MergeLIDChat merges a LID-based chat into a phone-based chat
+// Updates all messages from lidJID to phoneJID and deletes the LID chat
+func (r *SQLiteRepository) MergeLIDChat(deviceID, lidJID, phoneJID string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Get the LID chat to merge its metadata
+	lidChat, err := r.GetChatByDevice(deviceID, lidJID)
+	if err != nil {
+		return fmt.Errorf("failed to get LID chat: %w", err)
+	}
+	if lidChat == nil {
+		// LID chat doesn't exist, nothing to merge
+		return nil
+	}
+
+	// Get the phone chat (target)
+	phoneChat, err := r.GetChatByDevice(deviceID, phoneJID)
+	if err != nil {
+		return fmt.Errorf("failed to get phone chat: %w", err)
+	}
+
+	// Update all messages from LID chat to phone chat
+	_, err = tx.Exec(`
+		UPDATE messages SET chat_jid = ?
+		WHERE chat_jid = ? AND device_id = ?
+	`, phoneJID, lidJID, deviceID)
+	if err != nil {
+		return fmt.Errorf("failed to update messages: %w", err)
+	}
+
+	// If phone chat exists, update its metadata with LID chat's if newer
+	if phoneChat != nil {
+		// Use LID chat's name if phone chat has a phone number as name
+		if lidChat.Name != "" && isPhoneNumberString(phoneChat.Name) {
+			phoneChat.Name = lidChat.Name
+		}
+		// Use later timestamp
+		if lidChat.LastMessageTime.After(phoneChat.LastMessageTime) {
+			phoneChat.LastMessageTime = lidChat.LastMessageTime
+		}
+		// Preserve ephemeral settings
+		if phoneChat.EphemeralExpiration == 0 && lidChat.EphemeralExpiration > 0 {
+			phoneChat.EphemeralExpiration = lidChat.EphemeralExpiration
+		}
+		// Update phone chat within the transaction to maintain atomicity
+		_, err = tx.Exec(`
+			UPDATE chats SET name = ?, last_message_time = ?, ephemeral_expiration = ?, updated_at = ?
+			WHERE jid = ? AND device_id = ?
+		`, phoneChat.Name, phoneChat.LastMessageTime, phoneChat.EphemeralExpiration, time.Now(), phoneChat.JID, phoneChat.DeviceID)
+		if err != nil {
+			return fmt.Errorf("failed to update phone chat: %w", err)
+		}
+	} else {
+		// Phone chat doesn't exist, rename LID chat to phone JID
+		_, err = tx.Exec(`
+			UPDATE chats SET jid = ?
+			WHERE jid = ? AND device_id = ?
+		`, phoneJID, lidJID, deviceID)
+		if err != nil {
+			return fmt.Errorf("failed to rename chat: %w", err)
+		}
+		return tx.Commit()
+	}
+
+	// Delete the LID chat entry
+	_, err = tx.Exec(`
+		DELETE FROM chats WHERE jid = ? AND device_id = ?
+	`, lidJID, deviceID)
+	if err != nil {
+		return fmt.Errorf("failed to delete LID chat: %w", err)
+	}
+
+	logrus.Infof("Merged LID chat %s into %s for device %s", lidJID, phoneJID, deviceID)
+	return tx.Commit()
+}
+
+// GetLIDChats returns all chats with @lid JIDs for a device
+func (r *SQLiteRepository) GetLIDChats(deviceID string) ([]*domainChatStorage.Chat, error) {
+	query := `
+		SELECT device_id, jid, name, last_message_time, ephemeral_expiration, created_at, updated_at
+		FROM chats
+		WHERE device_id = ? AND jid LIKE '%@lid'
+		ORDER BY last_message_time DESC
+	`
+
+	rows, err := r.db.Query(query, deviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var chats []*domainChatStorage.Chat
+	for rows.Next() {
+		chat, err := r.scanChat(rows)
+		if err != nil {
+			return nil, err
+		}
+		chats = append(chats, chat)
+	}
+
+	return chats, rows.Err()
+}
+
+// isPhoneNumberString checks if a string looks like a phone number
+func isPhoneNumberString(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, c := range s {
+		if c == '+' && i == 0 {
+			continue
+		}
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return len(s) >= 5 // Minimum phone number length
+}
+
 // _____________________________________________________________________________________________________________________
 
 // initializeSchema creates or migrates the database schema

@@ -102,6 +102,7 @@ func scheduleHistorySyncWebhook(chatStorageRepo domainChatStorage.IChatStorageRe
 		if chatStorageRepo != nil && client != nil && client.Store != nil && client.Store.ID != nil {
 			deviceJID := client.Store.ID.ToNonAD().String()
 			applyCachedPushNamesToChats(context.Background(), chatStorageRepo, deviceJID)
+			deduplicateLIDChats(context.Background(), chatStorageRepo, client, deviceJID)
 		}
 
 		forwardHistorySyncCompleteToWebhook(context.Background(), client, syncType)
@@ -170,7 +171,7 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 		}
 
 		// Normalize JID (convert @lid to @s.whatsapp.net if possible)
-		jid = NormalizeJIDFromLID(ctx, jid, client)
+		jid = NormalizeJIDFromLIDWithContext(jid, client)
 		chatJID := jid.String()
 
 		displayName := conv.GetDisplayName()
@@ -240,7 +241,7 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 					// For group messages, participant contains the actual sender
 					if senderJID, err := types.ParseJID(participant); err == nil {
 						// Normalize sender JID (convert @lid to @s.whatsapp.net if possible)
-						senderJID = NormalizeJIDFromLID(ctx, senderJID, client)
+						senderJID = NormalizeJIDFromLIDWithContext(senderJID, client)
 						sender = senderJID.ToNonAD().String() // Use full JID format for consistency
 					} else {
 						// Fallback to participant string, but ensure it's not empty
@@ -335,7 +336,7 @@ func processOnDemandHistorySync(ctx context.Context, data *waHistorySync.History
 	if len(config.WhatsappWebhook) > 0 {
 		deviceID := ""
 		if client != nil && client.Store != nil && client.Store.ID != nil {
-			deviceJID := NormalizeJIDFromLID(ctx, client.Store.ID.ToNonAD(), client)
+			deviceJID := NormalizeJIDFromLIDWithContext(client.Store.ID.ToNonAD(), client)
 			deviceID = deviceJID.ToNonAD().String()
 		}
 
@@ -379,7 +380,7 @@ func forwardOnDemandMessageToWebhook(ctx context.Context, msg *waWeb.WebMessageI
 	// Parse and normalize the chat JID
 	chatJID := msgKey.GetRemoteJID()
 	if jid, err := types.ParseJID(chatJID); err == nil {
-		normalizedJID := NormalizeJIDFromLID(ctx, jid, client)
+		normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
 		chatJID = normalizedJID.String()
 	}
 
@@ -389,7 +390,7 @@ func forwardOnDemandMessageToWebhook(ctx context.Context, msg *waWeb.WebMessageI
 		sender = client.Store.ID.ToNonAD().String()
 	} else if participant := msgKey.GetParticipant(); participant != "" {
 		if jid, err := types.ParseJID(participant); err == nil {
-			normalizedJID := NormalizeJIDFromLID(ctx, jid, client)
+			normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
 			sender = normalizedJID.String()
 		}
 	}
@@ -477,7 +478,7 @@ func processPushNames(ctx context.Context, data *waHistorySync.HistorySync, chat
 		var existingChat *domainChatStorage.Chat
 
 		// Try 1: Normalized JID
-		normalizedJID := NormalizeJIDFromLID(ctx, jid, client)
+		normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
 		existingChat, _ = chatStorageRepo.GetChatByDevice(deviceID, normalizedJID.String())
 
 		// Try 2: Standard s.whatsapp.net format
@@ -599,6 +600,56 @@ func applyCachedPushNamesToChats(ctx context.Context, chatStorageRepo domainChat
 	}
 }
 
+// deduplicateLIDChats finds and merges LID-based chats that have phone number mappings
+func deduplicateLIDChats(ctx context.Context, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client, deviceID string) {
+	if chatStorageRepo == nil || client == nil {
+		return
+	}
+
+	// Get all LID-based chats
+	lidChats, err := chatStorageRepo.GetLIDChats(deviceID)
+	if err != nil {
+		log.Warnf("Failed to get LID chats for deduplication: %v", err)
+		return
+	}
+
+	if len(lidChats) == 0 {
+		return
+	}
+
+	log.Infof("Found %d LID-based chats to check for deduplication", len(lidChats))
+
+	merged := 0
+	for _, chat := range lidChats {
+		// Parse the LID JID
+		lidJID, err := types.ParseJID(chat.JID)
+		if err != nil {
+			log.Warnf("Failed to parse LID JID %s: %v", chat.JID, err)
+			continue
+		}
+
+		// Try to resolve to phone number
+		phoneJID := NormalizeJIDFromLIDWithContext(lidJID, client)
+
+		// If resolution succeeded (different JID returned)
+		if phoneJID.Server != "lid" {
+			phoneJIDStr := phoneJID.String()
+
+			// Attempt to merge
+			if err := chatStorageRepo.MergeLIDChat(deviceID, chat.JID, phoneJIDStr); err != nil {
+				log.Warnf("Failed to merge LID chat %s into %s: %v", chat.JID, phoneJIDStr, err)
+			} else {
+				merged++
+				log.Debugf("Merged LID chat %s into %s", chat.JID, phoneJIDStr)
+			}
+		}
+	}
+
+	if merged > 0 {
+		log.Infof("Deduplicated %d LID-based chats", merged)
+	}
+}
+
 // extractPhoneFromJID extracts the phone number (user part) from a JID string
 func extractPhoneFromJID(jid string) string {
 	// JID format: phone@server or phone:device@server
@@ -629,7 +680,7 @@ func extractPhoneFromJID(jid string) string {
 func forwardHistorySyncCompleteToWebhook(ctx context.Context, client *whatsmeow.Client, syncType string) {
 	deviceID := ""
 	if client != nil && client.Store != nil && client.Store.ID != nil {
-		deviceJID := NormalizeJIDFromLID(ctx, client.Store.ID.ToNonAD(), client)
+		deviceJID := NormalizeJIDFromLIDWithContext(client.Store.ID.ToNonAD(), client)
 		deviceID = deviceJID.ToNonAD().String()
 	}
 

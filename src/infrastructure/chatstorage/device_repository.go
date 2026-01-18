@@ -182,3 +182,19 @@ func (r *DeviceRepository) GetDeviceRecord(deviceID string) (*domainChatStorage.
 func (r *DeviceRepository) DeleteDeviceRecord(deviceID string) error {
 	return r.base.DeleteDeviceRecord(deviceID)
 }
+
+func (r *DeviceRepository) MergeLIDChat(deviceID, lidJID, phoneJID string) error {
+	target := deviceID
+	if target == "" {
+		target = r.deviceID
+	}
+	return r.base.MergeLIDChat(target, lidJID, phoneJID)
+}
+
+func (r *DeviceRepository) GetLIDChats(deviceID string) ([]*domainChatStorage.Chat, error) {
+	target := deviceID
+	if target == "" {
+		target = r.deviceID
+	}
+	return r.base.GetLIDChats(target)
+}
