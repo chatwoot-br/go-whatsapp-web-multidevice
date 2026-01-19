@@ -1,6 +1,10 @@
 package utils
 
-import "testing"
+import (
+	"testing"
+
+	"go.mau.fi/whatsmeow/types"
+)
 
 func TestDetermineMediaExtension(t *testing.T) {
 	tests := []struct {
@@ -48,5 +52,34 @@ func TestDetermineMediaExtension(t *testing.T) {
 				t.Fatalf("determineMediaExtension() = %q, want %q", got, tt.wantSuffix)
 			}
 		})
+	}
+}
+
+func TestValidateAndNormalizeJID_GroupJIDPassthrough(t *testing.T) {
+	// Group JIDs should pass through without modification
+	jid := "120363123456789012@g.us"
+	result, err := ValidateAndNormalizeJID(nil, jid)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := types.JID{User: "120363123456789012", Server: "g.us"}
+	if result.User != expected.User || result.Server != expected.Server {
+		t.Errorf("got %v, want %v", result, expected)
+	}
+}
+
+func TestValidateAndNormalizeJID_NonUserJIDPassthrough(t *testing.T) {
+	// Newsletter and other non-user JIDs should pass through
+	jid := "120363123456789012@newsletter"
+	result, err := ValidateAndNormalizeJID(nil, jid)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Server != "newsletter" {
+		t.Errorf("got server %s, want newsletter", result.Server)
 	}
 }

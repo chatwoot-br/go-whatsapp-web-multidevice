@@ -662,6 +662,76 @@ func ValidateJidWithLogin(client *whatsmeow.Client, jid string) (types.JID, erro
 	return ParseJID(jid)
 }
 
+// ValidateAndNormalizeJID validates JID and returns WhatsApp's normalized JID.
+// For user JIDs (@s.whatsapp.net), it queries WhatsApp to get the canonical phone number.
+// This handles cases like Brazilian numbers where 5566996679626 normalizes to 556696679626.
+// For non-user JIDs (groups, newsletters), it returns the parsed JID unchanged.
+func ValidateAndNormalizeJID(client *whatsmeow.Client, jid string) (types.JID, error) {
+	// For non-user JIDs (groups, newsletters), skip normalization
+	if !strings.Contains(jid, "@s.whatsapp.net") {
+		return ParseJID(jid)
+	}
+
+	// If no client provided, fall back to simple parsing
+	if client == nil {
+		return ParseJID(jid)
+	}
+
+	MustLogin(client)
+
+	// Extract phone number from JID
+	phone := strings.TrimSuffix(jid, "@s.whatsapp.net")
+	if phone == "" {
+		return types.JID{}, pkgError.InvalidJID("Empty phone number")
+	}
+
+	// whatsmeow expects international format with + prefix
+	if !strings.HasPrefix(phone, "+") {
+		phone = "+" + phone
+	}
+
+	// Query WhatsApp for the canonical JID
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	data, err := client.IsOnWhatsApp(ctx, []string{phone})
+	if err != nil {
+		logrus.Warnf("Failed to query WhatsApp for %s: %v", jid, err)
+		// Fall back to original JID if query fails
+		if config.WhatsappAccountValidation {
+			return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Failed to validate phone %s: %v", jid, err))
+		}
+		return ParseJID(jid)
+	}
+
+	// Empty response means number not found
+	if len(data) == 0 {
+		if config.WhatsappAccountValidation {
+			return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on WhatsApp", jid))
+		}
+		return ParseJID(jid)
+	}
+
+	// Check results and return normalized JID
+	for _, v := range data {
+		if !v.IsIn {
+			if config.WhatsappAccountValidation {
+				return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on WhatsApp", jid))
+			}
+			return ParseJID(jid)
+		}
+
+		// Return WhatsApp's canonical JID (normalized phone number)
+		if !v.JID.IsEmpty() {
+			logrus.Debugf("Normalized JID %s to %s", jid, v.JID.String())
+			return v.JID, nil
+		}
+	}
+
+	// Fallback to original
+	return ParseJID(jid)
+}
+
 // ResolveJIDForSend resolves a JID for sending messages, using LID when available.
 // This ensures messages are delivered to the correct contact even if their phone number changed.
 // Use this ONLY for client.SendMessage operations, not for comparisons or app state.
