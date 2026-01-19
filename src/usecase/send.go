@@ -207,7 +207,7 @@ func (service serviceSend) SendImage(ctx context.Context, request domainSend.Ima
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -375,7 +375,7 @@ func (service serviceSend) SendFile(ctx context.Context, request domainSend.File
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.BaseRequest.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.BaseRequest.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -648,7 +648,7 @@ func (service serviceSend) SendVideo(ctx context.Context, request domainSend.Vid
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.BaseRequest.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.BaseRequest.Phone)
 	if err != nil {
 		return response, err
 	}
