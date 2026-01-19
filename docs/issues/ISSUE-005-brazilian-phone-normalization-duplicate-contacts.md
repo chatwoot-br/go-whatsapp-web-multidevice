@@ -1,6 +1,6 @@
 # ISSUE-005: Brazilian Phone Number Normalization Causes Duplicate Contacts
 
-## Status: Open
+## Status: Fixed
 
 ## Summary
 When Chatwoot sends messages to a Brazilian phone number with the 9-digit mobile format (e.g., `5566996679626`), the system resolves it to a different LID than the contact's actual LID. This occurs because WhatsApp normalizes Brazilian numbers to the 8-digit format internally, but the system ignores this normalization and uses the original input number for LID lookup.
@@ -189,6 +189,36 @@ func ValidateAndNormalizeJID(client *whatsmeow.Client, jid string) (types.JID, e
 ### Option 2: Normalize at the entry point
 
 Add Brazilian phone normalization logic before any JID operations.
+
+## Fix Implementation
+
+**Status:** Fixed on 2026-01-19
+
+### Changes Made
+
+1. **Added `ValidateAndNormalizeJID` function** (`src/pkg/utils/whatsapp.go`)
+   - Queries WhatsApp to get canonical JID using `client.IsOnWhatsApp()`
+   - Returns normalized phone number instead of original input
+   - Handles non-user JIDs (groups, newsletters) without modification
+
+2. **Updated all message sending callers** (35 occurrences)
+   - `src/usecase/send.go` - SendText, SendImage, SendFile, SendVideo, etc.
+   - `src/usecase/message.go` - MarkAsRead, ReactMessage, etc.
+   - `src/usecase/chat.go`, `group.go`, `user.go`, `newsletter.go`
+
+### Commits
+
+- `58ed55d` feat(utils): add ValidateAndNormalizeJID for phone normalization
+- `e9861b8` fix(utils): add test coverage and fix error message casing
+- `437d6b5` fix(send): use normalized JID for SendText
+- `3f9095e` fix(send): use normalized JID for SendImage, SendFile, SendVideo
+- `4d6a979` fix: update all callers to use ValidateAndNormalizeJID
+
+### Verification
+
+1. Build: PASS
+2. Tests: All pass
+3. No remaining callers of old `ValidateJidWithLogin` function
 
 ## Testing
 
