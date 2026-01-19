@@ -97,7 +97,7 @@ func (service serviceSend) SendText(ctx context.Context, request domainSend.Mess
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.BaseRequest.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.BaseRequest.Phone)
 	if err != nil {
 		return response, err
 	}
