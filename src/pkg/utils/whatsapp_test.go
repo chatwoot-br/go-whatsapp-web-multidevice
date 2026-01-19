@@ -83,3 +83,17 @@ func TestValidateAndNormalizeJID_NonUserJIDPassthrough(t *testing.T) {
 		t.Errorf("got server %s, want newsletter", result.Server)
 	}
 }
+
+func TestValidateAndNormalizeJID_UserJIDWithNilClient(t *testing.T) {
+	// User JID with nil client should fall back to ParseJID
+	jid := "5511999999999@s.whatsapp.net"
+	result, err := ValidateAndNormalizeJID(nil, jid)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.User != "5511999999999" || result.Server != "s.whatsapp.net" {
+		t.Errorf("got %v, want 5511999999999@s.whatsapp.net", result)
+	}
+}

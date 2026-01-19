@@ -707,7 +707,7 @@ func ValidateAndNormalizeJID(client *whatsmeow.Client, jid string) (types.JID, e
 	// Empty response means number not found
 	if len(data) == 0 {
 		if config.WhatsappAccountValidation {
-			return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on WhatsApp", jid))
+			return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on whatsapp", jid))
 		}
 		return ParseJID(jid)
 	}
@@ -716,7 +716,7 @@ func ValidateAndNormalizeJID(client *whatsmeow.Client, jid string) (types.JID, e
 	for _, v := range data {
 		if !v.IsIn {
 			if config.WhatsappAccountValidation {
-				return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on WhatsApp", jid))
+				return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on whatsapp", jid))
 			}
 			return ParseJID(jid)
 		}
