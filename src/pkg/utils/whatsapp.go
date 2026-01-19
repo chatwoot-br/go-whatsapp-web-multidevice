@@ -652,11 +652,12 @@ func IsOnWhatsapp(client *whatsmeow.Client, jid string) bool {
 }
 
 // ValidateJidWithLogin validates JID with login check (returns phone JID)
+// Deprecated: Use ValidateAndNormalizeJID instead, which returns WhatsApp's normalized JID.
 func ValidateJidWithLogin(client *whatsmeow.Client, jid string) (types.JID, error) {
 	MustLogin(client)
 
 	if config.WhatsappAccountValidation && !IsOnWhatsapp(client, jid) {
-		return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on whatsapp", jid))
+		return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on WhatsApp", jid))
 	}
 
 	return ParseJID(jid)
@@ -707,7 +708,7 @@ func ValidateAndNormalizeJID(client *whatsmeow.Client, jid string) (types.JID, e
 	// Empty response means number not found
 	if len(data) == 0 {
 		if config.WhatsappAccountValidation {
-			return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on whatsapp", jid))
+			return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on WhatsApp", jid))
 		}
 		return ParseJID(jid)
 	}
@@ -716,7 +717,7 @@ func ValidateAndNormalizeJID(client *whatsmeow.Client, jid string) (types.JID, e
 	for _, v := range data {
 		if !v.IsIn {
 			if config.WhatsappAccountValidation {
-				return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on whatsapp", jid))
+				return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on WhatsApp", jid))
 			}
 			return ParseJID(jid)
 		}
