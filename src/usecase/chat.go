@@ -240,7 +240,7 @@ func (service serviceChat) PinChat(ctx context.Context, request domainChat.PinCh
 	}
 
 	// Validate JID and ensure connection
-	targetJID, err := utils.ValidateJidWithLogin(client, request.ChatJID)
+	targetJID, err := utils.ValidateAndNormalizeJID(client, request.ChatJID)
 	if err != nil {
 		return response, err
 	}
@@ -287,7 +287,7 @@ func (service serviceChat) SetDisappearingTimer(ctx context.Context, request dom
 	}
 
 	// Validate JID and ensure connection
-	targetJID, err := utils.ValidateJidWithLogin(client, request.ChatJID)
+	targetJID, err := utils.ValidateAndNormalizeJID(client, request.ChatJID)
 	if err != nil {
 		return response, err
 	}
@@ -337,7 +337,7 @@ func (service serviceChat) ArchiveChat(ctx context.Context, request domainChat.A
 	}
 
 	// Validate JID and ensure connection
-	targetJID, err := utils.ValidateJidWithLogin(client, request.ChatJID)
+	targetJID, err := utils.ValidateAndNormalizeJID(client, request.ChatJID)
 	if err != nil {
 		return response, err
 	}
