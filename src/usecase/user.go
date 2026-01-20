@@ -48,7 +48,7 @@ func (service serviceUser) Info(ctx context.Context, request domainUser.InfoRequ
 	}
 
 	var jids []types.JID
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -112,7 +112,7 @@ func (service serviceUser) Avatar(ctx context.Context, request domainUser.Avatar
 		return response, err
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -367,7 +367,7 @@ func (service serviceUser) BusinessProfile(ctx context.Context, request domainUs
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}
