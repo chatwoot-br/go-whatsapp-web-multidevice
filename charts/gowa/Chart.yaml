@@ -2,8 +2,8 @@ apiVersion: v2
 name: gowa
 description: A Helm chart for deploying go-whatsapp-web-multidevice - WhatsApp Web API server
 type: application
-version: 8.1.6
-appVersion: "v8.1.0-6"
+version: 8.1.7
+appVersion: "v8.1.0-7"
 keywords:
   - whatsapp
   - api

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.1.0+7] - 2026-01-20
+
+### Fixed
+- fix(utils): normalize Brazilian phone numbers to prevent duplicate contacts
+  - Add ValidateAndNormalizeJID function that handles Brazilian 9-digit mobile normalization
+  - Update all callers across send, chat, group, message, newsletter, and user usecases
+  - Mark ValidateJidWithLogin as deprecated in favor of the new function
+
 ## [v8.1.0+6] - 2026-01-18
 
 ### Fixed
