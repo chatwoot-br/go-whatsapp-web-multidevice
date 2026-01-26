@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.1.2+1] - 2026-01-26 (Synced with upstream v8.1.2)
+
+### Upstream Changes
+- feat: add webhook events for newsletters and group.joined
+- fix: react to other users' messages by looking up IsFromMe from database (#535)
+- fix: webhook event whitelist filtering for groups and proper event names (#539)
+- fix(security): prevent cross-device data leak in chat message queries (#525)
+- fix(device): sort device list by created_at for stable UI ordering (#528)
+- fix: store phone-sent messages in chat history (issue #526) (#530)
+- chore: update dependencies (golang.org/x/text to v0.33.0, app version to v8.1.2)
+
+### Fork Changes
+- chore: update whatsmeow to latest (v0.0.0-20260126173513-4dbbef8d4d4a)
+- fix(docker): add mailcap package for MIME types database
+
 ## [v8.1.0+7] - 2026-01-20
 
 ### Fixed

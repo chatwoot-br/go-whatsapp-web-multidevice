@@ -15,7 +15,8 @@ RUN go build -a -ldflags="-w -s" -o /app/whatsapp
 ## STEP 2 build a smaller image
 #############################
 FROM alpine:3.20
-RUN apk add --no-cache ffmpeg libwebp-tools tzdata
+# Install runtime dependencies including mailcap for MIME types database
+RUN apk add --no-cache ffmpeg libwebp-tools tzdata mailcap
 ENV TZ=UTC
 WORKDIR /app
 # Copy compiled from builder.
