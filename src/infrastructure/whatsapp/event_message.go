@@ -46,7 +46,7 @@ func forwardMessageToWebhook(ctx context.Context, client *whatsmeow.Client, evt 
 		"payload":   webhookEvent.Payload,
 	}
 
-	return forwardPayloadToConfiguredWebhooks(ctx, payload, "message event")
+	return forwardPayloadToConfiguredWebhooks(ctx, payload, webhookEvent.Event)
 }
 
 func createWebhookEvent(ctx context.Context, client *whatsmeow.Client, evt *events.Message, chatStorageRepo domainChatStorage.IChatStorageRepository) (*WebhookEvent, error) {
