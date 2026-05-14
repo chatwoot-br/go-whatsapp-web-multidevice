@@ -28,7 +28,7 @@ func TestBuildEventPayloadIncludesIsFromMe(t *testing.T) {
 		},
 	}
 
-	eventType, payload, err := buildEventPayload(context.Background(), nil, evt)
+	eventType, payload, err := buildEventPayload(context.Background(), nil, evt, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -66,7 +66,7 @@ func TestBuildEventPayloadRevokedIncludesIsFromMe(t *testing.T) {
 		},
 	}
 
-	eventType, payload, err := buildEventPayload(context.Background(), nil, evt)
+	eventType, payload, err := buildEventPayload(context.Background(), nil, evt, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -112,7 +112,7 @@ func TestBuildEventPayloadImageWithCaption(t *testing.T) {
 		},
 	}
 
-	eventType, payload, err := buildEventPayload(context.Background(), nil, evt)
+	eventType, payload, err := buildEventPayload(context.Background(), nil, evt, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -148,7 +148,7 @@ func TestBuildEventPayloadVideoWithCaption(t *testing.T) {
 		},
 	}
 
-	eventType, payload, err := buildEventPayload(context.Background(), nil, evt)
+	eventType, payload, err := buildEventPayload(context.Background(), nil, evt, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -181,7 +181,7 @@ func TestBuildEventPayloadImageWithoutCaption(t *testing.T) {
 		},
 	}
 
-	_, payload, err := buildEventPayload(context.Background(), nil, evt)
+	_, payload, err := buildEventPayload(context.Background(), nil, evt, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -210,7 +210,7 @@ func TestBuildEventPayloadDocumentWithCaption(t *testing.T) {
 		},
 	}
 
-	eventType, payload, err := buildEventPayload(context.Background(), nil, evt)
+	eventType, payload, err := buildEventPayload(context.Background(), nil, evt, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -247,7 +247,7 @@ func TestBuildEventPayloadContactIncludesPhoneNumber(t *testing.T) {
 		},
 	}
 
-	_, payload, err := buildEventPayload(context.Background(), nil, evt)
+	_, payload, err := buildEventPayload(context.Background(), nil, evt, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -295,7 +295,7 @@ func TestBuildEventPayloadContactsArrayIncludesPhoneNumbers(t *testing.T) {
 		},
 	}
 
-	_, payload, err := buildEventPayload(context.Background(), nil, evt)
+	_, payload, err := buildEventPayload(context.Background(), nil, evt, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

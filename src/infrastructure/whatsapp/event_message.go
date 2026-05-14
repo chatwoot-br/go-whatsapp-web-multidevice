@@ -12,6 +12,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
+	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
 	pkgError "github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/error"
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/sirupsen/logrus"
@@ -42,8 +43,8 @@ type webhookContactPayload struct {
 }
 
 // forwardMessageToWebhook is a helper function to forward message event to webhook url
-func forwardMessageToWebhook(ctx context.Context, client *whatsmeow.Client, evt *events.Message) error {
-	webhookEvent, err := createWebhookEvent(ctx, client, evt)
+func forwardMessageToWebhook(ctx context.Context, client *whatsmeow.Client, evt *events.Message, chatStorageRepo domainChatStorage.IChatStorageRepository) error {
+	webhookEvent, err := createWebhookEvent(ctx, client, evt, chatStorageRepo)
 	if err != nil {
 		return err
 	}
@@ -57,7 +58,7 @@ func forwardMessageToWebhook(ctx context.Context, client *whatsmeow.Client, evt 
 	return forwardPayloadToConfiguredWebhooks(ctx, payload, webhookEvent.Event)
 }
 
-func createWebhookEvent(ctx context.Context, client *whatsmeow.Client, evt *events.Message) (*WebhookEvent, error) {
+func createWebhookEvent(ctx context.Context, client *whatsmeow.Client, evt *events.Message, chatStorageRepo domainChatStorage.IChatStorageRepository) (*WebhookEvent, error) {
 	webhookEvent := &WebhookEvent{
 		Event:   EventTypeMessage,
 		Payload: make(map[string]any),
@@ -70,7 +71,7 @@ func createWebhookEvent(ctx context.Context, client *whatsmeow.Client, evt *even
 	}
 
 	// Determine event type and build payload
-	eventType, payload, err := buildEventPayload(ctx, client, evt)
+	eventType, payload, err := buildEventPayload(ctx, client, evt, chatStorageRepo)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +82,7 @@ func createWebhookEvent(ctx context.Context, client *whatsmeow.Client, evt *even
 	return webhookEvent, nil
 }
 
-func buildEventPayload(ctx context.Context, client *whatsmeow.Client, evt *events.Message) (string, map[string]any, error) {
+func buildEventPayload(ctx context.Context, client *whatsmeow.Client, evt *events.Message, chatStorageRepo domainChatStorage.IChatStorageRepository) (string, map[string]any, error) {
 	payload := make(map[string]any)
 
 	msg := utils.UnwrapMessage(evt.Message)
@@ -97,6 +98,41 @@ func buildEventPayload(ctx context.Context, client *whatsmeow.Client, evt *event
 	// Set from_name (pushname)
 	if pushname := evt.Info.PushName; pushname != "" {
 		payload["from_name"] = pushname
+	}
+
+	// For outgoing messages (is_from_me), look up the chat name for contact creation
+	// Try multiple sources: chat storage (history sync) → contact store (WhatsApp contacts)
+	if evt.Info.IsFromMe {
+		outgoingChatJID := evt.Info.Chat
+		chatJIDStr := outgoingChatJID.String()
+		var chatName string
+
+		// First try: chat storage (populated during history sync)
+		if chatStorageRepo != nil {
+			if chat, err := chatStorageRepo.GetChat(chatJIDStr); err == nil && chat != nil && chat.Name != "" {
+				chatName = chat.Name
+				logrus.Debugf("[Webhook] Found chat_name from storage: %s for %s", chatName, chatJIDStr)
+			}
+		}
+
+		// Second try: WhatsApp contact store (for contacts not in history sync)
+		if chatName == "" && client != nil && client.Store != nil && client.Store.Contacts != nil {
+			if contact, err := client.Store.Contacts.GetContact(ctx, outgoingChatJID.ToNonAD()); err == nil {
+				if contact.FullName != "" {
+					chatName = contact.FullName
+					logrus.Debugf("[Webhook] Found chat_name from contacts: %s for %s", chatName, chatJIDStr)
+				} else if contact.PushName != "" {
+					chatName = contact.PushName
+					logrus.Debugf("[Webhook] Found chat_name from contacts pushname: %s for %s", chatName, chatJIDStr)
+				}
+			}
+		}
+
+		if chatName != "" {
+			payload["chat_name"] = chatName
+		} else {
+			logrus.Debugf("[Webhook] No chat_name found for outgoing message to %s", chatJIDStr)
+		}
 	}
 
 	// Check for protocol messages (revoke, edit)
