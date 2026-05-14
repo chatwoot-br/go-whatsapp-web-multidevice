@@ -58,7 +58,28 @@ func normalizePhoneBR(phone string) string {
 // normalizePhoneBR is the deterministic fallback when IsOnWhatsApp is
 // unavailable.
 func ValidateAndNormalizeJID(client *whatsmeow.Client, jid string) (types.JID, error) {
-	// For non-user JIDs (groups, newsletters, lid), skip normalization.
+	// LID JIDs route through Slice 3's LID resolution to recover the canonical
+	// phone JID, then fall through to the BR normalization pipeline.
+	if strings.Contains(jid, "@lid") {
+		if client == nil {
+			return ParseJID(jid)
+		}
+		parsed, err := ParseJID(jid)
+		if err != nil {
+			return types.JID{}, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		resolved := ResolveLIDToPhone(ctx, parsed, client)
+		// If resolution returned the same @lid JID, no phone mapping exists yet.
+		if resolved.Server == "lid" {
+			return resolved, nil
+		}
+		// Re-enter the pipeline with the resolved phone JID for BR normalization.
+		jid = resolved.String()
+	}
+
+	// For non-user JIDs (groups, newsletters), skip normalization.
 	if !strings.Contains(jid, "@s.whatsapp.net") {
 		return ParseJID(jid)
 	}
