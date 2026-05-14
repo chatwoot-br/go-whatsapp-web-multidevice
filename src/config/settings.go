@@ -45,6 +45,12 @@ var (
 	WhatsappAccountValidation                  = true
 	WhatsappPresenceOnConnect                  = "unavailable" // Presence to send on connect: "available", "unavailable", or "none"
 
+	// Proxy configuration for WhatsApp connections
+	WhatsappProxyURL         string  // Proxy URL (http://, https://, socks5://)
+	WhatsappProxyNoWebsocket = false // Don't use proxy for websocket connections
+	WhatsappProxyOnlyLogin   = false // Use proxy only for pre-login websocket
+	WhatsappProxyNoMedia     = false // Don't use proxy for media uploads/downloads
+
 	ChatStorageURI               = "file:storages/chatstorage.db"
 	ChatStorageEnableForeignKeys = true
 	ChatStorageEnableWAL         = true

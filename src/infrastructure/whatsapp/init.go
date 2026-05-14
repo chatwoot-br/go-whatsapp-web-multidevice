@@ -8,6 +8,7 @@ import (
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
 	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
+	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -106,6 +107,20 @@ func InitWaCLI(ctx context.Context, storeContainer, keysStoreContainer *sqlstore
 	client := whatsmeow.NewClient(device, newFilteredLogger(baseLogger))
 	client.EnableAutoReconnect = true
 	client.AutoTrustIdentity = true
+
+	// Configure proxy if specified
+	if config.WhatsappProxyURL != "" {
+		proxyOpts := whatsmeow.SetProxyOptions{
+			NoWebsocket: config.WhatsappProxyNoWebsocket,
+			OnlyLogin:   config.WhatsappProxyOnlyLogin,
+			NoMedia:     config.WhatsappProxyNoMedia,
+		}
+		if err := client.SetProxyAddress(config.WhatsappProxyURL, proxyOpts); err != nil {
+			logrus.Warnf("Failed to set proxy: %v", err)
+		} else {
+			logrus.Infof("Proxy configured: %s", config.WhatsappProxyURL)
+		}
+	}
 
 	deviceRepo := newDeviceChatStorage(instanceID, chatStorageRepo)
 	instance := NewDeviceInstance(instanceID, client, deviceRepo)

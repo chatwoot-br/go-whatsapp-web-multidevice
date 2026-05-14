@@ -19,6 +19,7 @@ import (
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // DeviceManager keeps a registry of active device instances.
@@ -485,6 +486,20 @@ func (m *DeviceManager) EnsureClient(ctx context.Context, deviceID string) (*Dev
 	client.EnableAutoReconnect = true
 	client.AutoTrustIdentity = true
 
+	// Configure proxy if specified
+	if config.WhatsappProxyURL != "" {
+		proxyOpts := whatsmeow.SetProxyOptions{
+			NoWebsocket: config.WhatsappProxyNoWebsocket,
+			OnlyLogin:   config.WhatsappProxyOnlyLogin,
+			NoMedia:     config.WhatsappProxyNoMedia,
+		}
+		if err := client.SetProxyAddress(config.WhatsappProxyURL, proxyOpts); err != nil {
+			logrus.Warnf("[DEVICE_MANAGER] Failed to set proxy for device %s: %v", deviceID, err)
+		} else {
+			logrus.Infof("[DEVICE_MANAGER] Proxy configured for device %s: %s", deviceID, config.WhatsappProxyURL)
+		}
+	}
+
 	repo := inst.GetChatStorage()
 	if repo == nil {
 		repo = newDeviceChatStorage(deviceID, m.storage)
@@ -604,6 +619,21 @@ func configureDeviceProps() {
 	osName := fmt.Sprintf("%s %s", config.AppOs, config.AppVersion)
 	store.DeviceProps.PlatformType = &config.AppPlatform
 	store.DeviceProps.Os = &osName
+
+	// Phase 1: Enable maximum history sync on initial pairing
+	// This requests up to 1 year of history instead of default 3 months
+	// Only affects NEW device pairings - existing devices need re-pairing
+	store.DeviceProps.RequireFullSync = proto.Bool(true)
+
+	// Enable ON_DEMAND history sync capability (experimental)
+	// These flags may enable the server to respond to BuildHistorySyncRequest() calls
+	// See: https://github.com/tulir/whatsmeow/issues/654
+	if store.DeviceProps.HistorySyncConfig != nil {
+		store.DeviceProps.HistorySyncConfig.OnDemandReady = proto.Bool(true)
+		store.DeviceProps.HistorySyncConfig.CompleteOnDemandReady = proto.Bool(true)
+	}
+
+	logrus.Info("[DEVICE_PROPS] Configured: RequireFullSync=true, OnDemandReady=true")
 }
 
 // StoreInfo returns configured store URIs for observability.

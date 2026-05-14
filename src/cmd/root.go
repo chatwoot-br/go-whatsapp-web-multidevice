@@ -147,6 +147,20 @@ func initEnvConfig() {
 		config.WhatsappPresenceOnConnect = envPresenceOnConnect
 	}
 
+	// WhatsApp Proxy settings
+	if envProxyURL := viper.GetString("whatsapp_proxy_url"); envProxyURL != "" {
+		config.WhatsappProxyURL = envProxyURL
+	}
+	if viper.IsSet("whatsapp_proxy_no_websocket") {
+		config.WhatsappProxyNoWebsocket = viper.GetBool("whatsapp_proxy_no_websocket")
+	}
+	if viper.IsSet("whatsapp_proxy_only_login") {
+		config.WhatsappProxyOnlyLogin = viper.GetBool("whatsapp_proxy_only_login")
+	}
+	if viper.IsSet("whatsapp_proxy_no_media") {
+		config.WhatsappProxyNoMedia = viper.GetBool("whatsapp_proxy_no_media")
+	}
+
 	// Chatwoot settings
 	if viper.IsSet("chatwoot_enabled") {
 		config.ChatwootEnabled = viper.GetBool("chatwoot_enabled")
@@ -296,6 +310,32 @@ func initFlags() {
 		"presence-on-connect", "",
 		config.WhatsappPresenceOnConnect,
 		`presence to send on connect: "available", "unavailable", or "none" --presence-on-connect <string> | example: --presence-on-connect="unavailable"`,
+	)
+
+	// WhatsApp Proxy flags
+	rootCmd.PersistentFlags().StringVarP(
+		&config.WhatsappProxyURL,
+		"whatsapp-proxy-url", "",
+		config.WhatsappProxyURL,
+		`proxy URL for WhatsApp connections (http://, https://, socks5://) --whatsapp-proxy-url <string> | example: --whatsapp-proxy-url="socks5://user:pass@proxy:1080"`,
+	)
+	rootCmd.PersistentFlags().BoolVarP(
+		&config.WhatsappProxyNoWebsocket,
+		"whatsapp-proxy-no-websocket", "",
+		config.WhatsappProxyNoWebsocket,
+		`don't use proxy for websocket connections --whatsapp-proxy-no-websocket <true/false> | example: --whatsapp-proxy-no-websocket=true`,
+	)
+	rootCmd.PersistentFlags().BoolVarP(
+		&config.WhatsappProxyOnlyLogin,
+		"whatsapp-proxy-only-login", "",
+		config.WhatsappProxyOnlyLogin,
+		`use proxy only for pre-login websocket --whatsapp-proxy-only-login <true/false> | example: --whatsapp-proxy-only-login=true`,
+	)
+	rootCmd.PersistentFlags().BoolVarP(
+		&config.WhatsappProxyNoMedia,
+		"whatsapp-proxy-no-media", "",
+		config.WhatsappProxyNoMedia,
+		`don't use proxy for media uploads/downloads --whatsapp-proxy-no-media <true/false> | example: --whatsapp-proxy-no-media=true`,
 	)
 
 	// Chatwoot flags
