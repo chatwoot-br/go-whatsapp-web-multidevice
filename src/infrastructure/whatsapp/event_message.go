@@ -65,7 +65,7 @@ func createWebhookEvent(ctx context.Context, client *whatsmeow.Client, evt *even
 
 	// Set device_id
 	if client != nil && client.Store != nil && client.Store.ID != nil {
-		deviceJID := NormalizeJIDFromLID(ctx, client.Store.ID.ToNonAD(), client)
+		deviceJID := utils.ResolveLIDToPhone(ctx, client.Store.ID.ToNonAD(), client)
 		webhookEvent.DeviceID = deviceJID.ToNonAD().String()
 	}
 
@@ -155,7 +155,7 @@ func buildFromFields(ctx context.Context, client *whatsmeow.Client, evt *events.
 	chatJID := evt.Info.Chat.ToNonAD()
 	if chatJID.Server == "lid" {
 		payload["chat_lid"] = chatJID.String()
-		chatJID = NormalizeJIDFromLID(ctx, chatJID, client).ToNonAD()
+		chatJID = utils.ResolveLIDToPhone(ctx, chatJID, client).ToNonAD()
 	}
 	payload["chat_id"] = chatJID.String()
 
@@ -164,7 +164,7 @@ func buildFromFields(ctx context.Context, client *whatsmeow.Client, evt *events.
 		payload["from_lid"] = senderJID.ToNonAD().String()
 	}
 
-	normalizedSenderJID := NormalizeJIDFromLID(ctx, senderJID, client)
+	normalizedSenderJID := utils.ResolveLIDToPhone(ctx, senderJID, client)
 	payload["from"] = normalizedSenderJID.ToNonAD().String()
 }
 

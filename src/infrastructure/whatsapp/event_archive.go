@@ -4,6 +4,7 @@ import (
 	"context"
 
 	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
+	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types/events"
@@ -24,7 +25,7 @@ func handleArchive(ctx context.Context, evt *events.Archive, chatStorageRepo dom
 	}
 
 	// Normalize JID from LID format (@lid) to regular format (@s.whatsapp.net)
-	jidStr := NormalizeJIDFromLID(ctx, evt.JID, client).String()
+	jidStr := utils.ResolveLIDToPhone(ctx, evt.JID, client).String()
 
 	logFields := logrus.Fields{"device_id": deviceID, "jid": jidStr}
 

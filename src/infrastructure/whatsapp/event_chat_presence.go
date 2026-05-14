@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
+	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
@@ -47,7 +48,7 @@ func createChatPresencePayload(ctx context.Context, evt *events.ChatPresence, de
 	if senderJID.Server == "lid" {
 		payload["from_lid"] = senderJID.ToNonAD().String()
 	}
-	normalizedSenderJID := NormalizeJIDFromLID(ctx, senderJID, client)
+	normalizedSenderJID := utils.ResolveLIDToPhone(ctx, senderJID, client)
 	payload["from"] = normalizedSenderJID.ToNonAD().String()
 
 	// Chat where the presence event occurred
