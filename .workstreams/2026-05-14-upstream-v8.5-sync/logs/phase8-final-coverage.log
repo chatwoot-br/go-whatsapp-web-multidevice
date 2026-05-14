@@ -1,0 +1,4 @@
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils	21.563s	coverage: 34.6% of statements
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatstorage	0.769s	coverage: 13.6% of statements
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp	1.240s	coverage: 12.1% of statements
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot	1.544s	coverage: 36.4% of statements

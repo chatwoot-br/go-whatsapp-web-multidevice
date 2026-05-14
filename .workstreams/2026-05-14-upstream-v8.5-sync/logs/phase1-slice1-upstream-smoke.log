@@ -1,0 +1,63 @@
+go: downloading go.mau.fi/whatsmeow v0.0.0-20260513140310-c551a4055c0f
+go: downloading github.com/gofiber/fiber/v2 v2.52.12
+go: downloading github.com/lib/pq v1.12.0
+go: downloading github.com/mark3labs/mcp-go v0.45.0
+go: downloading github.com/mattn/go-sqlite3 v1.14.42
+go: downloading github.com/PuerkitoBio/goquery v1.12.0
+go: downloading golang.org/x/image v0.37.0
+go: downloading golang.org/x/sys v0.44.0
+go: downloading github.com/inconshreveable/mousetrap v1.1.0
+go: downloading go.mau.fi/util v0.9.8
+go: downloading github.com/rs/zerolog v1.35.1
+go: downloading golang.org/x/crypto v0.51.0
+go: downloading golang.org/x/net v0.54.0
+go: downloading golang.org/x/sync v0.20.0
+go: downloading github.com/mattn/go-isatty v0.0.22
+go: downloading github.com/mattn/go-runewidth v0.0.21
+go: downloading github.com/klauspost/compress v1.18.5
+go: downloading golang.org/x/text v0.37.0
+go: downloading github.com/frankban/quicktest v1.14.6
+go: downloading github.com/petermattis/goid v0.0.0-20260330135022-df67b199bc81
+go: downloading golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
+go: downloading github.com/DATA-DOG/go-sqlmock v1.5.2
+go: downloading filippo.io/edwards25519 v1.2.0
+go: downloading github.com/vektah/gqlparser/v2 v2.5.33
+go: downloading github.com/xyproto/randomstring v1.2.0
+go: downloading gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15
+go: downloading github.com/clipperhouse/uax29/v2 v2.7.0
+go: downloading github.com/kr/pretty v0.3.1
+go: downloading github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883
+go: downloading github.com/buger/jsonparser v1.1.2
+go: downloading github.com/mailru/easyjson v0.9.2
+go: downloading github.com/agnivade/levenshtein v1.2.1
+go: downloading github.com/rogpeppe/go-internal v1.14.1
+go: downloading github.com/kr/text v0.2.0
+go: downloading github.com/sergi/go-diff v1.4.0
+TIDY_EXIT=0
+BUILD_EXIT=0
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/cmd	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/config	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/app	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chat	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/device	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/group	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/message	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/newsletter	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/send	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/user	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatstorage	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot	0.478s
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp	0.855s
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/error	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils	22.301s
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/mcp	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/mcp/helpers	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest/helpers	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest/middleware	1.686s
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/websocket	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/usecase	2.132s
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/validations	1.753s
+TEST_EXIT=0

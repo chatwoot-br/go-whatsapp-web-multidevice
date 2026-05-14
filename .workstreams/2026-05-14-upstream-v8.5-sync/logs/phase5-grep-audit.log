@@ -1,0 +1,99 @@
+/Users/woot/code/go-whatsapp-web-multidevice/src/.env.example:22:WHATSAPP_WEBHOOK_EVENTS=message,message.reaction,message.revoked,message.edited,message.ack,message.deleted,group.participants,chat_presence,call.offer,history_sync_complete
+/Users/woot/code/go-whatsapp-web-multidevice/src/.env.example:23:# DEPRECATED in v8.5: dead config; outgoing webhooks always forwarded. Use is_from_me payload field on the consumer side.
+/Users/woot/code/go-whatsapp-web-multidevice/src/.env.example:24:WHATSAPP_WEBHOOK_INCLUDE_OUTGOING=false
+/Users/woot/code/go-whatsapp-web-multidevice/src/ui/mcp/query.go:161:		mcp.WithBoolean("is_from_me",
+/Users/woot/code/go-whatsapp-web-multidevice/src/ui/mcp/query.go:208:		if value, ok := args["is_from_me"]; ok {
+/Users/woot/code/go-whatsapp-web-multidevice/src/ui/rest/chat.go:71:	// Parse is_from_me filter
+/Users/woot/code/go-whatsapp-web-multidevice/src/ui/rest/chat.go:72:	if isFromMeStr := c.Query("is_from_me"); isFromMeStr != "" {
+/Users/woot/code/go-whatsapp-web-multidevice/src/ui/rest/chat.go:73:		isFromMe := c.QueryBool("is_from_me")
+/Users/woot/code/go-whatsapp-web-multidevice/src/domains/chat/chat.go:25:	IsFromMe  *bool   `json:"is_from_me" query:"is_from_me"`
+/Users/woot/code/go-whatsapp-web-multidevice/src/domains/chat/chat.go:64:	IsFromMe  bool   `json:"is_from_me"`
+/Users/woot/code/go-whatsapp-web-multidevice/src/domains/chatstorage/chatstorage.go:25:	IsFromMe         bool      `db:"is_from_me"`
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/chatwoot_forward_test.go:41:				payload["is_from_me"] = tc.isFromMe
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/webhook_forward_test.go:215:		"contacts_array": []webhookContactPayload{
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_message_test.go:38:	if value, ok := payload["is_from_me"]; !ok {
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_message_test.go:39:		t.Fatalf("expected is_from_me in payload")
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_message_test.go:41:		t.Fatalf("expected is_from_me=true, got %v", value)
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_message_test.go:76:	if value, ok := payload["is_from_me"]; !ok {
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_message_test.go:77:		t.Fatalf("expected is_from_me in payload")
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_message_test.go:79:		t.Fatalf("expected is_from_me=true, got %v", value)
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_message_test.go:303:	contacts, ok := payload["contacts_array"].([]webhookContactPayload)
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_message_test.go:305:		t.Fatalf("expected contacts_array to be []webhookContactPayload, got %T", payload["contacts_array"])
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/chatstorage/sqlite_repository.go:90:		SELECT id, chat_jid, device_id, sender, content, timestamp, is_from_me,
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/chatstorage/sqlite_repository.go:243:		UPDATE messages SET sender = ?, content = ?, timestamp = ?, is_from_me = ?,
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/chatstorage/sqlite_repository.go:259:				id, chat_jid, device_id, sender, content, timestamp, is_from_me,
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/chatstorage/sqlite_repository.go:285:		UPDATE messages SET sender = ?, content = ?, timestamp = ?, is_from_me = ?,
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/chatstorage/sqlite_repository.go:297:			id, chat_jid, device_id, sender, content, timestamp, is_from_me,
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/chatstorage/sqlite_repository.go:375:		conditions = append(conditions, "is_from_me = ?")
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/chatstorage/sqlite_repository.go:380:		SELECT id, chat_jid, device_id, sender, content, timestamp, is_from_me,
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/chatstorage/sqlite_repository.go:445:		SELECT id, chat_jid, device_id, sender, content, timestamp, is_from_me,
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/chatstorage/sqlite_repository.go:1338:			is_from_me BOOLEAN DEFAULT FALSE,
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/history_sync.go:26:// dispatch the fork-specific history_sync_complete event after a quiet period to
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/history_sync.go:380:			"is_from_me":        msgKey.GetFromMe(),
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/forward_history_sync.go:10:// forwardHistorySyncCompleteToWebhook dispatches the fork-specific history_sync_complete
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/forward_history_sync.go:19://	  "event":     "history_sync_complete",
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/forward_history_sync.go:31:		"event":     "history_sync_complete",
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/forward_history_sync.go:39:	if err := forwardPayloadToConfiguredWebhooks(ctx, payload, "history_sync_complete"); err != nil {
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/forward_history_sync.go:40:		log.Errorf("Failed to forward history_sync_complete webhook: %v", err)
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_chat_presence.go:35:				logrus.Errorf("Failed to forward chat_presence event to webhook: %v", err)
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_chat_presence.go:67:	body["event"] = "chat_presence"
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_chat_presence.go:80:	return forwardPayloadToConfiguredWebhooks(ctx, payload, "chat_presence")
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/webhook_forward.go:147:	isFromMe, _ := data["is_from_me"].(bool)
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/webhook_forward.go:149:	logrus.Infof("Chatwoot: Processing message from %s (from_name: %s, chat_id: %s, is_from_me: %v)", from, fromName, chatID, isFromMe)
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/webhook_forward.go:267:	if isFromMe, ok := data["is_from_me"].(bool); ok && isFromMe {
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/webhook_forward.go:281:	if contactsArray, ok := data["contacts_array"]; ok && contactsArray != nil {
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_message.go:92:	payload["is_from_me"] = evt.Info.IsFromMe
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_message.go:357:		payload["contacts_array"] = buildWebhookContactsArrayPayload(contactsArrayMessage.GetContacts())
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_call.go:81:	body["event"] = "call.offer"
+/Users/woot/code/go-whatsapp-web-multidevice/src/infrastructure/whatsapp/event_call.go:94:	return forwardPayloadToConfiguredWebhooks(ctx, payload, "call.offer")
+/Users/woot/code/go-whatsapp-web-multidevice/src/views/components/ChatMessages.js:85:          params.append("is_from_me", this.isFromMe);
+/Users/woot/code/go-whatsapp-web-multidevice/src/views/components/ChatMessages.js:154:      if (message.is_from_me) return "Me";
+/Users/woot/code/go-whatsapp-web-multidevice/src/views/components/ChatMessages.js:303:      if (message.is_from_me) {
+/Users/woot/code/go-whatsapp-web-multidevice/src/views/components/ChatMessages.js:571:                                     :class="message.is_from_me ? 'blue' : 'grey'">
+/Users/woot/code/go-whatsapp-web-multidevice/readme.md:142:  | `call.offer`         | Incoming call received                        |
+/Users/woot/code/go-whatsapp-web-multidevice/readme.md:143:  | `history_sync_complete` | Fork-only: emitted once after history sync settles (debounced) |
+/Users/woot/code/go-whatsapp-web-multidevice/readme.md:211:| `WHATSAPP_WEBHOOK_INCLUDE_OUTGOING`     | **Deprecated** (v8.5+): no-op. Outgoing webhooks are always forwarded; consumers filter on `is_from_me`. | `false` | _(deprecated, do not set)_ |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/openapi.yaml:2000:        - name: is_from_me
+/Users/woot/code/go-whatsapp-web-multidevice/docs/openapi.yaml:4223:        is_from_me:
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:23:| `chat_presence`      | Typing and recording indicators from contacts           |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:30:| `call.offer`         | Incoming call received                                  |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:31:| `history_sync_complete` | Fork-only: emitted once after WhatsApp's multi-stage history sync settles (debounced ~5s) |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:56:WHATSAPP_WEBHOOK_EVENTS=call.offer
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:143:| `event`     | string   | Event type: `message`, `message.reaction`, `message.revoked`, `message.edited`, `message.ack`, `message.deleted`, `chat_presence`, `group.participants`, `group.joined`, `newsletter.joined`, `newsletter.left`, `newsletter.message`, `newsletter.mute`, `call.offer`, `history_sync_complete` |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:159:| `is_from_me` | boolean | Whether the message was sent by the current user (paired phone or REST API)   |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:163:> `WHATSAPP_WEBHOOK_INCLUDE_OUTGOING` knob no longer gates this. Consumers that want
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:164:> to suppress their own echoes should branch on `is_from_me` and filter client-side.
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:181:    "is_from_me": false,
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:199:    "is_from_me": false,
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:219:    "is_from_me": false,
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:291:These events use the `chat_presence` event type and are useful for implementing message batching strategies.
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:302:  "event": "chat_presence",
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:321:  "event": "chat_presence",
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:340:  "event": "chat_presence",
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:359:  "event": "chat_presence",
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:377:| `event`            | string   | Always `"chat_presence"` for typing events                         |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:595:  "event": "call.offer",
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:614:  "event": "call.offer",
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:632:| `event`                   | string   | Always `"call.offer"` for call events                      |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:663:`history_sync_complete` event when the sync window closes, so consumers can run
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:668:  "event": "history_sync_complete",
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:681:| `event`             | string   | Always `"history_sync_complete"`                                                                |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:909:    "contacts_array": [
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:925:> **Note:** WhatsApp uses `ContactMessage` (field 4) for a single contact and `ContactsArrayMessage` (field 13) for multiple contacts. A single contact produces `"contact"`, while multiple contacts produce `"contacts_array"`.
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:1019:    "is_from_me": true,
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:1041:    "is_from_me": false,
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:1106:    "is_from_me": false,
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:1249:        case 'chat_presence':
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:1258:        case 'history_sync_complete':
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:1293:        case 'call.offer':
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:1385:| Type in a chat | `chat_presence` | `state: composing` then `state: paused` |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:1386:| Receive incoming call | `call.offer` | offer-stage event; pairs with `call.terminate` if rejected |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:1387:| Complete history sync after fresh pair | `history_sync_complete` | Exactly one debounced event per sync cycle |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:1388:| Send a message from the phone (not via API) | `message` with `is_from_me: true` | Outgoing echo; consumer must filter if echo-suppression desired |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/webhook-payload.md:1389:| Share a multi-contact list | `contacts_array` shape on inbound message | Distinct from single-contact `contact` shape |
+/Users/woot/code/go-whatsapp-web-multidevice/docs/decisions/2026-05-14-chatwoot-app-cutover.md:12:- The gateway forwards Chatwoot push payloads to `POST /webhooks/whatsapp/:hmac_token` using upstream's v8.5.0 shape — message events always include outgoing traffic; the `is_from_me` field on the payload disambiguates direction.
+/Users/woot/code/go-whatsapp-web-multidevice/docs/decisions/2026-05-14-chatwoot-app-cutover.md:14:- Echo suppression (don't re-broadcast our own sends back into the inbox) MUST be implemented on the consumer side by checking `is_from_me` on the payload, NOT by toggling `WHATSAPP_WEBHOOK_INCLUDE_OUTGOING` on the gateway. That env knob is **deprecated in v8.5**: outgoing webhooks are always forwarded; the consumer is responsible for filtering.
+/Users/woot/code/go-whatsapp-web-multidevice/docs/decisions/2026-05-14-chatwoot-app-cutover.md:21:- Marks `WHATSAPP_WEBHOOK_INCLUDE_OUTGOING` deprecated in `src/.env.example`.
+/Users/woot/code/go-whatsapp-web-multidevice/docs/decisions/2026-05-14-chatwoot-app-cutover.md:26:- Add `is_from_me` echo-suppression on the consumer side.
+/Users/woot/code/go-whatsapp-web-multidevice/docs/decisions/2026-05-14-chatwoot-app-cutover.md:27:- Migrate any production deployment env files away from `WHATSAPP_WEBHOOK_INCLUDE_OUTGOING`.
+/Users/woot/code/go-whatsapp-web-multidevice/docs/decisions/2026-05-14-chatwoot-app-cutover.md:40:- `src/.env.example` — `WHATSAPP_WEBHOOK_INCLUDE_OUTGOING` carries the deprecation comment.

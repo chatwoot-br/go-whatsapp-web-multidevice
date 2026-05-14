@@ -59,11 +59,11 @@ Each phase produces a commit on its target branch + a status line in this doc. S
 
 Phase status updated below as agents complete:
 
-- [ ] Phase 1 — Slice 0 + Slice 1
-- [ ] Phase 2 — Slices 2, 3, 6 (parallel)
+- [x] Phase 1 — Slice 0 + Slice 1
+- [x] Phase 2 — Slices 2, 3, 6 (parallel)
 - [x] Phase 3 — Merge 2+3+6
 - [x] Phase 4 — Slice 4
 - [x] Phase 5 — Slice 5
 - [x] Phase 6 — Slice 7 release
 - [x] Phase 7 — E2E tests
-- [ ] Phase 8 — Final validation
+- [x] Phase 8 — Final validation
