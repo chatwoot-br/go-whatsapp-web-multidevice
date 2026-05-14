@@ -43,7 +43,7 @@ func (service serviceMessage) MarkAsRead(ctx context.Context, request domainMess
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -75,7 +75,7 @@ func (service serviceMessage) ReactMessage(ctx context.Context, request domainMe
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -129,7 +129,7 @@ func (service serviceMessage) RevokeMessage(ctx context.Context, request domainM
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -175,7 +175,7 @@ func (service serviceMessage) DeleteMessage(ctx context.Context, request domainM
 		return pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (service serviceMessage) UpdateMessage(ctx context.Context, request domainM
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -242,7 +242,7 @@ func (service serviceMessage) StarMessage(ctx context.Context, request domainMes
 		return pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return err
 	}
@@ -271,7 +271,7 @@ func (service serviceMessage) DownloadMedia(ctx context.Context, request domainM
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}

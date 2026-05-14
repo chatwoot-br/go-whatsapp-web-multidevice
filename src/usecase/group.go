@@ -50,7 +50,7 @@ func (service serviceGroup) LeaveGroup(ctx context.Context, request domainGroup.
 		return pkgError.ErrWaCLI
 	}
 
-	JID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	JID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (service serviceGroup) ManageParticipant(ctx context.Context, request domai
 	}
 	utils.MustLogin(client)
 
-	groupJID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	groupJID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return result, err
 	}
@@ -175,7 +175,7 @@ func (service serviceGroup) GetGroupParticipants(ctx context.Context, request do
 		return response, pkgError.ErrWaCLI
 	}
 
-	groupJID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	groupJID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return response, err
 	}
@@ -222,7 +222,7 @@ func (service serviceGroup) GetGroupRequestParticipants(ctx context.Context, req
 		return result, pkgError.ErrWaCLI
 	}
 
-	groupJID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	groupJID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return result, err
 	}
@@ -259,7 +259,7 @@ func (service serviceGroup) ManageGroupRequestParticipants(ctx context.Context, 
 		return result, pkgError.ErrWaCLI
 	}
 
-	groupJID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	groupJID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return result, err
 	}
@@ -324,7 +324,7 @@ func (service serviceGroup) SetGroupPhoto(ctx context.Context, request domainGro
 		return pictureID, pkgError.ErrWaCLI
 	}
 
-	groupJID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	groupJID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return pictureID, err
 	}
@@ -366,7 +366,7 @@ func (service serviceGroup) SetGroupName(ctx context.Context, request domainGrou
 		return pkgError.ErrWaCLI
 	}
 
-	groupJID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	groupJID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return err
 	}
@@ -384,7 +384,7 @@ func (service serviceGroup) SetGroupLocked(ctx context.Context, request domainGr
 		return pkgError.ErrWaCLI
 	}
 
-	groupJID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	groupJID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return err
 	}
@@ -402,7 +402,7 @@ func (service serviceGroup) SetGroupAnnounce(ctx context.Context, request domain
 		return pkgError.ErrWaCLI
 	}
 
-	groupJID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	groupJID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return err
 	}
@@ -420,7 +420,7 @@ func (service serviceGroup) SetGroupTopic(ctx context.Context, request domainGro
 		return pkgError.ErrWaCLI
 	}
 
-	groupJID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	groupJID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return err
 	}
@@ -445,7 +445,7 @@ func (service serviceGroup) GroupInfo(ctx context.Context, request domainGroup.G
 	utils.MustLogin(client)
 
 	// Validate and parse the provided group JID / ID
-	groupJID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	groupJID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return response, err
 	}
@@ -475,7 +475,7 @@ func (service serviceGroup) GetGroupInviteLink(ctx context.Context, request doma
 	}
 	utils.MustLogin(client)
 
-	groupJID, err := utils.ValidateJidWithLogin(client, request.GroupID)
+	groupJID, err := utils.ValidateAndNormalizeJID(client, request.GroupID)
 	if err != nil {
 		return response, err
 	}

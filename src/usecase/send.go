@@ -92,7 +92,7 @@ func (service serviceSend) SendText(ctx context.Context, request domainSend.Mess
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.BaseRequest.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.BaseRequest.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -202,7 +202,7 @@ func (service serviceSend) SendImage(ctx context.Context, request domainSend.Ima
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -370,7 +370,7 @@ func (service serviceSend) SendFile(ctx context.Context, request domainSend.File
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.BaseRequest.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.BaseRequest.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -732,7 +732,7 @@ func (service serviceSend) SendVideo(ctx context.Context, request domainSend.Vid
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.BaseRequest.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.BaseRequest.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -914,7 +914,7 @@ func (service serviceSend) SendContact(ctx context.Context, request domainSend.C
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.BaseRequest.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.BaseRequest.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -963,7 +963,7 @@ func (service serviceSend) SendLink(ctx context.Context, request domainSend.Link
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.BaseRequest.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.BaseRequest.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -1048,7 +1048,7 @@ func (service serviceSend) SendLocation(ctx context.Context, request domainSend.
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.BaseRequest.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.BaseRequest.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -1100,7 +1100,7 @@ func (service serviceSend) SendAudio(ctx context.Context, request domainSend.Aud
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.BaseRequest.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.BaseRequest.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -1306,7 +1306,7 @@ func (service serviceSend) SendPoll(ctx context.Context, request domainSend.Poll
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.BaseRequest.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.BaseRequest.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -1364,7 +1364,7 @@ func (service serviceSend) SendChatPresence(ctx context.Context, request domainS
 		return response, pkgError.ErrWaCLI
 	}
 
-	userJid, err := utils.ValidateJidWithLogin(client, request.Phone)
+	userJid, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}
@@ -1405,7 +1405,7 @@ func (service serviceSend) getMentionFromText(ctx context.Context, messages stri
 	mentions := utils.ContainsMention(messages)
 	for _, mention := range mentions {
 		// Get JID from phone number
-		if dataWaRecipient, err := utils.ValidateJidWithLogin(client, mention); err == nil {
+		if dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, mention); err == nil {
 			result = append(result, dataWaRecipient.String())
 		}
 	}
@@ -1435,7 +1435,7 @@ func (service serviceSend) getMentionsFromList(ctx context.Context, mentions []s
 		}
 
 		// Validate phone number/JID with WhatsApp check
-		if dataWaRecipient, err := utils.ValidateJidWithLogin(client, mention); err == nil {
+		if dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, mention); err == nil {
 			result = append(result, dataWaRecipient.String())
 		}
 	}
@@ -1454,7 +1454,7 @@ func (service serviceSend) SendSticker(ctx context.Context, request domainSend.S
 		return response, pkgError.ErrWaCLI
 	}
 
-	dataWaRecipient, err := utils.ValidateJidWithLogin(client, request.Phone)
+	dataWaRecipient, err := utils.ValidateAndNormalizeJID(client, request.Phone)
 	if err != nil {
 		return response, err
 	}

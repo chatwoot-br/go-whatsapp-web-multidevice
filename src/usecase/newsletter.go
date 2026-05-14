@@ -26,7 +26,7 @@ func (service serviceNewsletter) Unfollow(ctx context.Context, request domainNew
 		return pkgError.ErrWaCLI
 	}
 
-	JID, err := utils.ValidateJidWithLogin(client, request.NewsletterID)
+	JID, err := utils.ValidateAndNormalizeJID(client, request.NewsletterID)
 	if err != nil {
 		return err
 	}
