@@ -5,13 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v8.5.0+1] - (in progress) (Synced with upstream v8.5.0)
+## [v8.5.0+1] - 2026-05-14 (Synced with upstream v8.5.0)
 
 ### Upstream Changes
-- (TBD — summarize 88 upstream commits per slice 7)
+- ~31 whatsmeow protocol updates (security/compatibility patches)
+- Native Chatwoot integration: src/infrastructure/chatwoot/{client,sync,sync_test,sync_types,types}.go, src/ui/rest/chatwoot.go, /chatwoot/webhook + /chatwoot/sync* endpoints, 8 CHATWOOT_* env vars
+- LID handling improvements: ResolveLIDToPhone/ResolvePhoneToLID primitives, LID-aware auto-reply, group-participants phone fix
+- Webhook taxonomy: chat_presence (typing), call.offer (incoming call), contacts_array shape, media captions in payloads, is_from_me top-level field
+- feat: healthcheck endpoint, GIF playback, document thumbnails, CTWA Meta Ads referral support, ghost mentions, archived chats filtering
+- fix: Docker permission readonly DB on group messages, document thumbnail security, audio extension test parser
+- chore: Go 1.25 / Alpine 3.23, dependency updates
+
+Full upstream commit log: git log v8.1.2..v8.5.0
 
 ### Fork Changes
-- (TBD — per-slice fork-delta commits from slices 2-6)
+- slice 1: reset to upstream/v8.5.0 + reapply release rail (Helm chart, 4 CI workflows, Dockerfile mailcap)
+- slice 2: BR phone normalization layer (src/pkg/utils/phone_br.go) + 39 caller sweep across src/usecase/{send,group,message,chat,user,newsletter}.go (preserves v8.1.0+7 ValidateAndNormalizeJID behavior on upstream baseline)
+- slice 3: LID dedup + history_sync_complete dispatch (preserves v8.1.0+6 deduplicateLIDChats post-history-sync pass + MergeLIDChat/GetLIDChats chatstorage primitives + NormalizeJIDFromLIDWithContext 30s-timeout variant; new file forward_history_sync.go scopes the fork-specific event)
+- slice 6: fork-only delta sweep (proxy support v8.1.0+3, info-request cache v8.1.0+2, S3 image-extension fix v8.1.0+5; OQ8 device_manager.go own-commit due to upstream/any-modernization overlap; audio/PTT v8.1.0+1 and APP_BASE_PATH v8.1.0+1 subsumed by upstream)
+- slice 4: chatwoot lockstep cutover gateway-side wiring (8 CHATWOOT_* env vars in Helm + configmap; /chatwoot/webhook route order verified; chatwoot-app Rails cutover documented as separate-repo follow-up)
+- slice 5: webhook taxonomy + env audit (docs/webhook-payload.md union of upstream events + fork's history_sync_complete; WHATSAPP_WEBHOOK_INCLUDE_OUTGOING marked deprecated; is_from_me echo-suppression documented)
+- fix(webhook): recovered chat_name + sender_name payload fields (v8.1.0+1) missed during slice 6 sweep
+
+### Known follow-ups (out of scope for this upgrade)
+- chatwoot-app Rails-side cutover PR (Channel::Whatsapp::Provider rewire)
+- Paired-phone validation: trigger each event from staging phone; confirm receipt at test webhook
+- Cleanup: usecase callers of new info_cache helpers (left dormant but build-green per Slice 6 agent note)
 
 ## [v8.1.2+1] - 2026-01-26 (Synced with upstream v8.1.2)
 
