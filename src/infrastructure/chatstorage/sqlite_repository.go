@@ -1204,7 +1204,7 @@ func (r *SQLiteRepository) MergeLIDChat(deviceID, lidJID, phoneJID string) error
 // GetLIDChats returns all chats with @lid JIDs for a device. Fork-only.
 func (r *SQLiteRepository) GetLIDChats(deviceID string) ([]*domainChatStorage.Chat, error) {
 	query := `
-		SELECT device_id, jid, name, last_message_time, ephemeral_expiration, created_at, updated_at
+		SELECT device_id, jid, name, last_message_time, ephemeral_expiration, created_at, updated_at, archived
 		FROM chats
 		WHERE device_id = ? AND jid LIKE '%@lid'
 		ORDER BY last_message_time DESC

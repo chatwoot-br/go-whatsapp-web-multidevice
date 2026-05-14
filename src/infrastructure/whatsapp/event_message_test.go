@@ -6,11 +6,129 @@ import (
 	"time"
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
+	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
 	"go.mau.fi/whatsmeow/proto/waCommon"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
+
+// chatNameStubRepo implements only the IChatStorageRepository methods touched
+// by buildEventPayload's chat_name lookup. Everything else panics if invoked —
+// loud failure on accidental expansion of the call surface.
+type chatNameStubRepo struct {
+	domainChatStorage.IChatStorageRepository // embed to satisfy unused methods at compile time
+	chats                                    map[string]*domainChatStorage.Chat
+	getChatCalls                             []string
+}
+
+func (r *chatNameStubRepo) GetChat(jid string) (*domainChatStorage.Chat, error) {
+	r.getChatCalls = append(r.getChatCalls, jid)
+	if chat, ok := r.chats[jid]; ok {
+		return chat, nil
+	}
+	return nil, nil
+}
+
+func TestBuildEventPayload_ChatName_FromStorage(t *testing.T) {
+	chatJID := types.NewJID("5511999999999", types.DefaultUserServer)
+	repo := &chatNameStubRepo{
+		chats: map[string]*domainChatStorage.Chat{
+			chatJID.String(): {JID: chatJID.String(), Name: "Saved Contact"},
+		},
+	}
+
+	evt := &events.Message{
+		Info: types.MessageInfo{
+			MessageSource: types.MessageSource{
+				Chat:     chatJID,
+				Sender:   chatJID,
+				IsFromMe: true,
+			},
+			ID:        "MSG-CHATNAME-1",
+			Timestamp: time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC),
+		},
+		Message: &waE2E.Message{Conversation: protoString("hello")},
+	}
+
+	_, payload, err := buildEventPayload(context.Background(), nil, evt, repo)
+	if err != nil {
+		t.Fatalf("buildEventPayload: %v", err)
+	}
+	got, ok := payload["chat_name"].(string)
+	if !ok {
+		t.Fatalf("chat_name not in payload (or wrong type): %T", payload["chat_name"])
+	}
+	if got != "Saved Contact" {
+		t.Errorf("chat_name = %q, want %q", got, "Saved Contact")
+	}
+	if len(repo.getChatCalls) == 0 {
+		t.Error("expected GetChat to be called for chat_name lookup")
+	}
+}
+
+// TestBuildEventPayload_ChatName_StorageMissNilClient asserts the no-source
+// branch: storage missing + nil client = no chat_name in payload (NOT crash).
+func TestBuildEventPayload_ChatName_StorageMissNilClient(t *testing.T) {
+	chatJID := types.NewJID("5511888888888", types.DefaultUserServer)
+	repo := &chatNameStubRepo{chats: map[string]*domainChatStorage.Chat{}}
+
+	evt := &events.Message{
+		Info: types.MessageInfo{
+			MessageSource: types.MessageSource{
+				Chat:     chatJID,
+				Sender:   chatJID,
+				IsFromMe: true,
+			},
+			ID:        "MSG-CHATNAME-2",
+			Timestamp: time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC),
+		},
+		Message: &waE2E.Message{Conversation: protoString("hello")},
+	}
+
+	_, payload, err := buildEventPayload(context.Background(), nil, evt, repo)
+	if err != nil {
+		t.Fatalf("buildEventPayload: %v", err)
+	}
+	if _, ok := payload["chat_name"]; ok {
+		t.Errorf("chat_name should be absent when storage missing and no client; got %v", payload["chat_name"])
+	}
+}
+
+// TestBuildEventPayload_ChatName_OnlySetForOutgoing locks the invariant that
+// the chat_name lookup is only triggered for is_from_me=true messages.
+func TestBuildEventPayload_ChatName_OnlySetForOutgoing(t *testing.T) {
+	chatJID := types.NewJID("5511777777777", types.DefaultUserServer)
+	repo := &chatNameStubRepo{
+		chats: map[string]*domainChatStorage.Chat{
+			chatJID.String(): {JID: chatJID.String(), Name: "Should Not Appear"},
+		},
+	}
+
+	evt := &events.Message{
+		Info: types.MessageInfo{
+			MessageSource: types.MessageSource{
+				Chat:     chatJID,
+				Sender:   chatJID,
+				IsFromMe: false, // incoming — must NOT trigger chat_name lookup
+			},
+			ID:        "MSG-CHATNAME-3",
+			Timestamp: time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC),
+		},
+		Message: &waE2E.Message{Conversation: protoString("hi")},
+	}
+
+	_, payload, err := buildEventPayload(context.Background(), nil, evt, repo)
+	if err != nil {
+		t.Fatalf("buildEventPayload: %v", err)
+	}
+	if _, ok := payload["chat_name"]; ok {
+		t.Error("chat_name must NOT be set for incoming messages")
+	}
+	if len(repo.getChatCalls) != 0 {
+		t.Errorf("incoming message must skip GetChat lookup, got %d calls", len(repo.getChatCalls))
+	}
+}
 
 func TestBuildEventPayloadIncludesIsFromMe(t *testing.T) {
 	evt := &events.Message{

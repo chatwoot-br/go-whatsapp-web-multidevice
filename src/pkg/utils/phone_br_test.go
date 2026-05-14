@@ -104,6 +104,64 @@ func TestValidateAndNormalizeJID_LIDPassthrough(t *testing.T) {
 	}
 }
 
+// TestNormalizePhoneBR_MalformedInputs locks down the passthrough behavior
+// for edge cases the deterministic fallback must not corrupt.
+func TestNormalizePhoneBR_MalformedInputs(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		out  string
+	}{
+		// 14-digit number — too long for the BR pattern. Must passthrough.
+		{name: "14-digit-passthrough", in: "55669966796260", out: "55669966796260"},
+		// 11-digit — shorter than the BR shape. Must passthrough.
+		{name: "11-digit-passthrough", in: "55669966796", out: "55669966796"},
+		// Starts with 55 but position-4 char is not '9' (e.g., landline).
+		{name: "landline-area-13", in: "5566123456789", out: "5566123456789"},
+		// Non-numeric characters mixed in: must not panic; not 13 digits so passthrough.
+		{name: "non-numeric", in: "55-66-9966-79626", out: "55-66-9966-79626"},
+		// Leading "+ " variant — whitespace inside is preserved (passthrough).
+		{name: "spaces-inside", in: "+55 66 99667 9626", out: "+55 66 99667 9626"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := normalizePhoneBR(tc.in)
+			if got != tc.out {
+				t.Errorf("normalizePhoneBR(%q) = %q, want %q", tc.in, got, tc.out)
+			}
+		})
+	}
+}
+
+// TestValidateAndNormalizeJID_EmptyJID locks the empty-input behavior — does
+// NOT panic; falls through to ParseJID which returns an empty user JID on the
+// default server. (Validation that the caller must check for empty User
+// elsewhere lives in the send path.)
+func TestValidateAndNormalizeJID_EmptyJID(t *testing.T) {
+	result, err := ValidateAndNormalizeJID(nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.User != "" {
+		t.Errorf("expected empty user, got %q", result.User)
+	}
+}
+
+// TestValidateAndNormalizeJID_BRLikeUserJID_NilClient confirms the no-client
+// fallback parses without applying any normalization (Slice 2 invariant — BR
+// strip only applies when a live client confirms via IsOnWhatsApp).
+func TestValidateAndNormalizeJID_BRLikeUserJID_NilClient(t *testing.T) {
+	jid := "5566996679626@s.whatsapp.net"
+	result, err := ValidateAndNormalizeJID(nil, jid)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Nil client falls back to ParseJID — user part stays 13-digit.
+	if result.User != "5566996679626" {
+		t.Errorf("nil client must not normalize: got user=%q", result.User)
+	}
+}
+
 func TestValidateAndNormalizeJID_UserJIDWithNilClient(t *testing.T) {
 	// User JID with nil client falls back to ParseJID.
 	jid := "5511999999999@s.whatsapp.net"
