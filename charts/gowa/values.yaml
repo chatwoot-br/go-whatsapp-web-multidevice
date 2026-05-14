@@ -109,10 +109,15 @@ whatsapp:
   autoReply: ""
   # autoMarkRead enables auto-marking messages as read (WHATSAPP_AUTO_MARK_READ)
   autoMarkRead: "false"
+  # autoRejectCall auto-rejects incoming WhatsApp calls (WHATSAPP_AUTO_REJECT_CALL)
+  autoRejectCall: "false"
   # autoDownloadMedia enables auto-downloading media (WHATSAPP_AUTO_DOWNLOAD_MEDIA)
   autoDownloadMedia: "true"
   # accountValidation enables account validation (WHATSAPP_ACCOUNT_VALIDATION)
   accountValidation: "true"
+  # presenceOnConnect controls the presence broadcast on connect (WHATSAPP_PRESENCE_ON_CONNECT)
+  # One of: "available", "unavailable", "none"
+  presenceOnConnect: "unavailable"
   # chatStorage enables chat history storage (WHATSAPP_CHAT_STORAGE)
   chatStorage: "true"
 

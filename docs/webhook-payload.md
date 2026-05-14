@@ -156,7 +156,12 @@ Fields commonly found inside the `payload` object:
 | `from_lid`  | string   | LID (Linked ID) of the sender if available                                    |
 | `from_name` | string   | Display name (pushname) of the sender                                         |
 | `timestamp` | string   | RFC3339 formatted timestamp (e.g., `2023-10-15T10:30:00Z`)                    |
-| `is_from_me` | boolean | Whether the message was sent by the current user                              |
+| `is_from_me` | boolean | Whether the message was sent by the current user (paired phone or REST API)   |
+
+> **Outgoing-echo note**: outgoing messages always arrive at the webhook, including
+> messages sent from the paired phone (not via this app's REST API). The deprecated
+> `WHATSAPP_WEBHOOK_INCLUDE_OUTGOING` knob no longer gates this. Consumers that want
+> to suppress their own echoes should branch on `is_from_me` and filter client-side.
 
 ## Message Events
 
@@ -649,6 +654,34 @@ WHATSAPP_AUTO_REJECT_CALL=true
 # Auto-reject all incoming calls
 ./whatsapp rest --auto-reject-call=true
 ```
+
+## History Sync Complete Events
+
+Fork-only event. Emitted once after WhatsApp's multi-stage history sync settles. The
+upstream `events.HistorySync` event fires multiple times per sync cycle (one per
+chunk); GOWA debounces these (default ~5s of quiet) and emits a single
+`history_sync_complete` event when the sync window closes, so consumers can run
+post-sync reconciliation (e.g., Chatwoot contact upserts) exactly once.
+
+```json
+{
+  "event": "history_sync_complete",
+  "device_id": "628123456789@s.whatsapp.net",
+  "payload": {
+    "sync_type": "RECENT",
+    "timestamp": "2026-05-14T12:00:00Z"
+  }
+}
+```
+
+### History Sync Complete Event Fields
+
+| **Field**           | **Type** | **Description**                                                                                 |
+|---------------------|----------|-------------------------------------------------------------------------------------------------|
+| `event`             | string   | Always `"history_sync_complete"`                                                                |
+| `device_id`         | string   | JID of the device whose history sync settled                                                    |
+| `payload.sync_type` | string   | WhatsApp history sync type that triggered the debounce close (e.g., `"RECENT"`, `"FULL"`)       |
+| `payload.timestamp` | string   | RFC3339 timestamp when the debounce window closed                                               |
 
 ## Media Messages
 
@@ -1207,6 +1240,28 @@ app.post('/webhook', (req, res) => {
             });
             break;
 
+        case 'group.joined':
+            console.log('Added to group:', {
+                chat_id: data.payload.chat_id
+            });
+            break;
+
+        case 'chat_presence':
+            console.log('Chat presence:', {
+                from: data.payload.from,
+                chat_id: data.payload.chat_id,
+                state: data.payload.state,
+                media: data.payload.media
+            });
+            break;
+
+        case 'history_sync_complete':
+            console.log('History sync settled:', {
+                sync_type: data.payload.sync_type,
+                timestamp: data.payload.timestamp
+            });
+            break;
+
         case 'newsletter.joined':
             console.log('Joined newsletter:', {
                 newsletter_id: data.payload.newsletter_id,
@@ -1318,6 +1373,22 @@ WHATSAPP_WEBHOOK_SECRET=your-super-secret-key
 5. **Use HTTPS** for webhook URLs to ensure secure transmission
 6. **Store media files** locally if you need to process them later
 7. **Implement proper error handling** for different event types
+
+## Verification scenarios (paired-phone)
+
+Human-validation gate before merging to chatwoot-br/main. Trigger each
+from a paired staging phone; confirm receipt at the test webhook endpoint
+with the documented payload shape.
+
+| Phone action | Expected event | Notes |
+|---|---|---|
+| Type in a chat | `chat_presence` | `state: composing` then `state: paused` |
+| Receive incoming call | `call.offer` | offer-stage event; pairs with `call.terminate` if rejected |
+| Complete history sync after fresh pair | `history_sync_complete` | Exactly one debounced event per sync cycle |
+| Send a message from the phone (not via API) | `message` with `is_from_me: true` | Outgoing echo; consumer must filter if echo-suppression desired |
+| Share a multi-contact list | `contacts_array` shape on inbound message | Distinct from single-contact `contact` shape |
+| Click a Click-to-WhatsApp ad and reply | `message` with `referral` object | Meta Ads CTWA flow |
+| Send media with caption | `message` payload includes `caption` | Image/video/document types |
 
 ## Troubleshooting
 

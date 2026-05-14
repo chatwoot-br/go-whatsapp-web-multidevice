@@ -13,8 +13,10 @@ data:
   APP_TRUSTED_PROXIES: {{ .Values.config.trustedProxies | quote }}
   WHATSAPP_AUTO_REPLY: {{ .Values.whatsapp.autoReply | quote }}
   WHATSAPP_AUTO_MARK_READ: {{ .Values.whatsapp.autoMarkRead | quote }}
+  WHATSAPP_AUTO_REJECT_CALL: {{ .Values.whatsapp.autoRejectCall | quote }}
   WHATSAPP_AUTO_DOWNLOAD_MEDIA: {{ .Values.whatsapp.autoDownloadMedia | quote }}
   WHATSAPP_ACCOUNT_VALIDATION: {{ .Values.whatsapp.accountValidation | quote }}
+  WHATSAPP_PRESENCE_ON_CONNECT: {{ .Values.whatsapp.presenceOnConnect | quote }}
   WHATSAPP_CHAT_STORAGE: {{ .Values.whatsapp.chatStorage | quote }}
   WHATSAPP_WEBHOOK_EVENTS: {{ .Values.webhook.events | quote }}
   WHATSAPP_WEBHOOK_INSECURE_SKIP_VERIFY: {{ .Values.webhook.insecureSkipVerify | quote }}
