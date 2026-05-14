@@ -28,6 +28,7 @@ The following events can be received via webhook:
 | `newsletter.message` | New message(s) posted in a newsletter                   |
 | `newsletter.mute`    | Newsletter mute setting changed                         |
 | `call.offer`         | Incoming call received                                  |
+| `history_sync_complete` | Fork-only: emitted once after WhatsApp's multi-stage history sync settles (debounced ~5s) |
 
 ## Event Filtering
 
@@ -139,7 +140,7 @@ All webhook payloads follow a consistent top-level structure:
 
 | **Field**   | **Type** | **Description**                                                                                                     |
 |-------------|----------|---------------------------------------------------------------------------------------------------------------------|
-| `event`     | string   | Event type: `message`, `message.reaction`, `message.revoked`, `message.edited`, `message.ack`, `message.deleted`, `chat_presence`, `group.participants`, `group.joined`, `newsletter.joined`, `newsletter.left`, `newsletter.message`, `newsletter.mute`, `call.offer` |
+| `event`     | string   | Event type: `message`, `message.reaction`, `message.revoked`, `message.edited`, `message.ack`, `message.deleted`, `chat_presence`, `group.participants`, `group.joined`, `newsletter.joined`, `newsletter.left`, `newsletter.message`, `newsletter.mute`, `call.offer`, `history_sync_complete` |
 | `device_id` | string   | JID of the device that received this event (e.g., `628123456789@s.whatsapp.net`)                                    |
 | `payload`   | object   | Event-specific payload data                                                                                         |
 

@@ -46,6 +46,10 @@ type IChatStorageRepository interface {
 	TruncateAllDataWithLogging(logPrefix string) error
 	DeleteDeviceData(deviceID string) error
 
+	// LID deduplication (fork-only — see docs/plans/2026-01-18-fix-history-sync-lid-duplicate-chats.md)
+	MergeLIDChat(deviceID, lidJID, phoneJID string) error
+	GetLIDChats(deviceID string) ([]*Chat, error)
+
 	// Device registry operations
 	SaveDeviceRecord(record *DeviceRecord) error
 	ListDeviceRecords() ([]*DeviceRecord, error)
