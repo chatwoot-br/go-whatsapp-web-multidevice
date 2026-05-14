@@ -89,3 +89,87 @@ Explicitly out of scope for this upgrade:
 - **Refactoring fork-heavier overlap files** (`history_sync.go`, `device_manager.go`, the workflows) into "cleaner" shapes during reapply. Reapply preserves behaviour; refactors are separate commits or separate sprints.
 - **Touching `pre-upgrade-snapshot-2026-05-14`.** It is an immutable archaeology tag. Do not rebase, force-push, or delete.
 - **Renaming, splitting, or relocating the Helm chart.** It stays at `charts/gowa/` with the existing `chart-releaser.yaml` flow.
+
+## D-review resolutions (2026-05-14)
+
+Code-owner review of D-stage Open questions. Decisions locked; investigation
+items queued for execution before S.
+
+### Decisions
+
+- **OQ1 (`3b87f4e` scope)** → **Verify before S.** Spawn a fresh agent to read the full diff in a clean window. If the fix touches signature verification on the inbound chatwoot side, the Slice 4 chatwoot-app HTTP client config must change too. Pre-empts a P-stage surprise.
+- **OQ2 (MergeLIDChat survival)** → **Investigate first, decide before P.** A fresh agent reads `40b0875`, `d718ef8`, `17ff32f` line-by-line and reports whether the fork's `deduplicateLIDChats` post-sync pass is subsumed by upstream's native LID resolution. If subsumed → drop the fork delta. If not → keep `deduplicateLIDChats` as its own re-applied commit.
+- **OQ3 (`history_sync_complete` plug-in)** → **Decide at P-time** after reading upstream's restructured `webhook_forward.go`. Picking between `forward_history_sync.go` (new file, cleanest reapply) and an in-place edit on the upstream dispatcher is a code-level call best made with the dispatcher open.
+- **OQ4 (release tag)** → **`v8.5.0+1`** matching the chatwoot-br `vX.Y.Z+N` convention. **Plus**: update the release process (CI workflows + tag-naming gates) to formalise the convention so future syncs can't drift on the tag shape. Add a Slice 7 sub-task.
+- **OQ5 (cutover sequencing)** → **Lockstep.** Slice 4 lands in both repos in one window. chatwoot-app's `Channel::Whatsapp::Provider` switch flips at the same moment the gateway gains native chatwoot integration. No dual-listen complexity.
+- **OQ8+9 (fork-heavier overlap files)** → **Decide per-file after P-time inspection.** Read upstream-side diff for each fork-heavier file (`device_manager.go`, `usecase/{chat,group,message}.go`); bundle trivially-clean ones into a sweep commit, give contentious ones their own slice.
+- **OQ10 (test reapply)** → **Bundle with the `phone_br.go` slice.** Atomic change; BR-rule regressions surface immediately. `jid_utils_test.go` + BR-specific fixtures from `general_test.go` / `whatsapp_test.go` move in the same commit as `phone_br.go`.
+
+### Investigation actions (before S can start)
+
+1. **3b87f4e scope verification** — spawn agent, read commit diff, confirm chatwoot-REST authn assumption.
+2. **LID-commits subsumption check** — spawn agent, read `40b0875`/`d718ef8`/`17ff32f`, report on `deduplicateLIDChats` redundancy.
+3. **Customer webhook payload break inventory (OQ6)** — out-of-band, requires business knowledge. Owner: human. Not blocking S.
+4. **Uncategorised upstream commits `381c381` + `a8b5ed8` (OQ7)** — read commit bodies; confirm they're benign chat-storage persistence changes. Defer to P-stage if not blocking.
+
+### Reviewer note
+
+S can start after items 1+2 complete. Items 3+4 are operational items the workstream tracks but doesn't gate on.
+
+## Investigation findings (2026-05-14)
+
+Two fresh-context investigation agents reported. Both gates now resolved; S is unblocked.
+
+### OQ1 — `3b87f4e` scope: confirmed chatwoot-REST-authn-only
+
+24 files touched; **HMAC signing path untouched**. Zero hits on `X-Hub-Signature`, `hmac.New`, or any modification to `webhook.go::GetMessageDigestOrSignature`. The one `GetMessageDigestOrSignature` reference in the diff is a hunk-header context label only; the actual added code is `UnwrapMessage` (FutureProof / view-once / ephemeral unwrap).
+
+The "webhook auth fix" in the commit subject refers exclusively to a sub-commit `fix: exclude /chatwoot/webhook from basic auth` — moving the chatwoot inbound-webhook route registration *before* basic-auth middleware in `src/cmd/rest.go::restServer`, splitting `/chatwoot/webhook` (unauth) from `/chatwoot/sync*` (auth). The commit title is misleadingly broad: it sounds like outgoing HMAC plumbing but is purely inbound chatwoot-route middleware ordering.
+
+**Implication for Slice 4 chatwoot-app cutover: zero.** Rails consumer's signature verification, header parsing, and `WHATSAPP_WEBHOOK_SECRET` config remain valid as-is. No HTTP-client changes required.
+
+**Anomaly worth tracking (not auth, but payload):** the commit adds `is_from_me: bool` to outgoing webhook payloads (per the `docs/webhook-payload.md` diff) AND **removes the `WHATSAPP_WEBHOOK_INCLUDE_OUTGOING` config knob** — outgoing messages are now always forwarded. If chatwoot-app filters on this knob or branches on `is_from_me`, behaviour changed: outgoing messages now arrive unconditionally. Flag for Slice 5 webhook-event taxonomy expansion checklist; surface in the chatwoot-app cutover checklist if there's any conditional consumer logic.
+
+### OQ2 — LID subsumption: confirmed NOT subsumed
+
+The three upstream LID commits (`40b0875`, `d718ef8`, `17ff32f`) touch `auto_reply.go`, `usecase/group.go`, `pkg/utils/whatsapp.go`, `usecase/user.go`, `domains/user/account.go`, `ui/rest/user.go`, and JS UI files. **Zero overlap** with `history_sync.go`, `jid_utils.go`, `chatstorage/sqlite_repository.go`, `device_repository.go`, or `chatstorage_wrapper.go`.
+
+The fork's `deduplicateLIDChats` runs post-history-sync (after `applyCachedPushNamesToChats`, before `forwardHistorySyncCompleteToWebhook`) and merges residual `@lid`-server chat rows that survived per-conversation LID resolution because of an event-context-cancellation race during sync (root cause documented in fork commit `a4d88a8`, decision doc at `docs/decisions/2026-01-18-fix-history-sync-lid-duplicate-chats.md`). The `WithContext` variant exists specifically to defeat this race with a 30s timeout; upstream's `ResolveLIDToPhone` uses the caller's `ctx` directly and inherits the same race.
+
+**Recommendation: keep all three fork functions.** Re-apply `deduplicateLIDChats`, `MergeLIDChat` + `GetLIDChats`, and `NormalizeJIDFromLIDWithContext` as fork-delta commits in the reset.
+
+**Cleanup opportunity for a follow-up sprint (not this upgrade):** upstream's `ResolveLIDToPhone` (`pkg/utils/whatsapp.go`, from `17ff32f`) is byte-identical to the fork's `NormalizeJIDFromLID` no-context variant (`infrastructure/whatsapp/jid_utils.go`) — same `GetPNForLID` call, same fallback. Same job, different package. Pick one canonical location post-upgrade; the `WithContext` variant is the only fork-unique helper required by `deduplicateLIDChats`. Track this as a Slice 6 sub-task (not blocking).
+
+### S unblocked
+
+Both factual gaps resolved. S-stage agent can now produce signatures/types without speculation. Next: spawn S agent with `01-research.md` + `02-design.md` (including these findings) as inputs.
+
+## S-stage corrections back to D (2026-05-14)
+
+S agent flagged two points where the codebase contradicts D claims. Recorded
+here so P doesn't propagate the error.
+
+- **`WHATSAPP_WEBHOOK_INCLUDE_OUTGOING` is DEPRECATED, not REMOVED.** Still
+  present in `upstream/main:src/.env.example` post-`3b87f4e`, but no Go code
+  in upstream references `WhatsappWebhookIncludeOutgoing` — dead config. Status
+  is dead-knob-still-documented. The Investigation finding's *behavior* claim
+  is correct ("outgoing webhooks always forwarded"); the *config-knob-deleted*
+  claim is not. Update Slice 5 chatwoot-app cutover checklist to "consumer
+  ignores the knob; behavior is forced-on" rather than "remove knob from env".
+
+- **Chatwoot env var count is 8, not 9.** D End-state said 9 new `CHATWOOT_*`
+  variables; actual count is 8 — `CHATWOOT_IMPORT_CONTACTS` was added and then
+  removed inside `3b87f4e` (sub-commit `chore: remove unused ChatwootImportContacts
+  config option`). R-stage flagged this as a README-only ghost; S surfaced the
+  same on the actual `.env.example`. Update Slice 7 release docs accordingly.
+
+## OQ3 simplification (S finding)
+
+S agent confirmed: `forwardPayloadToConfiguredWebhooks(ctx, payload, eventName) error`
+exists in **both** fork and upstream with the same signature. The fork's
+`history_sync.go` already invokes it correctly. What upstream restructures is
+the dispatcher *internals* — `forwardToWebhooks` + `forwardToChatwoot` get
+split out. The "plug-in" is signature-trivial; only the file-boundary call
+(new `forward_history_sync.go` vs in-place edit of `webhook_forward.go`)
+remains a P-time judgment. OQ3 narrowed: it's a code-organization choice, not
+a contract choice.

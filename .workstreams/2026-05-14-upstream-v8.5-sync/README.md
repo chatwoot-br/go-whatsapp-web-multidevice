@@ -16,9 +16,9 @@ Started: 2026-05-14 · Methodology: [QRSPI](../../../../workspaces/llm-wiki/.que
 |---|---|---|
 | **Q** Questions | `00-questions.md` | ✓ done 2026-05-14 |
 | **R** Research (ticket hidden) | `01-research.md` | ✓ done 2026-05-14 |
-| **D** Design (~200 lines) | `02-design.md` | ✓ done 2026-05-14 (91 lines, decision-dense) |
-| **S** Structure (signatures/types) | `03-structure.md` | **next** — after D review |
-| **P** Plan (vertical slices) | `04-plan.md` | drafted (revisit after D) |
+| **D** Design (~200 lines) | `02-design.md` | ✓ done 2026-05-14 (91 lines + D-review resolutions section) |
+| **S** Structure (signatures/types) | `03-structure.md` | ✓ done 2026-05-14 (295 lines) |
+| **P** Plan (vertical slices) | `04-plan.md` | **next** — revisit draft against S |
 | **W** Worktree | `05-worktree.md` | pending |
 | **I** Implement | (in worktree) | pending |
 | **PR** Pull Request | `06-pr.md` | pending |
@@ -47,3 +47,14 @@ Started: 2026-05-14 · Methodology: [QRSPI](../../../../workspaces/llm-wiki/.que
 6. **W**: `git worktree add` per slice; review the plan once, spot-check after.
 7. **I**: implement per slice.
 8. **PR**: deep review against code, not plan.
+
+
+## Investigation gate (cleared 2026-05-14)
+
+Before S could start, two fresh-context investigation agents needed to run (D-review locked the strategy, but two factual gaps gate the structure stage):
+
+1. **`3b87f4e` scope verification** — Read the full diff of upstream commit `3b87f4e` (`feat: Chatwoot message history sync & webhook auth fix #565`). Confirm the auth-fix is scoped to `src/ui/rest/chatwoot.go` + `src/cmd/rest.go` chatwoot REST authentication (not HMAC signing on the outgoing `webhook.go` path). If the fix DOES touch signature verification, the chatwoot-app HTTP client config must change in Slice 4.
+
+2. **LID subsumption check** — Read commits `40b0875`, `d718ef8`, `17ff32f` (the three upstream LID-handling commits) line-by-line. Report whether they subsume the fork's `MergeLIDChat` + `deduplicateLIDChats` + `NormalizeJIDFromLIDWithContext` (v8.1.0+6, in `src/infrastructure/whatsapp/history_sync.go`). Outcome controls whether the fork's post-history-sync dedup pass survives the reset.
+
+Both investigations complete. Findings recorded in `02-design.md` § Investigation findings (2026-05-14). S unblocked.
