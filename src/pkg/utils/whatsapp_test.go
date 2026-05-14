@@ -1,10 +1,76 @@
 package utils
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
 )
+
+// TestGetMessageDigestOrSignature_KnownVector verifies HMAC-SHA256 with a
+// fixed key/body pair against the value an independent reference computation
+// produces, locking the cipher choice (HMAC-SHA256, hex-encoded) against
+// future regressions. The webhook contract documents
+// `X-Hub-Signature-256: sha256=<hex>` so the encoding must remain hex.
+func TestGetMessageDigestOrSignature_KnownVector(t *testing.T) {
+	body := []byte(`{"event":"history_sync_complete","device_id":"x","payload":{}}`)
+	key := []byte("secret-shared-with-webhook-receiver")
+
+	// Reference: compute HMAC-SHA256 the canonical way and compare.
+	mac := hmac.New(sha256.New, key)
+	mac.Write(body)
+	expected := hex.EncodeToString(mac.Sum(nil))
+
+	got, err := GetMessageDigestOrSignature(body, key)
+	if err != nil {
+		t.Fatalf("GetMessageDigestOrSignature: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("got %s, want %s (HMAC-SHA256 mismatch)", got, expected)
+	}
+	// Sanity: hex output is 64 chars (SHA256 = 32 bytes).
+	if len(got) != 64 {
+		t.Fatalf("HMAC-SHA256 hex must be 64 chars, got %d", len(got))
+	}
+}
+
+// TestGetMessageDigestOrSignature_NotPlainSHA256 guards against an accidental
+// downgrade from HMAC-SHA256 to plain SHA256 — the two produce different
+// outputs for the same body+key. The webhook receivers verify by HMAC, so a
+// downgrade would silently break every consumer.
+func TestGetMessageDigestOrSignature_NotPlainSHA256(t *testing.T) {
+	body := []byte("payload")
+	key := []byte("k")
+
+	hmacOut, err := GetMessageDigestOrSignature(body, key)
+	if err != nil {
+		t.Fatalf("GetMessageDigestOrSignature: %v", err)
+	}
+	plain := sha256.Sum256(body)
+	plainHex := hex.EncodeToString(plain[:])
+	if hmacOut == plainHex {
+		t.Fatalf("function is plain SHA256, not HMAC: %s", hmacOut)
+	}
+}
+
+// TestGetMessageDigestOrSignature_KeySensitive ensures changing the key changes
+// the output — guards against the function ignoring the secret entirely.
+func TestGetMessageDigestOrSignature_KeySensitive(t *testing.T) {
+	body := []byte("payload")
+	a, err := GetMessageDigestOrSignature(body, []byte("k1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := GetMessageDigestOrSignature(body, []byte("k2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b {
+		t.Fatalf("different keys must produce different signatures (a=%s, b=%s)", a, b)
+	}
+}
 
 func TestDetermineMediaExtension(t *testing.T) {
 	tests := []struct {
