@@ -18,9 +18,9 @@ Started: 2026-05-14 · Methodology: [QRSPI](../../../../workspaces/llm-wiki/.que
 | **R** Research (ticket hidden) | `01-research.md` | ✓ done 2026-05-14 |
 | **D** Design (~200 lines) | `02-design.md` | ✓ done 2026-05-14 (91 lines + D-review resolutions section) |
 | **S** Structure (signatures/types) | `03-structure.md` | ✓ done 2026-05-14 (295 lines) |
-| **P** Plan (vertical slices) | `04-plan.md` | **next** — revisit draft against S |
-| **W** Worktree | `05-worktree.md` | pending |
-| **I** Implement | (in worktree) | pending |
+| **P** Plan (vertical slices) | `04-plan.md` | ✓ done 2026-05-14 (244 lines, consolidated from Claude + Codex drafts) |
+| **W** Worktree | `05-worktree.md` | ✓ done 2026-05-14 (concentrated on Slice 4 + optional Slice 2/6) |
+| **I** Implement | (in worktree/trunk) | **next** — execute Slices 0→7 |
 | **PR** Pull Request | `06-pr.md` | pending |
 
 ## Q-stage answers (summary)
