@@ -1,0 +1,111 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [v8.5.0+1] - (in progress) (Synced with upstream v8.5.0)
+
+### Upstream Changes
+- (TBD — summarize 88 upstream commits per slice 7)
+
+### Fork Changes
+- (TBD — per-slice fork-delta commits from slices 2-6)
+
+## [v8.1.2+1] - 2026-01-26 (Synced with upstream v8.1.2)
+
+### Upstream Changes
+- feat: add webhook events for newsletters and group.joined
+- fix: react to other users' messages by looking up IsFromMe from database (#535)
+- fix: webhook event whitelist filtering for groups and proper event names (#539)
+- fix(security): prevent cross-device data leak in chat message queries (#525)
+- fix(device): sort device list by created_at for stable UI ordering (#528)
+- fix: store phone-sent messages in chat history (issue #526) (#530)
+- chore: update dependencies (golang.org/x/text to v0.33.0, app version to v8.1.2)
+
+### Fork Changes
+- chore: update whatsmeow to latest (v0.0.0-20260126173513-4dbbef8d4d4a)
+- fix(docker): add mailcap package for MIME types database
+
+## [v8.1.0+7] - 2026-01-20
+
+### Fixed
+- fix(utils): normalize Brazilian phone numbers to prevent duplicate contacts
+  - Add ValidateAndNormalizeJID function that handles Brazilian 9-digit mobile normalization
+  - Update all callers across send, chat, group, message, newsletter, and user usecases
+  - Mark ValidateJidWithLogin as deprecated in favor of the new function
+
+## [v8.1.0+6] - 2026-01-18
+
+### Fixed
+- fix(history-sync): resolve LID duplicate chats and context cancellation
+  - Add dedicated context with 5s timeout for LID resolution to prevent context cancellation errors
+  - Add NormalizeJIDFromLIDWithContext helper for isolated LID lookups
+  - Add MergeLIDChat to chatstorage for deduplicating chats with same sender but different JID formats
+  - Add post-sync deduplication to merge LID chats after history sync
+
+## [v8.1.0+5] - 2026-01-17
+
+### Fixed
+- fix(utils): derive image extension from Content-Type for S3 URLs
+
+## [v8.1.0+4] - 2026-01-15
+
+### Added
+- feat(whatsapp): enable full history sync and ON_DEMAND capability
+- feat(whatsapp): handle unavailable messages from linked devices
+- feat(whatsapp): process ON_DEMAND history sync responses
+- feat: add logs directory to .gitignore and create .keep file
+
+### Fixed
+- fix(whatsapp): normalize chat_id from LID to phone number in webhook
+
+### Changed
+- chore: update dependencies for go.mau.fi/whatsmeow and golang.org/x packages
+
+## [v8.1.0+3] - 2026-01-13
+
+### Added
+- feat(proxy): add SOCKS5/HTTP/HTTPS proxy support for WhatsApp connections
+- feat(proxy): display external proxy IP in device card UI
+
+### Fixed
+- fix(webhook): include caption in payload when auto-downloading media (image, video, video_note)
+
+## [v8.1.0+2] - 2026-01-08
+
+### Added
+- feat(cache): add short-term caching for info requests
+- feat(webhook): update events list to include history_sync_complete and improve documentation
+
+### Fixed
+- fix(cache): cache error responses to prevent repeated API calls
+- fix(send): use LID for message delivery with targeted approach
+- Various CI workflow fixes for tag patterns and multi-arch builds
+
+### Changed
+- refactor(workflow): trigger Helm chart release on version tags only
+
+## [v8.1.0+1] - 2025-01-07
+
+### Added
+- feat(helm): add gowa Helm chart for Kubernetes deployment
+- feat(webhook): add chat_name to outgoing message payload
+- feat(chat): add sender_name field for group message contacts
+- feat(whatsapp): add history sync webhook notification
+- feat(audio): add OGG Opus conversion for PTT voice notes
+- feat(whatsapp): include is_from_me in webhook payload
+- feat: add multi-device support guide documentation
+- feat: add waveform generation for audio messages
+- feat: enhance audio handling with MIME type resolution and duration retrieval
+
+### Fixed
+- fix(whatsapp): debounce history sync webhook to wait for all events
+- fix(login): use background context for QR channel
+- fix(device.go): Fix DeviceMiddleware to allow if APP_BASE_PATH is changed
+
+### Changed
+- Updated GitHub Actions workflows to support fork versioning (v8.1.0+1 format)
+- Added chart-releaser workflow for Helm chart releases
+
