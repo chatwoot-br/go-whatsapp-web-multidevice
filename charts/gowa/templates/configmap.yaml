@@ -23,3 +23,10 @@ data:
   WHATSAPP_PROXY_ONLY_LOGIN: {{ .Values.whatsapp.proxy.onlyLogin | quote }}
   WHATSAPP_PROXY_NO_MEDIA: {{ .Values.whatsapp.proxy.noMedia | quote }}
   {{- end }}
+  CHATWOOT_ENABLED: {{ .Values.chatwoot.enabled | quote }}
+  CHATWOOT_URL: {{ .Values.chatwoot.url | quote }}
+  CHATWOOT_ACCOUNT_ID: {{ .Values.chatwoot.accountId | quote }}
+  CHATWOOT_INBOX_ID: {{ .Values.chatwoot.inboxId | quote }}
+  CHATWOOT_DEVICE_ID: {{ .Values.chatwoot.deviceId | quote }}
+  CHATWOOT_IMPORT_MESSAGES: {{ .Values.chatwoot.importMessages | quote }}
+  CHATWOOT_DAYS_LIMIT_IMPORT_MESSAGES: {{ .Values.chatwoot.daysLimitImportMessages | quote }}

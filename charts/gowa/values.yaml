@@ -147,6 +147,28 @@ auth:
   # Format: user1:pass1,user2:pass2
   basicAuth: ""
 
+# chatwoot contains Chatwoot integration configuration
+# Defaults disabled so existing deployments are unaffected.
+chatwoot:
+  # enabled toggles the Chatwoot integration (CHATWOOT_ENABLED)
+  enabled: "false"
+  # url is the Chatwoot instance URL (CHATWOOT_URL)
+  url: "https://app.chatwoot.com"
+  # apiToken is the Chatwoot API access token (CHATWOOT_API_TOKEN)
+  # Stored in the Secret; leave empty when enabled=false.
+  apiToken: ""
+  # accountId is the Chatwoot account ID (CHATWOOT_ACCOUNT_ID)
+  accountId: "0"
+  # inboxId is the Chatwoot inbox ID (CHATWOOT_INBOX_ID)
+  inboxId: "0"
+  # deviceId is the device identifier for outbound messages (CHATWOOT_DEVICE_ID)
+  deviceId: ""
+  # importMessages enables history sync into Chatwoot (CHATWOOT_IMPORT_MESSAGES)
+  importMessages: "false"
+  # daysLimitImportMessages caps how many days of history are imported
+  # (CHATWOOT_DAYS_LIMIT_IMPORT_MESSAGES)
+  daysLimitImportMessages: "3"
+
 # database contains database configuration
 database:
   # uri is the main database URI (DB_URI)
