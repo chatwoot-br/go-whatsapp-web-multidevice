@@ -184,3 +184,21 @@ func (r *deviceChatStorage) GetDeviceRecord(deviceID string) (*domainChatStorage
 func (r *deviceChatStorage) DeleteDeviceRecord(deviceID string) error {
 	return r.base.DeleteDeviceRecord(deviceID)
 }
+
+// MergeLIDChat / GetLIDChats — fork-only LID deduplication wrappers.
+// Defaults deviceID to the wrapper's bound device when empty.
+func (r *deviceChatStorage) MergeLIDChat(deviceID, lidJID, phoneJID string) error {
+	target := deviceID
+	if target == "" {
+		target = r.deviceID
+	}
+	return r.base.MergeLIDChat(target, lidJID, phoneJID)
+}
+
+func (r *deviceChatStorage) GetLIDChats(deviceID string) ([]*domainChatStorage.Chat, error) {
+	target := deviceID
+	if target == "" {
+		target = r.deviceID
+	}
+	return r.base.GetLIDChats(target)
+}

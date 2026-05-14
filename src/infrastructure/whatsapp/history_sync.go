@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -13,11 +14,29 @@ import (
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
+	"go.mau.fi/whatsmeow/proto/waWeb"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
 var historySyncID int32
+
+// Debounce timer for history sync webhook.
+// WhatsApp sends multiple sync types (RECENT, PUSH_NAME, etc.) in sequence; we only
+// dispatch the fork-specific history_sync_complete event after a quiet period to
+// avoid duplicate webhook deliveries.
+var (
+	historySyncDebounceTimer *time.Timer
+	historySyncDebounceMu    sync.Mutex
+	historySyncDebounceDelay = 5 * time.Second
+)
+
+// Push name cache — push names keyed by phone number (user part of JID).
+// Allows applying names even if PUSH_NAME arrives before/concurrently with RECENT.
+var (
+	pushNameCache   = make(map[string]string)
+	pushNameCacheMu sync.RWMutex
+)
 
 func handleHistorySync(ctx context.Context, evt *events.HistorySync, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client) {
 	if client == nil || client.Store == nil || client.Store.ID == nil {
@@ -55,6 +74,44 @@ func handleHistorySync(ctx context.Context, evt *events.HistorySync, chatStorage
 			log.Errorf("Failed to process history sync to database: %v", err)
 		}
 	}
+
+	// Debounce webhook notification — wait for all sync events to complete.
+	// Only schedule when webhooks are configured to avoid wasted timers.
+	if len(config.WhatsappWebhook) > 0 {
+		scheduleHistorySyncWebhook(chatStorageRepo, client, evt.Data.GetSyncType().String())
+	}
+}
+
+// scheduleHistorySyncWebhook debounces webhook notifications.
+// Resets timer on each sync event; only fires after a quiet period (historySyncDebounceDelay).
+// At fire time it runs:
+//  1. applyCachedPushNamesToChats — sync push names into chat rows
+//  2. deduplicateLIDChats         — collapse @lid chats into their phone counterparts
+//  3. forwardHistorySyncCompleteToWebhook — dispatch the fork-specific event
+//  4. clearPushNameCache          — bound memory across sync cycles
+func scheduleHistorySyncWebhook(chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client, syncType string) {
+	historySyncDebounceMu.Lock()
+	defer historySyncDebounceMu.Unlock()
+
+	if historySyncDebounceTimer != nil {
+		historySyncDebounceTimer.Stop()
+	}
+
+	log.Infof("History sync event (%s), waiting %v for more events before webhook", syncType, historySyncDebounceDelay)
+
+	historySyncDebounceTimer = time.AfterFunc(historySyncDebounceDelay, func() {
+		log.Infof("History sync debounce complete, sending webhook")
+
+		if chatStorageRepo != nil && client != nil && client.Store != nil && client.Store.ID != nil {
+			deviceJID := client.Store.ID.ToNonAD().String()
+			applyCachedPushNamesToChats(context.Background(), chatStorageRepo, deviceJID)
+			deduplicateLIDChats(context.Background(), chatStorageRepo, client, deviceJID)
+		}
+
+		forwardHistorySyncCompleteToWebhook(context.Background(), client, syncType)
+
+		clearPushNameCache()
+	})
 }
 
 // processHistorySync processes history sync data and stores messages in the database
@@ -68,25 +125,27 @@ func processHistorySync(ctx context.Context, data *waHistorySync.HistorySync, ch
 
 	switch syncType {
 	case waHistorySync.HistorySync_INITIAL_BOOTSTRAP, waHistorySync.HistorySync_RECENT:
-		// Process conversation messages
 		return processConversationMessages(ctx, data, chatStorageRepo, client)
+	case waHistorySync.HistorySync_ON_DEMAND:
+		// ON_DEMAND history sync (response to BuildHistorySyncRequest) — also forwards
+		// individual messages to webhooks since these represent previously-unavailable messages.
+		return processOnDemandHistorySync(ctx, data, chatStorageRepo, client)
 	case waHistorySync.HistorySync_PUSH_NAME:
-		// Process push names to update chat names
 		return processPushNames(ctx, data, chatStorageRepo, client)
 	default:
-		// Other sync types are not needed for message storage
 		log.Debugf("Skipping history sync type: %s", syncType.String())
 		return nil
 	}
 }
 
-// processConversationMessages processes and stores conversation messages from history sync
+// processConversationMessages processes and stores conversation messages from history sync.
+// Uses NormalizeJIDFromLIDWithContext so LID resolution survives a cancelled event context.
 func processConversationMessages(ctx context.Context, data *waHistorySync.HistorySync, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client) error {
 	conversations := data.GetConversations()
 	log.Infof("Processing %d conversations from history sync", len(conversations))
 
 	// Prioritize device JID from context (set by event handler with correct device instance)
-	// over client.Store.ID which may point to a different device in multi-device scenarios
+	// over client.Store.ID which may point to a different device in multi-device scenarios.
 	deviceID := ""
 	if inst, ok := DeviceFromContext(ctx); ok && inst != nil {
 		deviceID = inst.JID()
@@ -104,30 +163,29 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 			continue
 		}
 
-		// Parse JID to get proper format
 		jid, err := types.ParseJID(rawChatJID)
 		if err != nil {
 			log.Warnf("Failed to parse JID %s: %v", rawChatJID, err)
 			continue
 		}
 
-		// Normalize JID (convert @lid to @s.whatsapp.net if possible)
-		jid = NormalizeJIDFromLID(ctx, jid, client)
+		jid = NormalizeJIDFromLIDWithContext(jid, client)
 		chatJID := jid.String()
 
 		displayName := conv.GetDisplayName()
 
-		// Get or create chat
-		chatName := chatStorageRepo.GetChatNameWithPushName(jid, chatJID, "", displayName)
+		// Fall back to cached push name (populated by PUSH_NAME sync) when display name is empty.
+		cachedPushName := GetPushNameFromCache(jid.User)
+		if cachedPushName != "" && displayName == "" {
+			displayName = cachedPushName
+		}
 
-		// Extract ephemeral expiration from conversation
+		chatName := chatStorageRepo.GetChatNameWithPushName(jid, chatJID, "", displayName)
 		ephemeralExpiration := conv.GetEphemeralExpiration()
 
-		// Process messages in the conversation
 		messages := conv.GetMessages()
 		log.Debugf("Processing %d messages for chat %s", len(messages), chatJID)
 
-		// Collect messages for batch processing
 		var messageBatch []*domainChatStorage.Message
 		var latestTimestamp time.Time
 
@@ -142,43 +200,34 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 				continue
 			}
 
-			// Skip messages without ID
 			messageID := msgKey.GetID()
 			if messageID == "" {
 				continue
 			}
 
-			// Extract message content and media info
 			content := utils.ExtractMessageTextFromProto(msg.GetMessage())
 			mediaType, filename, url, mediaKey, fileSHA256, fileEncSHA256, fileLength := utils.ExtractMediaInfo(msg.GetMessage())
 
-			// Skip if there's no content and no media
 			if content == "" && mediaType == "" {
 				continue
 			}
 
-			// Determine sender
 			sender := ""
 			isFromMe := msgKey.GetFromMe()
 			if isFromMe {
-				// For self-messages, use the full JID format to match regular message processing
 				if client != nil && client.Store.ID != nil {
-					sender = client.Store.ID.ToNonAD().String() // Use full JID instead of just User part
+					sender = client.Store.ID.ToNonAD().String()
 				} else {
-					// Skip messages where we can't determine the sender to avoid NOT NULL violations
 					log.Warnf("Skipping self-message %s: client ID unavailable", messageID)
 					continue
 				}
 			} else {
 				participant := msgKey.GetParticipant()
 				if participant != "" {
-					// For group messages, participant contains the actual sender
 					if senderJID, err := types.ParseJID(participant); err == nil {
-						// Normalize sender JID (convert @lid to @s.whatsapp.net if possible)
-						senderJID = NormalizeJIDFromLID(ctx, senderJID, client)
-						sender = senderJID.ToNonAD().String() // Use full JID format for consistency
+						senderJID = NormalizeJIDFromLIDWithContext(senderJID, client)
+						sender = senderJID.ToNonAD().String()
 					} else {
-						// Fallback to participant string, but ensure it's not empty
 						if participant != "" {
 							sender = participant
 						} else {
@@ -187,28 +236,23 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 						}
 					}
 				} else {
-					// Check if this is a group chat — group messages must have a participant
-					// to identify the actual sender. Without it, we'd incorrectly store the
-					// group JID as the sender (see GitHub issue #609).
+					// Group messages must have a participant to identify the actual sender
+					// (upstream-added safety check — see GitHub issue #609). Without it we'd
+					// incorrectly store the group JID as the sender.
 					if jid.Server == "g.us" {
 						log.Warnf("Skipping group message %s in chat %s: no participant info available", messageID, chatJID)
 						continue
 					}
-					// For individual chats, use the chat JID as sender with full format
-					sender = jid.String() // Use full JID format for consistency
+					sender = jid.String()
 				}
 			}
 
-			// Convert timestamp from Unix seconds to time.Time
-			// WhatsApp history sync timestamps are in seconds, not milliseconds
 			timestamp := time.Unix(int64(msg.GetMessageTimestamp()), 0)
 
-			// Track latest timestamp
 			if timestamp.After(latestTimestamp) {
 				latestTimestamp = timestamp
 			}
 
-			// Create message object and add to batch
 			message := &domainChatStorage.Message{
 				ID:            messageID,
 				ChatJID:       chatJID,
@@ -229,7 +273,6 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 			messageBatch = append(messageBatch, message)
 		}
 
-		// Store or update the chat with latest message time
 		if len(messageBatch) > 0 {
 			chat := &domainChatStorage.Chat{
 				DeviceID:            deviceID,
@@ -239,13 +282,11 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 				EphemeralExpiration: ephemeralExpiration,
 			}
 
-			// Store or update the chat
 			if err := chatStorageRepo.StoreChat(chat); err != nil {
 				log.Warnf("Failed to store chat %s: %v", chatJID, err)
 				continue
 			}
 
-			// Store messages in batch
 			if err := chatStorageRepo.StoreMessagesBatch(messageBatch); err != nil {
 				log.Warnf("Failed to store messages batch for chat %s: %v", chatJID, err)
 			} else {
@@ -257,12 +298,104 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 	return nil
 }
 
-// processPushNames processes push names from history sync to update chat names
+// processOnDemandHistorySync processes ON_DEMAND history sync responses (triggered when we
+// request history for a specific chat, e.g. after unavailable messages). ON_DEMAND messages
+// are forwarded individually to webhooks since they represent "new" messages not received in
+// real-time. WhatsApp protocol limitations may make these rare in practice (issue #654).
+func processOnDemandHistorySync(ctx context.Context, data *waHistorySync.HistorySync, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client) error {
+	conversations := data.GetConversations()
+	log.Infof("[ON_DEMAND] Processing ON_DEMAND history sync with %d conversations", len(conversations))
+
+	// Store messages first using existing logic; continue to forward even on storage failure.
+	if err := processConversationMessages(ctx, data, chatStorageRepo, client); err != nil {
+		log.Errorf("[ON_DEMAND] Failed to store messages: %v", err)
+	}
+
+	if len(config.WhatsappWebhook) > 0 {
+		deviceID := ""
+		if client != nil && client.Store != nil && client.Store.ID != nil {
+			deviceJID := NormalizeJIDFromLIDWithContext(client.Store.ID.ToNonAD(), client)
+			deviceID = deviceJID.ToNonAD().String()
+		}
+
+		messageCount := 0
+		for _, conv := range conversations {
+			for _, histMsg := range conv.GetMessages() {
+				if histMsg == nil || histMsg.Message == nil {
+					continue
+				}
+				forwardOnDemandMessageToWebhook(ctx, histMsg.Message, deviceID, client)
+				messageCount++
+			}
+		}
+		log.Infof("[ON_DEMAND] Forwarded %d messages to webhook", messageCount)
+	}
+
+	return nil
+}
+
+// forwardOnDemandMessageToWebhook forwards an ON_DEMAND history sync message to configured webhooks.
+// These are messages that were previously unavailable (from other linked devices).
+func forwardOnDemandMessageToWebhook(ctx context.Context, msg *waWeb.WebMessageInfo, deviceID string, client *whatsmeow.Client) {
+	msgKey := msg.GetKey()
+	if msgKey == nil {
+		return
+	}
+
+	messageID := msgKey.GetID()
+	if messageID == "" {
+		return
+	}
+
+	content := utils.ExtractMessageTextFromProto(msg.GetMessage())
+	if content == "" {
+		return
+	}
+
+	chatJID := msgKey.GetRemoteJID()
+	if jid, err := types.ParseJID(chatJID); err == nil {
+		normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
+		chatJID = normalizedJID.String()
+	}
+
+	sender := chatJID
+	if msgKey.GetFromMe() && client != nil && client.Store != nil && client.Store.ID != nil {
+		sender = client.Store.ID.ToNonAD().String()
+	} else if participant := msgKey.GetParticipant(); participant != "" {
+		if jid, err := types.ParseJID(participant); err == nil {
+			normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
+			sender = normalizedJID.String()
+		}
+	}
+
+	payload := map[string]any{
+		"event":     "message",
+		"device_id": deviceID,
+		"payload": map[string]any{
+			"id":                messageID,
+			"from":              chatJID,
+			"sender":            sender,
+			"body":              content,
+			"timestamp":         time.Unix(int64(msg.GetMessageTimestamp()), 0).Format(time.RFC3339),
+			"is_from_me":        msgKey.GetFromMe(),
+			"from_history_sync": true,
+			"sync_type":         "ON_DEMAND",
+		},
+	}
+
+	if err := forwardPayloadToConfiguredWebhooks(ctx, payload, "on_demand_message"); err != nil {
+		log.Errorf("[ON_DEMAND] Failed to forward message %s to webhook: %v", messageID, err)
+	} else {
+		log.Debugf("[ON_DEMAND] Forwarded message %s to webhook", messageID)
+	}
+}
+
+// processPushNames processes push names from history sync to update chat names.
+// First pass caches all push names by phone number; second pass updates existing chats.
 func processPushNames(ctx context.Context, data *waHistorySync.HistorySync, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client) error {
 	pushnames := data.GetPushnames()
 	log.Infof("Processing %d push names from history sync", len(pushnames))
 
-	// Extract device ID from context (same pattern as processConversationMessages)
 	deviceID := ""
 	if inst, ok := DeviceFromContext(ctx); ok && inst != nil {
 		deviceID = inst.JID()
@@ -274,6 +407,8 @@ func processPushNames(ctx context.Context, data *waHistorySync.HistorySync, chat
 		deviceID = client.Store.ID.ToNonAD().String()
 	}
 
+	// First pass: cache all push names by phone number for later use.
+	pushNameCacheMu.Lock()
 	for _, pushname := range pushnames {
 		rawJIDStr := pushname.GetID()
 		name := pushname.GetPushname()
@@ -282,48 +417,226 @@ func processPushNames(ctx context.Context, data *waHistorySync.HistorySync, chat
 			continue
 		}
 
-		// Parse and normalize JID (convert @lid to @s.whatsapp.net if possible)
+		jid, err := types.ParseJID(rawJIDStr)
+		if err != nil {
+			continue
+		}
+
+		if jid.User != "" {
+			pushNameCache[jid.User] = name
+			log.Debugf("Cached push name for %s: %s", jid.User, name)
+		}
+	}
+	pushNameCacheMu.Unlock()
+
+	// Second pass: update existing chats.
+	for _, pushname := range pushnames {
+		rawJIDStr := pushname.GetID()
+		name := pushname.GetPushname()
+
+		if rawJIDStr == "" || name == "" {
+			continue
+		}
+
 		jid, err := types.ParseJID(rawJIDStr)
 		if err != nil {
 			log.Warnf("Failed to parse JID %s in push names: %v", rawJIDStr, err)
 			continue
 		}
-		jid = NormalizeJIDFromLID(ctx, jid, client)
-		jidStr := jid.String()
 
-		// Check if chat exists (device-scoped to avoid cross-device data leak)
-		existingChat, err := chatStorageRepo.GetChatByDevice(deviceID, jidStr)
-		if err != nil {
-			log.Warnf("Failed to check chat existence for %s: %v", jidStr, err)
-			continue
+		var existingChat *domainChatStorage.Chat
+
+		// Try 1: Normalized JID
+		normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
+		existingChat, _ = chatStorageRepo.GetChatByDevice(deviceID, normalizedJID.String())
+
+		// Try 2: Standard s.whatsapp.net format
+		if existingChat == nil && jid.User != "" {
+			standardJID := jid.User + "@s.whatsapp.net"
+			existingChat, _ = chatStorageRepo.GetChatByDevice(deviceID, standardJID)
+		}
+
+		// Try 3: Original JID format
+		if existingChat == nil {
+			existingChat, _ = chatStorageRepo.GetChatByDevice(deviceID, jid.String())
 		}
 
 		if existingChat == nil {
-			// Chat doesn't exist, create it to store the push name
-			newChat := &domainChatStorage.Chat{
-				DeviceID:        deviceID,
-				JID:             jidStr,
-				Name:            name,
-				LastMessageTime: time.Time{}, // Use zero time so it doesn't bubble up in chat list
-			}
-			if err := chatStorageRepo.StoreChat(newChat); err != nil {
-				log.Warnf("Failed to create chat for %s during pushname sync: %v", jidStr, err)
-			} else {
-				log.Debugf("Created new chat entry from history sync")
-			}
+			// Chat doesn't exist yet — name is cached for when chat is created.
 			continue
 		}
 
-		// Update chat name if it's different
 		if existingChat.Name != name {
-			existingChat.Name = name
-			if err := chatStorageRepo.StoreChat(existingChat); err != nil {
-				log.Warnf("Failed to update chat name for %s: %v", jidStr, err)
-			} else {
-				log.Debugf("Updated chat name from history sync")
+			// Only overwrite if current name is empty, a phone number, or the JID user part.
+			if existingChat.Name == "" || existingChat.Name == jid.User || isPhoneNumber(existingChat.Name) {
+				existingChat.Name = name
+				if err := chatStorageRepo.StoreChat(existingChat); err != nil {
+					log.Warnf("Failed to update chat name for %s: %v", existingChat.JID, err)
+				} else {
+					log.Debugf("Updated chat name for %s to %s", existingChat.JID, name)
+				}
 			}
 		}
 	}
 
 	return nil
+}
+
+// isPhoneNumber checks if a string looks like a phone number (digits only, optionally with +).
+func isPhoneNumber(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, c := range s {
+		if c == '+' && i == 0 {
+			continue
+		}
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// GetPushNameFromCache retrieves a cached push name by phone number.
+func GetPushNameFromCache(phoneNumber string) string {
+	pushNameCacheMu.RLock()
+	defer pushNameCacheMu.RUnlock()
+	return pushNameCache[phoneNumber]
+}
+
+// clearPushNameCache clears the push name cache after sync is complete.
+func clearPushNameCache() {
+	pushNameCacheMu.Lock()
+	defer pushNameCacheMu.Unlock()
+	pushNameCache = make(map[string]string)
+	log.Debugf("Cleared push name cache")
+}
+
+// applyCachedPushNamesToChats applies any cached push names to chats that still have
+// phone-number names. Called at debounce-fire time, before deduplicateLIDChats.
+func applyCachedPushNamesToChats(ctx context.Context, chatStorageRepo domainChatStorage.IChatStorageRepository, deviceID string) {
+	pushNameCacheMu.RLock()
+	cacheSize := len(pushNameCache)
+	pushNameCacheMu.RUnlock()
+
+	if cacheSize == 0 {
+		return
+	}
+
+	log.Infof("Applying %d cached push names to chats", cacheSize)
+
+	filter := &domainChatStorage.ChatFilter{
+		DeviceID: deviceID,
+		Limit:    1000,
+	}
+
+	chats, err := chatStorageRepo.GetChats(filter)
+	if err != nil {
+		log.Warnf("Failed to get chats for push name application: %v", err)
+		return
+	}
+
+	updated := 0
+	for _, chat := range chats {
+		phoneNumber := extractPhoneFromJID(chat.JID)
+		if phoneNumber == "" {
+			continue
+		}
+
+		pushName := GetPushNameFromCache(phoneNumber)
+		if pushName == "" {
+			continue
+		}
+
+		if chat.Name != pushName && isPhoneNumber(chat.Name) {
+			chat.Name = pushName
+			if err := chatStorageRepo.StoreChat(chat); err != nil {
+				log.Warnf("Failed to apply push name to chat %s: %v", chat.JID, err)
+			} else {
+				updated++
+				log.Debugf("Applied push name to chat %s: %s", chat.JID, pushName)
+			}
+		}
+	}
+
+	if updated > 0 {
+		log.Infof("Updated %d chat names from push name cache", updated)
+	}
+}
+
+// deduplicateLIDChats finds and merges LID-based chats that have phone-number mappings.
+// Called at debounce-fire time, after applyCachedPushNamesToChats and before
+// forwardHistorySyncCompleteToWebhook. Fork-only — confirmed not subsumed by upstream's
+// LID commits (40b0875, d718ef8, 17ff32f) per investigation findings in 02-design.md.
+func deduplicateLIDChats(ctx context.Context, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client, deviceID string) {
+	if chatStorageRepo == nil || client == nil {
+		return
+	}
+
+	lidChats, err := chatStorageRepo.GetLIDChats(deviceID)
+	if err != nil {
+		log.Warnf("Failed to get LID chats for deduplication: %v", err)
+		return
+	}
+
+	if len(lidChats) == 0 {
+		return
+	}
+
+	log.Infof("Found %d LID-based chats to check for deduplication", len(lidChats))
+
+	merged := 0
+	for _, chat := range lidChats {
+		lidJID, err := types.ParseJID(chat.JID)
+		if err != nil {
+			log.Warnf("Failed to parse LID JID %s: %v", chat.JID, err)
+			continue
+		}
+
+		phoneJID := NormalizeJIDFromLIDWithContext(lidJID, client)
+
+		// If resolution succeeded (different JID returned), attempt to merge.
+		if phoneJID.Server != "lid" {
+			phoneJIDStr := phoneJID.String()
+
+			if err := chatStorageRepo.MergeLIDChat(deviceID, chat.JID, phoneJIDStr); err != nil {
+				log.Warnf("Failed to merge LID chat %s into %s: %v", chat.JID, phoneJIDStr, err)
+			} else {
+				merged++
+				log.Debugf("Merged LID chat %s into %s", chat.JID, phoneJIDStr)
+			}
+		}
+	}
+
+	if merged > 0 {
+		log.Infof("Deduplicated %d LID-based chats", merged)
+	}
+}
+
+// extractPhoneFromJID extracts the phone number (user part) from a JID string.
+// Local helper: avoids the round-trip through types.ParseJID for an O(n) string scan.
+func extractPhoneFromJID(jid string) string {
+	// JID format: phone@server or phone:device@server
+	atIdx := -1
+	colonIdx := -1
+	for i, c := range jid {
+		if c == '@' {
+			atIdx = i
+			break
+		}
+		if c == ':' {
+			colonIdx = i
+		}
+	}
+
+	if atIdx == -1 {
+		return jid
+	}
+
+	if colonIdx != -1 && colonIdx < atIdx {
+		return jid[:colonIdx]
+	}
+
+	return jid[:atIdx]
 }
