@@ -67,3 +67,15 @@ Phase status updated below as agents complete:
 - [x] Phase 6 — Slice 7 release
 - [x] Phase 7 — E2E tests
 - [x] Phase 8 — Final validation
+
+## Post-upgrade: Q2 reversal (2026-05-15)
+
+Topology investigation (`09-chatwoot-app-topology.md`) → Q2 reversed
+(`10-q2-reversal.md`). GoWA-native chatwoot NOT adopted; fork's custom
+integration kept. Native module stays dormant in-tree (CHATWOOT_ENABLED
+defaults false). Remaining gate: webhook-contract-drift check between
+post-v8.5.0 GoWA standard webhook output and chatwoot-app's fork webhook
+controller.
+
+- [x] Phase 9 — webhook contract-drift verification → CLEAN (0 breaking, 1 behavioral already-safe, HMAC stable; `11-contract-drift.md`)
+- [x] Phase 10 — confirmed clean; no chatwoot-app code change. PR description updated; obsolete cutover doc superseded. Optional deploy-config (WHATSAPP_WEBHOOK_EVENTS whitelist) noted as ~2.5h non-code follow-up.

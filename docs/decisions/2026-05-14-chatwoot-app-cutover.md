@@ -1,3 +1,7 @@
+> **SUPERSEDED 2026-05-15** — Q2 reversed (`.workstreams/2026-05-14-upstream-v8.5-sync/10-q2-reversal.md`). The fork keeps its custom chatwoot integration; GoWA-native is NOT adopted. The Rails-side cutover described below is NOT required. Webhook contract verified clean — see `11-contract-drift.md`. Retained for trail.
+
+---
+
 # chatwoot-app lockstep cutover (Slice 4 follow-up)
 
 **Date**: 2026-05-14
