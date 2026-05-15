@@ -2,6 +2,27 @@ apiVersion: v1
 entries:
   gowa:
   - apiVersion: v2
+    appVersion: v8.5.0-1
+    created: "2026-05-15T11:55:14.673202102Z"
+    description: A Helm chart for deploying go-whatsapp-web-multidevice - WhatsApp
+      Web API server
+    digest: ac333043f5fbb2ecf30fead2988252c1794ffe8795b1d1c6d87d5857e94b1d3e
+    home: https://github.com/chatwoot-br/go-whatsapp-web-multidevice
+    keywords:
+    - whatsapp
+    - api
+    - webhook
+    - messaging
+    maintainers:
+    - name: chatwoot-br
+    name: gowa
+    sources:
+    - https://github.com/chatwoot-br/go-whatsapp-web-multidevice
+    type: application
+    urls:
+    - https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases/download/gowa-8.3.0/gowa-8.3.0.tgz
+    version: 8.3.0
+  - apiVersion: v2
     appVersion: v8.1.2-1
     created: "2026-01-26T22:11:33.901676487Z"
     description: A Helm chart for deploying go-whatsapp-web-multidevice - WhatsApp
@@ -364,4 +385,4 @@ entries:
     urls:
     - https://github.com/chatwoot-br/go-whatsapp-web-multidevice/releases/download/gowa-7.5.0/gowa-7.5.0.tgz
     version: 7.5.0
-generated: "2026-01-26T22:11:33.901798294Z"
+generated: "2026-05-15T11:55:14.673356869Z"
