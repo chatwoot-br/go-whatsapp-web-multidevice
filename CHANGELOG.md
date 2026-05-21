@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.5.0+2] - 2026-05-21
+
+### Fixed
+- **chatstorage: `MergeLIDChat` deadlocked under `MaxOpenConns(1)`.** The transaction opened by `MergeLIDChat` held the only connection in the chatstorage pool (set by `cmd/root.go:initChatStorage`), then called `r.GetChatByDevice` twice — those helpers issue `r.db.QueryRow`, which requested a second connection and waited forever. After every history sync the fork-only `deduplicateLIDChats` goroutine triggers this path; if any `@lid` chat existed, the deadlock froze every subsequent `CreateMessage` from incoming WhatsApp events, and `handleWebhookForward` never fired (live messages stopped reaching downstream consumers ~5 s after the history-sync debounce). Inlined the two reads as `tx.QueryRow` so the whole transaction stays on the same connection; added a `MaxOpenConns(1)` invariant note in the function header and a regression test (`TestMergeLIDChat_NoDeadlockWithSingleConnPool`) that pins the behavior under the production pool size.
+
 ## [v8.5.0+1] - 2026-05-14 (Synced with upstream v8.5.0)
 
 ### Upstream Changes
