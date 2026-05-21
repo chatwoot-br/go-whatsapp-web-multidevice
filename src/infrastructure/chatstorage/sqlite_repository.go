@@ -1123,6 +1123,11 @@ func (r *SQLiteRepository) StoreSentMessageWithContext(ctx context.Context, mess
 // All messages whose chat_jid equals lidJID are rewritten to phoneJID inside a single
 // transaction; the LID chat row is then deleted (or renamed in-place when no phone-chat
 // target exists yet). Fork-only — see docs/plans/2026-01-18-fix-history-sync-lid-duplicate-chats.md.
+//
+// IMPORTANT: chatstorage runs with db.SetMaxOpenConns(1) (see cmd/root.go:initChatStorage).
+// All reads inside this transaction MUST go through tx.QueryRow — calling r.GetChatByDevice
+// (which uses r.db.QueryRow) would request a second pool connection and deadlock against
+// the tx itself.
 func (r *SQLiteRepository) MergeLIDChat(deviceID, lidJID, phoneJID string) error {
 	tx, err := r.db.Begin()
 	if err != nil {
@@ -1130,19 +1135,27 @@ func (r *SQLiteRepository) MergeLIDChat(deviceID, lidJID, phoneJID string) error
 	}
 	defer tx.Rollback()
 
-	// Get the LID chat to merge its metadata
-	lidChat, err := r.GetChatByDevice(deviceID, lidJID)
-	if err != nil {
-		return fmt.Errorf("failed to get LID chat: %w", err)
-	}
-	if lidChat == nil {
+	const getChatByDeviceSQL = `
+		SELECT device_id, jid, name, last_message_time, ephemeral_expiration, created_at, updated_at, archived
+		FROM chats
+		WHERE jid = ? AND device_id = ?
+	`
+
+	// Get the LID chat to merge its metadata (tx-scoped — see note above).
+	lidChat, err := r.scanChat(tx.QueryRow(getChatByDeviceSQL, lidJID, deviceID))
+	if err == sql.ErrNoRows {
 		// LID chat doesn't exist, nothing to merge
 		return nil
 	}
-
-	// Get the phone chat (target)
-	phoneChat, err := r.GetChatByDevice(deviceID, phoneJID)
 	if err != nil {
+		return fmt.Errorf("failed to get LID chat: %w", err)
+	}
+
+	// Get the phone chat (target) — may legitimately not exist (tx-scoped).
+	phoneChat, err := r.scanChat(tx.QueryRow(getChatByDeviceSQL, phoneJID, deviceID))
+	if err == sql.ErrNoRows {
+		phoneChat = nil
+	} else if err != nil {
 		return fmt.Errorf("failed to get phone chat: %w", err)
 	}
 

@@ -264,5 +264,63 @@ func TestMergeLIDChat_NoCrossDeviceLeakage(t *testing.T) {
 	}
 }
 
+// TestMergeLIDChat_NoDeadlockWithSingleConnPool reproduces the production pool
+// constraint set in cmd/root.go:initChatStorage — db.SetMaxOpenConns(1). Before
+// the tx-scoped read fix, MergeLIDChat would Begin() (grabbing the only conn),
+// then call r.GetChatByDevice (which uses r.db.QueryRow → needs a 2nd conn from
+// the same pool) → permanent deadlock that froze every subsequent CreateMessage
+// from incoming WhatsApp events.
+//
+// The test runs MergeLIDChat under a 5 s deadline; pre-fix it hangs and the
+// timeout watchdog fires t.Fatal; post-fix it returns in <50 ms.
+func TestMergeLIDChat_NoDeadlockWithSingleConnPool(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := sql.Open("sqlite3", "file:"+dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	// Reproduce production constraint: any nested r.db.* call inside a tx will
+	// deadlock against the parent transaction holding the single connection.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
+	repo := &SQLiteRepository{db: db}
+	if err := repo.InitializeSchema(); err != nil {
+		t.Fatalf("init schema: %v", err)
+	}
+
+	device := "dev1"
+	lidJID := "215946727821336@lid"
+	phoneJID := "5511999999999@s.whatsapp.net"
+	now := time.Now().UTC()
+
+	insertChat(t, db, device, lidJID, "Alice LID", now.Add(-time.Hour))
+	insertChat(t, db, device, phoneJID, "5511999999999", now.Add(-2*time.Hour))
+	insertMessage(t, db, "msg-1", lidJID, device, lidJID, "hello", now.Add(-30*time.Minute))
+
+	// Watchdog: kill the test if MergeLIDChat hangs for more than 5 s.
+	done := make(chan error, 1)
+	go func() { done <- repo.MergeLIDChat(device, lidJID, phoneJID) }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("MergeLIDChat returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("MergeLIDChat deadlocked: did not return within 5 s under MaxOpenConns(1) — the tx must use tx.QueryRow for reads, not r.db.QueryRow")
+	}
+
+	// Sanity: the merge actually happened.
+	if got := countRows(t, db, `SELECT COUNT(*) FROM chats WHERE jid=? AND device_id=?`, lidJID, device); got != 0 {
+		t.Errorf("LID chat row should be deleted post-merge, got %d", got)
+	}
+	if got := countRows(t, db, `SELECT COUNT(*) FROM messages WHERE chat_jid=? AND device_id=?`, phoneJID, device); got != 1 {
+		t.Errorf("message should be migrated to phone chat, got %d", got)
+	}
+}
+
 // Static assertion that the repo satisfies the domain interface (compile-time guard).
 var _ domainChatStorage.IChatStorageRepository = (*SQLiteRepository)(nil)
