@@ -33,17 +33,28 @@ var restCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(restCmd)
 }
+
+// restFiberConfig builds the fiber config for the REST server.
+// UnescapePath is required: Chatwoot's history-sync client percent-encodes the
+// chat JID (e.g. ":chat_jid" arrives as "...%40s.whatsapp.net"), and the
+// chat-storage lookup is an exact string match — without decoding, every
+// /chat/:chat_jid/messages request misses and panics with "chat not found".
+func restFiberConfig(engine fiber.Views) fiber.Config {
+	return fiber.Config{
+		Views:                   engine,
+		EnableTrustedProxyCheck: true,
+		BodyLimit:               int(config.WhatsappSettingMaxVideoSize),
+		Network:                 "tcp",
+		UnescapePath:            true,
+	}
+}
+
 func restServer(_ *cobra.Command, _ []string) {
 	engine := html.NewFileSystem(http.FS(EmbedIndex), ".html")
 	engine.AddFunc("isEnableBasicAuth", func(token any) bool {
 		return token != nil
 	})
-	fiberConfig := fiber.Config{
-		Views:                   engine,
-		EnableTrustedProxyCheck: true,
-		BodyLimit:               int(config.WhatsappSettingMaxVideoSize),
-		Network:                 "tcp",
-	}
+	fiberConfig := restFiberConfig(engine)
 
 	// Configure proxy settings if trusted proxies are specified
 	if len(config.AppTrustedProxies) > 0 {
