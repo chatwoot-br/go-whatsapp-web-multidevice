@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.5.0+3] - 2026-05-22
+
+### Fixed
+- **rest: `GET /chat/:chat_jid/messages` returned HTTP 500 ("chat with JID ... not found") for every request.** Fiber's `UnescapePath` defaults to `false`, so the percent-encoded chat JID sent by the Chatwoot history-sync client (`...%40s.whatsapp.net`) reached the handler still encoded. The chatstorage lookup (`GetChatByDevice`) is an exact string match, so it never matched the stored JID (`...@s.whatsapp.net`); `chat == nil` raised an error that `PanicIfNeeded` converted to a recovered panic / HTTP 500. Every per-chat fetch during a Chatwoot history sync failed, so the sync completed having imported 0 messages. Enabled `UnescapePath` so path params are percent-decoded before routing — also fixes the same latent bug on `/chat/:chat_jid/{pin,disappearing,archive}`. Added regression test `TestRestFiberConfigDecodesEncodedChatJID` that drives the production fiber config.
+
 ## [v8.5.0+2] - 2026-05-21
 
 ### Fixed
