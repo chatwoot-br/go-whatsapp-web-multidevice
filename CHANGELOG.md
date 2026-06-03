@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.5.0+4] - 2026-06-03
+
+### Fixed
+- **whatsapp: `WHATSAPP_ACCOUNT_VALIDATION=true` caused intermittent false-negative "Phone X is not on WhatsApp" send failures (#3).** `ValidateAndNormalizeJID` treated a single, un-retried `client.IsOnWhatsApp` USync probe as authoritative. WhatsApp's USync is non-deterministic (throttling, post-pairing app-state sync gaps), so a genuinely-registered number intermittently came back empty or `IsIn=false`, and the send failed permanently with a misleading terminal error (surfaced in Chatwoot as "Falha ao enviar"). The probe is now classified as **positive / confirmed-negative / ambiguous**, retried with bounded attempts under a single total deadline (`onWhatsAppTotalTimeout`), and an **ambiguous** result (empty response or transport error) falls through to the BR-normalized JID and sends instead of hard-failing — even when validation is on. Only an authoritative `IsIn=false` (non-empty response) is still rejected. The fall-through JID is built from the BR 9th-digit-stripped, E.164-normalized phone so delivery to BR mobiles is preserved. `IsOnWhatsapp` (backing the `/user/check` API and the group-add guard) stays honest: ambiguous => `false`, never fall-open. Logic extracted behind an `onWhatsAppProber` seam (`probeOnWhatsApp` / `resolveProbeOutcome` / `resolveUserJID` / `isOnWhatsApp`) with table-driven unit tests, including the bounded-deadline cutoff and the BR fall-open path.
+
 ## [v8.5.0+3] - 2026-05-22
 
 ### Fixed
