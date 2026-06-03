@@ -48,15 +48,130 @@ func normalizePhoneBR(phone string) string {
 	return phone
 }
 
+// onWhatsAppProber is the minimal whatsmeow surface needed to probe whether a
+// phone is registered on WhatsApp. *whatsmeow.Client satisfies it; tests inject
+// a fake so the retry/classification logic can be exercised without a session.
+type onWhatsAppProber interface {
+	IsOnWhatsApp(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error)
+}
+
+// probeOutcome is the classification of an IsOnWhatsApp probe.
+type probeOutcome int
+
+const (
+	// probeAmbiguous means the probe was inconclusive — a transport error or an
+	// empty USync response. This is NOT proof the number is unregistered:
+	// WhatsApp's USync is non-deterministic (throttling, post-pairing app-state
+	// sync gaps), so an empty/errored probe routinely happens for valid numbers.
+	probeAmbiguous probeOutcome = iota
+	// probePositive means WhatsApp confirmed the number is registered (IsIn).
+	probePositive
+	// probeNegative means WhatsApp returned a non-empty result that explicitly
+	// reports the number as not registered (IsIn == false) — authoritative.
+	probeNegative
+)
+
+const (
+	// onWhatsAppProbeAttempts bounds how many times an inconclusive probe is
+	// retried before giving up and classifying the result as ambiguous.
+	onWhatsAppProbeAttempts = 3
+	// onWhatsAppProbeErrLimit caps the number of *error* (typically slow,
+	// timed-out) attempts so a send isn't blocked for the full attempt budget
+	// when the transport is unhealthy. Empty responses return fast and are
+	// retried freely up to onWhatsAppProbeAttempts.
+	onWhatsAppProbeErrLimit = 2
+	// onWhatsAppProbeTimeout is the per-attempt context timeout.
+	onWhatsAppProbeTimeout = 8 * time.Second
+	// onWhatsAppRetryBackoff is the delay between retry attempts.
+	onWhatsAppRetryBackoff = 750 * time.Millisecond
+)
+
+// probeOnWhatsApp runs IsOnWhatsApp for a single phone with bounded retries and
+// classifies the result. A single USync probe is unreliable, so an inconclusive
+// answer (transport error or empty response) is retried before being treated as
+// ambiguous — never as a confirmed negative. backoff is the sleep between
+// attempts (tests pass 0). On probePositive the returned JID is WhatsApp's
+// canonical JID (may be empty if WhatsApp omitted it).
+func probeOnWhatsApp(prober onWhatsAppProber, phone string, backoff time.Duration) (types.JID, probeOutcome) {
+	var errCount int
+	for attempt := 0; attempt < onWhatsAppProbeAttempts; attempt++ {
+		if attempt > 0 && backoff > 0 {
+			time.Sleep(backoff)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), onWhatsAppProbeTimeout)
+		data, err := prober.IsOnWhatsApp(ctx, []string{phone})
+		cancel()
+
+		if err != nil {
+			errCount++
+			logrus.Warnf("IsOnWhatsApp probe failed for %s (attempt %d/%d): %v", phone, attempt+1, onWhatsAppProbeAttempts, err)
+			if errCount >= onWhatsAppProbeErrLimit {
+				break // bound the slow/error path
+			}
+			continue
+		}
+
+		// Empty response is inconclusive, not a confirmed negative — retry.
+		if len(data) == 0 {
+			logrus.Debugf("IsOnWhatsApp returned empty for %s (attempt %d/%d) — inconclusive, retrying", phone, attempt+1, onWhatsAppProbeAttempts)
+			continue
+		}
+
+		for _, v := range data {
+			if v.IsIn {
+				return v.JID, probePositive
+			}
+		}
+		// Non-empty response with no registered entry — authoritative negative.
+		return types.JID{}, probeNegative
+	}
+
+	return types.JID{}, probeAmbiguous
+}
+
+// resolveProbeOutcome maps a probe outcome to the final JID/error for the send
+// path. originalJID is the caller-supplied JID (used only for messaging);
+// normalizedPhone is the BR-stripped, E.164 phone to send to when WhatsApp does
+// not hand back a canonical JID. validation reflects WhatsappAccountValidation.
+//
+// The key behavior: an ambiguous probe NEVER hard-fails — it falls through to
+// the deterministically-normalized JID so a transient USync miss doesn't turn a
+// valid recipient into a permanent "not on WhatsApp" send failure. Only an
+// authoritative negative (with validation on) is rejected.
+func resolveProbeOutcome(originalJID, normalizedPhone string, canonicalJID types.JID, outcome probeOutcome, validation bool) (types.JID, error) {
+	switch outcome {
+	case probePositive:
+		if !canonicalJID.IsEmpty() {
+			logrus.Debugf("Normalized JID %s to %s", originalJID, canonicalJID.String())
+			return canonicalJID, nil
+		}
+		// Registered, but WhatsApp omitted the canonical JID — use normalized.
+		return ParseJID(normalizedPhone)
+
+	case probeNegative:
+		if validation {
+			return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on WhatsApp", originalJID))
+		}
+		return ParseJID(normalizedPhone)
+
+	default: // probeAmbiguous
+		logrus.Warnf("Could not verify %s on WhatsApp (probe inconclusive); proceeding with normalized JID", originalJID)
+		return ParseJID(normalizedPhone)
+	}
+}
+
 // ValidateAndNormalizeJID queries WhatsApp for the canonical JID, applying
 // Brazil 9th-digit normalization for user JIDs. For non-user JIDs (groups,
 // newsletters, LID) it returns the parsed JID unchanged.
 //
-// Thin layer on upstream utils.NormalizePhoneE164 + ParseJID; calls
-// whatsmeow's client.IsOnWhatsApp under a 10s context timeout. WhatsApp's
-// returned canonical JID is authoritative; the string-level BR strip in
-// normalizePhoneBR is the deterministic fallback when IsOnWhatsApp is
-// unavailable.
+// Thin layer on upstream utils.NormalizePhoneE164 + ParseJID; calls whatsmeow's
+// client.IsOnWhatsApp with bounded retries (see probeOnWhatsApp). WhatsApp's
+// returned canonical JID is authoritative. An inconclusive probe (empty or
+// errored USync) is treated as ambiguous, not as "not on WhatsApp": the send
+// falls through to the deterministically-normalized JID rather than failing.
+// Only an authoritative negative (IsIn == false) is rejected when
+// WhatsappAccountValidation is on.
 func ValidateAndNormalizeJID(client *whatsmeow.Client, jid string) (types.JID, error) {
 	// LID JIDs route through Slice 3's LID resolution to recover the canonical
 	// phone JID, then fall through to the BR normalization pipeline.
@@ -101,42 +216,8 @@ func ValidateAndNormalizeJID(client *whatsmeow.Client, jid string) (types.JID, e
 	phone = normalizePhoneBR(phone)
 	phone = NormalizePhoneE164(phone)
 
-	// Query WhatsApp for the canonical JID.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	data, err := client.IsOnWhatsApp(ctx, []string{phone})
-	if err != nil {
-		logrus.Warnf("Failed to query WhatsApp for %s: %v", jid, err)
-		if config.WhatsappAccountValidation {
-			return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Failed to validate phone %s: %v", jid, err))
-		}
-		return ParseJID(jid)
-	}
-
-	// Empty response means number not found.
-	if len(data) == 0 {
-		if config.WhatsappAccountValidation {
-			return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on WhatsApp", jid))
-		}
-		return ParseJID(jid)
-	}
-
-	// Check results and return WhatsApp's canonical JID when present.
-	for _, v := range data {
-		if !v.IsIn {
-			if config.WhatsappAccountValidation {
-				return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on WhatsApp", jid))
-			}
-			return ParseJID(jid)
-		}
-
-		if !v.JID.IsEmpty() {
-			logrus.Debugf("Normalized JID %s to %s", jid, v.JID.String())
-			return v.JID, nil
-		}
-	}
-
-	// Fallback to original parse.
-	return ParseJID(jid)
+	// Probe WhatsApp with bounded retries, then classify. An inconclusive probe
+	// falls through to the normalized JID rather than hard-failing the send.
+	canonicalJID, outcome := probeOnWhatsApp(client, phone, onWhatsAppRetryBackoff)
+	return resolveProbeOutcome(jid, phone, canonicalJID, outcome, config.WhatsappAccountValidation)
 }
