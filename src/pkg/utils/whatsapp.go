@@ -501,6 +501,14 @@ func SanitizePhone(phone *string) {
 // USync, even after retries) both return false — unlike the send path
 // (ValidateAndNormalizeJID), the check API must not fall open on ambiguity.
 func IsOnWhatsapp(client *whatsmeow.Client, jid string) bool {
+	return isOnWhatsApp(context.Background(), client, jid)
+}
+
+// isOnWhatsApp is the testable core of IsOnWhatsapp: it takes the minimal
+// onWhatsAppProber seam (satisfied by *whatsmeow.Client) and a ctx so the
+// probe-outcome → bool mapping can be exercised with a fake prober. Honest:
+// only a confirmed positive returns true; ambiguous/negative both return false.
+func isOnWhatsApp(ctx context.Context, prober onWhatsAppProber, jid string) bool {
 	// only check if the jid is a user with @s.whatsapp.net
 	if !strings.Contains(jid, "@s.whatsapp.net") {
 		// For non-user JIDs (groups, newsletters), skip validation
@@ -520,7 +528,7 @@ func IsOnWhatsapp(client *whatsmeow.Client, jid string) bool {
 
 	// Bounded retries smooth over transient USync misses; only a confirmed
 	// positive counts as "on WhatsApp".
-	_, outcome := probeOnWhatsApp(client, phone, onWhatsAppRetryBackoff)
+	_, outcome := probeOnWhatsApp(ctx, prober, phone, onWhatsAppRetryBackoff)
 	return outcome == probePositive
 }
 

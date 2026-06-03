@@ -82,6 +82,13 @@ const (
 	onWhatsAppProbeErrLimit = 2
 	// onWhatsAppProbeTimeout is the per-attempt context timeout.
 	onWhatsAppProbeTimeout = 8 * time.Second
+	// onWhatsAppTotalTimeout caps the *total* wall-clock across all probe
+	// attempts. The per-attempt timeout and the errCount cap only bound the
+	// error path; a slow-but-not-errored empty USync response is retried freely,
+	// so without an overall budget a probe could block a send for roughly
+	// onWhatsAppProbeAttempts × onWhatsAppProbeTimeout. Derived from the caller's
+	// context so it also honors upstream cancellation.
+	onWhatsAppTotalTimeout = 15 * time.Second
 	// onWhatsAppRetryBackoff is the delay between retry attempts.
 	onWhatsAppRetryBackoff = 750 * time.Millisecond
 )
@@ -89,19 +96,33 @@ const (
 // probeOnWhatsApp runs IsOnWhatsApp for a single phone with bounded retries and
 // classifies the result. A single USync probe is unreliable, so an inconclusive
 // answer (transport error or empty response) is retried before being treated as
-// ambiguous — never as a confirmed negative. backoff is the sleep between
-// attempts (tests pass 0). On probePositive the returned JID is WhatsApp's
-// canonical JID (may be empty if WhatsApp omitted it).
-func probeOnWhatsApp(prober onWhatsAppProber, phone string, backoff time.Duration) (types.JID, probeOutcome) {
+// ambiguous — never as a confirmed negative. The whole attempt loop is bounded
+// by one deadline derived from ctx (onWhatsAppTotalTimeout), so even a slow,
+// non-errored empty response can't keep a send blocked. backoff is the sleep
+// between attempts (tests pass 0). On probePositive the returned JID is
+// WhatsApp's canonical JID (may be empty if WhatsApp omitted it).
+func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phone string, backoff time.Duration) (types.JID, probeOutcome) {
+	deadlineCtx, cancel := context.WithTimeout(ctx, onWhatsAppTotalTimeout)
+	defer cancel()
+
 	var errCount int
 	for attempt := 0; attempt < onWhatsAppProbeAttempts; attempt++ {
-		if attempt > 0 && backoff > 0 {
-			time.Sleep(backoff)
+		if attempt > 0 {
+			if backoff > 0 {
+				select {
+				case <-time.After(backoff):
+				case <-deadlineCtx.Done():
+					return types.JID{}, probeAmbiguous
+				}
+			}
+			if deadlineCtx.Err() != nil {
+				break // total budget exhausted
+			}
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), onWhatsAppProbeTimeout)
-		data, err := prober.IsOnWhatsApp(ctx, []string{phone})
-		cancel()
+		attemptCtx, attemptCancel := context.WithTimeout(deadlineCtx, onWhatsAppProbeTimeout)
+		data, err := prober.IsOnWhatsApp(attemptCtx, []string{phone})
+		attemptCancel()
 
 		if err != nil {
 			errCount++
@@ -161,6 +182,28 @@ func resolveProbeOutcome(originalJID, normalizedPhone string, canonicalJID types
 	}
 }
 
+// resolveUserJID handles the user-JID (phone) tail of ValidateAndNormalizeJID:
+// BR 9th-digit + E.164 normalization, the bounded WhatsApp probe, and outcome
+// mapping. Split out (taking the onWhatsAppProber seam and a ctx) so the
+// normalize → probe → resolve glue is unit-testable without a live
+// *whatsmeow.Client. jid must already be a "<phone>@s.whatsapp.net" user JID.
+func resolveUserJID(ctx context.Context, prober onWhatsAppProber, jid string, validation bool) (types.JID, error) {
+	// Extract the phone string from the JID.
+	phone := strings.TrimSuffix(jid, "@s.whatsapp.net")
+	if phone == "" {
+		return types.JID{}, pkgError.InvalidJID("Empty phone number")
+	}
+
+	// Apply BR 9th-digit strip first, then upstream E.164 (adds the leading +).
+	phone = normalizePhoneBR(phone)
+	phone = NormalizePhoneE164(phone)
+
+	// Probe WhatsApp with bounded retries, then classify. An inconclusive probe
+	// falls through to the normalized JID rather than hard-failing the send.
+	canonicalJID, outcome := probeOnWhatsApp(ctx, prober, phone, onWhatsAppRetryBackoff)
+	return resolveProbeOutcome(jid, phone, canonicalJID, outcome, validation)
+}
+
 // ValidateAndNormalizeJID queries WhatsApp for the canonical JID, applying
 // Brazil 9th-digit normalization for user JIDs. For non-user JIDs (groups,
 // newsletters, LID) it returns the parsed JID unchanged.
@@ -206,18 +249,9 @@ func ValidateAndNormalizeJID(client *whatsmeow.Client, jid string) (types.JID, e
 
 	MustLogin(client)
 
-	// Extract the phone string from the JID.
-	phone := strings.TrimSuffix(jid, "@s.whatsapp.net")
-	if phone == "" {
-		return types.JID{}, pkgError.InvalidJID("Empty phone number")
-	}
-
-	// Apply BR 9th-digit strip first, then upstream E.164 (adds the leading +).
-	phone = normalizePhoneBR(phone)
-	phone = NormalizePhoneE164(phone)
-
-	// Probe WhatsApp with bounded retries, then classify. An inconclusive probe
-	// falls through to the normalized JID rather than hard-failing the send.
-	canonicalJID, outcome := probeOnWhatsApp(client, phone, onWhatsAppRetryBackoff)
-	return resolveProbeOutcome(jid, phone, canonicalJID, outcome, config.WhatsappAccountValidation)
+	// The phone-extraction → BR/E.164 normalization → probe → classify tail lives
+	// in resolveUserJID (testable via the onWhatsAppProber seam). context.Background
+	// for now: threading the request context through the ~40 callers is a separate
+	// change; the total probe budget (onWhatsAppTotalTimeout) bounds the wall-clock.
+	return resolveUserJID(context.Background(), client, jid, config.WhatsappAccountValidation)
 }
