@@ -412,10 +412,19 @@ func initApp() {
 	chatStorageRepo = chatstorage.NewStorageRepository(chatStorageDB)
 	chatStorageRepo.InitializeSchema()
 
-	whatsappDB := whatsapp.InitWaDB(ctx, config.DBURI)
+	whatsappDB, err := whatsapp.InitWaDB(ctx, config.DBURI)
+	if err != nil {
+		// Retries are already exhausted inside InitWaDB; exit cleanly instead of
+		// panicking so a permanent misconfig (or a DB that stayed down) doesn't
+		// dump a stack trace.
+		logrus.Fatalf("failed to initialize WhatsApp database: %v", err)
+	}
 	var keysDB *sqlstore.Container
 	if config.DBKeysURI != "" {
-		keysDB = whatsapp.InitWaDB(ctx, config.DBKeysURI)
+		keysDB, err = whatsapp.InitWaDB(ctx, config.DBKeysURI)
+		if err != nil {
+			logrus.Fatalf("failed to initialize WhatsApp keys database: %v", err)
+		}
 	}
 
 	whatsappCli = whatsapp.InitWaCLI(ctx, whatsappDB, keysDB, chatStorageRepo)
