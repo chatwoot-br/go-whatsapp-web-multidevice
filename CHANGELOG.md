@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.5.0+5] - 2026-06-05
+
+### Fixed
+- **whatsapp: `InitWaDB` panicked (no retry) on transient DB unavailability at startup, crash-looping on DB blips (#5).** Opening the WhatsApp store DB called `sqlstore.New` exactly once and turned any error into a `panic`, so a *transient* transport error (e.g. `connection refused` while an external Postgres restarts / fails over / a node blips) was fatal: the process exited and the container crash-looped until the DB happened to be reachable at the instant of a (re)start. Each crash also forced a fresh WhatsApp reconnect whose degraded post-reconnect USync window made send-time `IsOnWhatsApp` validation (#3/#4) more likely to return inconclusive results. `InitWaDB` now resolves the driver first and **fails fast on an unsupported/unknown DB type** (a permanent config error retrying can't fix), then opens the store with **bounded, context-aware retries** (`openDBWithRetry`: 6 attempts, 8s backoff, each attempt capped by a 10s connect timeout so a black-holed dial can't hang startup) — ≈40s for the common `connection refused` fast-fail, bounded ~100s worst case. It now returns an error instead of panicking, so `cmd/root.go` exits cleanly via `logrus.Fatalf` (matching the adjacent chat-storage init). Credentials in an unknown-type `DBURI` are redacted before they reach logs. Logic sits behind an injectable `dbOpener` seam with unit tests (`database_test.go`) covering retry, ctx-cancel, the per-attempt timeout, fail-fast, and credential redaction.
+
 ## [v8.5.0+4] - 2026-06-03
 
 ### Fixed
