@@ -17,3 +17,6 @@ bin
 src/whatsapp
 .worktrees/
 src/gowa
+
+# graphify generated artifacts (regenerable; rebuild via umbrella tools/graphify/)
+graphify-out/
