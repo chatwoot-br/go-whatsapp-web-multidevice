@@ -11,7 +11,15 @@ tail `upstream/v8.7.0..upstream/main` = 12 commits (`131b99b` tip).
 - [x] **Phase 0 — branch + scaffold + baseline.** `go build/vet/test` GREEN on `3cf8e68`
       (pre-merge). BUILD_EXIT=0 VET_EXIT=0 TEST_EXIT=0. Log: `logs/phase0-baseline.log`.
       go 1.26.4. e2e package present behind `//go:build e2e` (`src/e2e/integration_test.go`).
-- [ ] **Phase A — merge upstream/v8.7.0** (chatwoot-free core, 28-file surface).
+- [x] **Phase A — merge upstream/v8.7.0** (chatwoot-free core). Commit `0824c9e`.
+      13 conflicts resolved + 4 post-merge wiring fixes. **No whatsmeow API drift** —
+      only breakage was auto-merged upstream code referencing the fork-dropped
+      `NormalizeJIDFromLID` (rewired to `NormalizeJIDFromLIDWithContext` in
+      `event_label.go` + `sqlite_repository.go`). 1 test fix (`chat_test.go` `GetChat`
+      stub for fork's sender-name lookup). Adopted upstream reactions / secret-edit
+      decrypt / pure-Go sqlite / label webhooks / presence-pulse / send-retry. Fork
+      `CLAUDE.md` restored (upstream deleted it for AGENTS.md; AGENTS.md kept additively).
+      build/vet/test + e2e GREEN — `logs/phaseA-build-vet.log`, `logs/phaseA-tests.log`.
 - [ ] **Phase B — merge upstream/main tail** (chatwoot reconcile + session_id + contract-drift).
 - [ ] **Phase R — release rail** (`v8.7.0+1`).
 - [ ] **Phase V — validation + PR.**
