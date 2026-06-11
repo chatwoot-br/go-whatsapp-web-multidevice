@@ -1,0 +1,13 @@
+### PHASE A build/vet (attempt 3) — go version go1.26.4 darwin/arm64
+=== go build ./... ===
+BUILD_EXIT=0
+=== go vet ./... ===
+# github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp
+# [github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp]
+vet: infrastructure/whatsapp/event_message_test.go:205:77: not enough arguments in call to buildEventPayload
+	have (context.Context, nil, *events.Message)
+	want (context.Context, *whatsmeow.Client, *events.Message, chatstorage.IChatStorageRepository)
+VET_EXIT=1
+### PHASE A vet (attempt 2) — go version go1.26.4 darwin/arm64
+=== go vet ./... ===
+VET_EXIT=0

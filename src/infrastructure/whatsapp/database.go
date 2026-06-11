@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
+	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/sqlite"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
@@ -55,7 +56,10 @@ func initDatabaseWithRetry(ctx context.Context, dbLog waLog.Logger, DBURI string
 	var driver string
 	switch {
 	case strings.HasPrefix(DBURI, "file:"):
-		driver = "sqlite3"
+		// Adopt upstream's pure-Go/cgo sqlite driver selection + chat-storage URI
+		// formatting (WAL + foreign keys), then open through the fork's retry path.
+		driver = sqlite.DriverName
+		DBURI = sqlite.FormatChatStorageURI(DBURI, true, true)
 	case strings.HasPrefix(DBURI, "postgres:"):
 		driver = "postgres"
 	default:

@@ -58,6 +58,14 @@ func forwardMessageToWebhook(ctx context.Context, client *whatsmeow.Client, evt 
 	return forwardPayloadToConfiguredWebhooks(ctx, payload, webhookEvent.Event)
 }
 
+func isReactionMessage(evt *events.Message) bool {
+	if evt == nil || evt.Message == nil {
+		return false
+	}
+
+	return utils.UnwrapMessage(evt.Message).GetReactionMessage() != nil
+}
+
 func createWebhookEvent(ctx context.Context, client *whatsmeow.Client, evt *events.Message, chatStorageRepo domainChatStorage.IChatStorageRepository) (*WebhookEvent, error) {
 	webhookEvent := &WebhookEvent{
 		Event:   EventTypeMessage,
@@ -132,6 +140,21 @@ func buildEventPayload(ctx context.Context, client *whatsmeow.Client, evt *event
 			payload["chat_name"] = chatName
 		} else {
 			logrus.Debugf("[Webhook] No chat_name found for outgoing message to %s", chatJIDStr)
+		}
+	}
+
+	// Modern WhatsApp clients (LID-migrated accounts on recent app builds) wrap
+	// message edits in a SecretEncryptedMessage with encType=MESSAGE_EDIT instead
+	// of sending them as a plain ProtocolMessage{MESSAGE_EDIT}. Decrypt those
+	// here using whatsmeow's existing helper, then fall through to the standard
+	// MESSAGE_EDIT extraction path using the decrypted inner Message.
+	if sem := msg.GetSecretEncryptedMessage(); sem != nil &&
+		sem.GetSecretEncType() == waE2E.SecretEncryptedMessage_MESSAGE_EDIT &&
+		client != nil {
+		if decrypted, err := client.DecryptSecretEncryptedMessage(ctx, evt); err != nil {
+			logrus.Warnf("Failed to decrypt SecretEncryptedMessage(MESSAGE_EDIT) for %s: %v", evt.Info.ID, err)
+		} else if decrypted != nil {
+			msg = utils.UnwrapMessage(decrypted)
 		}
 	}
 
