@@ -21,7 +21,8 @@ tail `upstream/v8.7.0..upstream/main` = 12 commits (`131b99b` tip).
       `CLAUDE.md` restored (upstream deleted it for AGENTS.md; AGENTS.md kept additively).
       build/vet/test + e2e GREEN — `logs/phaseA-build-vet.log`, `logs/phaseA-tests.log`.
 - [x] **Phase B — merge upstream/main tail** (chatwoot reconcile + session_id). Commit `42cba0d`.
-      Base advanced to **upstream v8.8.0** (upstream/main moved past v8.7.0 during the sync).
+      Merged up to **upstream/main** (post-`v8.7.0`; upstream's in-dev version string is `v8.8.0`,
+      not a tagged release — the fork rail follows the `v8.7.0` tag → release `v8.7.0+1`).
       7 conflicts + chatwoot reconciliation. **Decisions (`02-contract-drift.md`):**
       (1) custom attr `waha_whatsapp_jid`→`gowa_whatsapp_jid` — write gowa, **read both**
       (waha fallback in `client.go` + inbound `ui/rest/chatwoot.go`) so pre-existing
@@ -30,8 +31,8 @@ tail `upstream/v8.7.0..upstream/main` = 12 commits (`131b99b` tip).
       additive top-level webhook key (chatwoot-app ignores unknowns); HMAC + fork fields
       intact. build/vet/test + e2e GREEN — `logs/phaseB-tests.log`. **0 breaking changes
       to the chatwoot-app contract.**
-- [x] **Phase R — release rail.** Commit `64acbd3`. AppVersion → `v8.8.0+1`
-      (`settings.go`), CHANGELOG entry, **local tag `v8.8.0+1`** (matches validate-tag
+- [x] **Phase R — release rail.** Commit `64acbd3`. AppVersion → `v8.7.0+1`
+      (`settings.go`), CHANGELOG entry, **local tag `v8.7.0+1`** (matches validate-tag
       regex `^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$`). Not pushed.
 - [x] **Phase V — validation + PR.** Final `build/vet/test + e2e` GREEN
       (`logs/phaseV-final.log`). Coverage: chatwoot 61%, pgimport 78%, chatstorage 43%,
@@ -42,7 +43,7 @@ tail `upstream/v8.7.0..upstream/main` = 12 commits (`131b99b` tip).
 
 Code-complete & PR-ready on `upgrade/v8.7.0-sync`. 5 commits over `origin/main`:
 phase-0 scaffold, phase-A merge (`0824c9e`), phase-A tracker, phase-B merge (`42cba0d`),
-release `v8.8.0+1` (`64acbd3`) + this bookkeeping. Nothing pushed. whatsmeow drift was a
+release `v8.7.0+1` (`64acbd3`) + this bookkeeping. Nothing pushed. whatsmeow drift was a
 non-event; the real work was chatwoot reconciliation (`02-contract-drift.md`).
 
 ## Decisions / notes (append as they happen)

@@ -5,10 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v8.8.0+1] - 2026-06-11
+## [v8.7.0+1] - 2026-06-11
 
 ### Upstream Sync
-- **Synced the fork onto upstream `v8.8.0`** (from the `v8.5.0` base — merge of `v8.7.0` plus the unreleased tail). whatsmeow `v0.0.0-20260513` → `v0.0.0-20260609`; Go 1.25.5; new pure-Go SQLite (`modernc.org/sqlite`, build-tag selected via `pkg/sqlite`); fiber/fasthttp/libsignal bumps. See `.workstreams/2026-06-11-upstream-v8.7-sync/`.
+- **Synced the fork onto upstream `v8.7.0`** (latest upstream release tag) from the `v8.5.0` base. The merge also pulls upstream's post-`v8.7.0` `main` tail — the still-unreleased work that bumped upstream's in-development version string to `v8.8.0` (not yet a tagged release, so the fork rail follows the `v8.7.0` tag). whatsmeow `v0.0.0-20260513` → `v0.0.0-20260609`; Go 1.25.5; new pure-Go SQLite (`modernc.org/sqlite`, build-tag selected via `pkg/sqlite`); fiber/fasthttp/libsignal bumps. See `.workstreams/2026-06-11-upstream-v8.7-sync/`.
 
 ### Added (from upstream)
 - Message reactions: persisted, mapped into `GetChatMessages`, emitted as `message.reaction` webhooks, and stored from history sync.

@@ -1,7 +1,7 @@
 # 02 — Chatwoot / webhook contract-drift recheck (Phase B)
 
 Date: 2026-06-11. Scope: does merging upstream's tail (`upstream/v8.7.0..upstream/main`,
-base now **v8.8.0**) drift the fork's **standard webhook output** (`forwardToWebhooks`) or
+upstream's in-dev `v8.8.0`; fork release `v8.7.0+1`) drift the fork's **standard webhook output** (`forwardToWebhooks`) or
 its **Chatwoot client** away from what `chatwoot-app` / existing production data expect?
 Model: `.workstreams/2026-05-14-upstream-v8.5-sync/11-contract-drift.md`.
 

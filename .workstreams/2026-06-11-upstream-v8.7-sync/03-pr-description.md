@@ -1,13 +1,16 @@
-# PR: Sync fork onto upstream v8.8.0 (merge of v8.7.0 + unreleased tail)
+# PR: Sync fork to upstream v8.7.0 + main tail (release v8.7.0+1)
 
-**Branch:** `upgrade/v8.7.0-sync` → `main` · **Release:** `v8.8.0+1` (local tag) · **Method:** merge (no rebase)
+**Branch:** `upgrade/v8.7.0-sync` → `main` · **Release:** `v8.7.0+1` (local tag) · **Method:** merge (no rebase)
 
 ## Summary
 
-Brings `chatwoot-br/go-whatsapp-web-multidevice` from upstream **v8.5.0** (`v8.5.0+5`) up to
-upstream **v8.8.0**. Two merges: Phase A = `upstream/v8.7.0` (chatwoot-free core), Phase B =
-`upstream/main` tail (chatwoot + webhook `session_id`). All fork features preserved; GoWA-native
-Chatwoot stays dormant (`CHATWOOT_ENABLED=false`). **0 breaking changes to the chatwoot-app contract.**
+Brings `chatwoot-br/go-whatsapp-web-multidevice` from upstream **v8.5.0** (`v8.5.0+5`) up to the
+latest upstream release **v8.7.0** **plus** upstream's post-`v8.7.0` `main` tail (the still-unreleased
+work upstream version-bumped to an in-dev `v8.8.0`). The fork release rail follows the upstream
+**release tag**, so this ships as **`v8.7.0+1`**. Two merges: Phase A = `upstream/v8.7.0`
+(chatwoot-free core), Phase B = `upstream/main` tail (chatwoot + webhook `session_id`). All fork
+features preserved; GoWA-native Chatwoot stays dormant (`CHATWOOT_ENABLED=false`).
+**0 breaking changes to the chatwoot-app contract.**
 
 ## What's included from upstream
 
@@ -53,5 +56,5 @@ chatstorage 43%, utils 47%, whatsapp 34%.
 - [ ] **Paired-phone + live Chatwoot UAT** — confirm inbound agent reply routes for **both** a
       new contact (`gowa_whatsapp_jid`) and a pre-existing one (`waha` fallback); confirm
       `session_id` benign; confirm name-preserve matches expectations. (`untestable-surfaces.md`)
-- [ ] **Push** branch + `v8.8.0+1` tag (a pushed `v*` tag triggers `release.yml` → image).
+- [ ] **Push** branch + `v8.7.0+1` tag (a pushed `v*` tag triggers `release.yml` → image).
 - [ ] Optional: add `waha` fallback to `pgimport` upsert SQL **iff** direct-DB import runs on legacy data.
