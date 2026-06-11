@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.8.0+1] - 2026-06-11
+
+### Upstream Sync
+- **Synced the fork onto upstream `v8.8.0`** (from the `v8.5.0` base — merge of `v8.7.0` plus the unreleased tail). whatsmeow `v0.0.0-20260513` → `v0.0.0-20260609`; Go 1.25.5; new pure-Go SQLite (`modernc.org/sqlite`, build-tag selected via `pkg/sqlite`); fiber/fasthttp/libsignal bumps. See `.workstreams/2026-06-11-upstream-v8.7-sync/`.
+
+### Added (from upstream)
+- Message reactions: persisted, mapped into `GetChatMessages`, emitted as `message.reaction` webhooks, and stored from history sync.
+- `SecretEncryptedMessage{MESSAGE_EDIT}` decryption for modern LID-migrated clients.
+- Label appstate → webhook forwarding, scheduled presence pulse, WhatsApp 463 send-retry mitigation, quoted media replies, ARMv7 / pure-Go SQLite build path.
+- `session_id` top-level webhook field — emitted when the device JID maps to a registered session (additive; chatwoot-app ignores unknown keys).
+
+### Changed
+- **Chatwoot contact custom attribute `waha_whatsapp_jid` → `gowa_whatsapp_jid`** (upstream rebrand). New contacts are written with `gowa_whatsapp_jid`; `FindContactByIdentifier` and the inbound agent-reply route **read `waha_whatsapp_jid` as a back-compat fallback**, so contacts created before this release keep routing — no data migration required.
+- **`FindOrCreateContact` now preserves an existing non-empty 1:1 contact name** (fills blank names only; group subjects still refresh) instead of always overwriting — adopts upstream #675/#688 (don't clobber a saved/agent-edited name with a phone number).
+
+### Preserved (fork features)
+- BR phone normalization, LID dedup + `history_sync_complete`, full history sync + `ON_DEMAND`, info cache, SOCKS/HTTP/HTTPS proxy, `chat_name`/`sender_name` webhook fields + HMAC `X-Hub-Signature-256`, `InitWaDB` bounded retry. GoWA-native Chatwoot module stays dormant (`CHATWOOT_ENABLED=false`); the fork's integration remains the active path.
+
 ## [v8.5.0+5] - 2026-06-05
 
 ### Fixed
