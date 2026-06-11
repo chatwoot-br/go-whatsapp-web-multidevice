@@ -2,12 +2,10 @@ package chatwoot
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -26,27 +24,8 @@ func testClient(srv *httptest.Server) *Client {
 	}
 }
 
-// TestIsConfigured covers the 4-field check.
-func TestIsConfigured(t *testing.T) {
-	cases := []struct {
-		name string
-		c    Client
-		want bool
-	}{
-		{"all set", Client{BaseURL: "http://x", APIToken: "t", AccountID: 1, InboxID: 1}, true},
-		{"missing url", Client{APIToken: "t", AccountID: 1, InboxID: 1}, false},
-		{"missing token", Client{BaseURL: "http://x", AccountID: 1, InboxID: 1}, false},
-		{"missing account", Client{BaseURL: "http://x", APIToken: "t", InboxID: 1}, false},
-		{"missing inbox", Client{BaseURL: "http://x", APIToken: "t", AccountID: 1}, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := tc.c.IsConfigured(); got != tc.want {
-				t.Errorf("got %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
+// TestIsConfigured lives in client_methods_test.go (upstream's variant covers
+// the same IsConfigured() contract plus the all-empty case).
 
 // TestCreateContact_AuthTokenHeader asserts that the api_access_token header is
 // sent on outbound requests — the fork's auth contract with Chatwoot.
@@ -101,8 +80,10 @@ func TestCreateContact_GroupUsesIdentifier(t *testing.T) {
 	if captured.PhoneNumber != "" {
 		t.Errorf("phone_number = %q, want empty for groups", captured.PhoneNumber)
 	}
-	if got := captured.CustomAttributes["waha_whatsapp_jid"]; got != groupJID {
-		t.Errorf("custom_attributes.waha_whatsapp_jid = %v, want %v", got, groupJID)
+	// New contacts are written with upstream's gowa_whatsapp_jid key (the fork
+	// reads waha_whatsapp_jid as a back-compat fallback for pre-rebrand data).
+	if got := captured.CustomAttributes["gowa_whatsapp_jid"]; got != groupJID {
+		t.Errorf("custom_attributes.gowa_whatsapp_jid = %v, want %v", got, groupJID)
 	}
 }
 
@@ -165,7 +146,7 @@ func TestCreateMessage_PostsToConversationsEndpoint(t *testing.T) {
 	defer srv.Close()
 
 	c := testClient(srv)
-	id, err := c.CreateMessage(123, "hello", "incoming", nil)
+	id, err := c.CreateMessage(123, "hello", "incoming", nil, MessageOptions{})
 	if err != nil {
 		t.Fatalf("CreateMessage: %v", err)
 	}
@@ -244,42 +225,10 @@ func TestCreateContact_BadStatusError(t *testing.T) {
 	}
 }
 
-// TestFindOrCreateContact_UpdatesNameOnFind covers the side-effect that when a
-// found contact has a different name, the name is PUT-updated server-side.
-func TestFindOrCreateContact_UpdatesNameOnFind(t *testing.T) {
-	var sawPut atomic.Bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/contacts/search"):
-			body, _ := io.ReadAll(r.Body)
-			_ = body
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"payload":[{"id":555,"name":"Old Name","phone_number":"+5511999999999"}]}`))
-		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/contacts/555"):
-			sawPut.Store(true)
-			w.WriteHeader(http.StatusOK)
-		default:
-			t.Logf("unexpected request: %s %s", r.Method, r.URL.Path)
-			w.WriteHeader(http.StatusOK)
-		}
-	}))
-	defer srv.Close()
-
-	c := testClient(srv)
-	contact, err := c.FindOrCreateContact("New Name", "5511999999999", false)
-	if err != nil {
-		t.Fatalf("FindOrCreateContact: %v", err)
-	}
-	if contact == nil || contact.ID != 555 {
-		t.Fatalf("contact = %+v", contact)
-	}
-	if !sawPut.Load() {
-		t.Error("expected PUT /contacts/555 to update name from Old Name -> New Name")
-	}
-	if contact.Name != "New Name" {
-		t.Errorf("name = %q, want New Name", contact.Name)
-	}
-}
+// Name-update-on-find behavior is now covered by upstream's
+// TestFindOrCreateContact_{PreservesExistingIndividualName,FillsBlankExistingIndividualName,RefreshesExistingGroupName}
+// in client_methods_test.go (the fork adopts upstream's preserve-existing-1:1-name
+// semantics; the old always-overwrite test was dropped).
 
 // TestClient_ConcurrentSafety lightly stress-tests the package-level
 // sentMessageIDs map under concurrent MarkMessageAsSent / IsMessageSentByUs
@@ -298,4 +247,180 @@ func TestClient_ConcurrentSafety(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestFindOrCreateContact_PreservesExistingIndividualName(t *testing.T) {
+	tests := []struct {
+		name         string
+		incomingName string
+	}{
+		{
+			name:         "incoming WhatsApp name differs",
+			incomingName: "Alice WA",
+		},
+		{
+			name:         "incoming name is phone fallback",
+			incomingName: "6281234567890",
+		},
+		{
+			name:         "incoming name is empty",
+			incomingName: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			putCalls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method == http.MethodGet && r.URL.Path == "/api/v1/accounts/1/contacts/search":
+					if got := r.URL.Query().Get("q"); got != "+6281234567890" {
+						t.Fatalf("search q = %q, want +6281234567890", got)
+					}
+					writeJSON(t, w, http.StatusOK, map[string]any{
+						"payload": []Contact{{
+							ID:          123,
+							Name:        "Manual Alice",
+							PhoneNumber: "+6281234567890",
+						}},
+					})
+				case r.Method == http.MethodPut && r.URL.Path == "/api/v1/accounts/1/contacts/123":
+					putCalls++
+					w.WriteHeader(http.StatusNoContent)
+				default:
+					t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+				}
+			}))
+			defer server.Close()
+
+			client := &Client{
+				BaseURL:    server.URL,
+				APIToken:   "token",
+				AccountID:  1,
+				InboxID:    2,
+				HTTPClient: server.Client(),
+			}
+
+			contact, err := client.FindOrCreateContact(tc.incomingName, "6281234567890", false)
+			if err != nil {
+				t.Fatalf("FindOrCreateContact: %v", err)
+			}
+			if contact.Name != "Manual Alice" {
+				t.Fatalf("contact name = %q, want Manual Alice", contact.Name)
+			}
+			if putCalls != 0 {
+				t.Fatalf("PUT contact calls = %d, want 0", putCalls)
+			}
+		})
+	}
+}
+
+func TestFindOrCreateContact_FillsBlankExistingIndividualName(t *testing.T) {
+	putCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/accounts/1/contacts/search":
+			writeJSON(t, w, http.StatusOK, map[string]any{
+				"payload": []Contact{{
+					ID:          123,
+					Name:        "",
+					PhoneNumber: "+6281234567890",
+				}},
+			})
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/accounts/1/contacts/123":
+			putCalls++
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode PUT body: %v", err)
+			}
+			if body["name"] != "6281234567890" {
+				t.Fatalf("PUT name = %q, want 6281234567890", body["name"])
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL:    server.URL,
+		APIToken:   "token",
+		AccountID:  1,
+		InboxID:    2,
+		HTTPClient: server.Client(),
+	}
+
+	contact, err := client.FindOrCreateContact("6281234567890", "6281234567890", false)
+	if err != nil {
+		t.Fatalf("FindOrCreateContact: %v", err)
+	}
+	if contact.Name != "6281234567890" {
+		t.Fatalf("contact name = %q, want 6281234567890", contact.Name)
+	}
+	if putCalls != 1 {
+		t.Fatalf("PUT contact calls = %d, want 1", putCalls)
+	}
+}
+
+func TestFindOrCreateContact_RefreshesExistingGroupName(t *testing.T) {
+	const groupJID = "120363123456789@g.us"
+	putCalls := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/accounts/1/contacts/search":
+			if got := r.URL.Query().Get("q"); got != groupJID {
+				t.Fatalf("search q = %q, want %s", got, groupJID)
+			}
+			writeJSON(t, w, http.StatusOK, map[string]any{
+				"payload": []Contact{{
+					ID:         456,
+					Name:       "Old Group",
+					Identifier: groupJID,
+				}},
+			})
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/accounts/1/contacts/456":
+			putCalls++
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode PUT body: %v", err)
+			}
+			if body["name"] != "New Group" {
+				t.Fatalf("PUT name = %q, want New Group", body["name"])
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+
+	client := &Client{
+		BaseURL:    server.URL,
+		APIToken:   "token",
+		AccountID:  1,
+		InboxID:    2,
+		HTTPClient: server.Client(),
+	}
+
+	contact, err := client.FindOrCreateContact("New Group", groupJID, true)
+	if err != nil {
+		t.Fatalf("FindOrCreateContact: %v", err)
+	}
+	if contact.Name != "New Group" {
+		t.Fatalf("contact name = %q, want New Group", contact.Name)
+	}
+	if putCalls != 1 {
+		t.Fatalf("PUT contact calls = %d, want 1", putCalls)
+	}
+}
+
+func writeJSON(t *testing.T, w http.ResponseWriter, status int, body any) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		t.Fatalf("write JSON: %v", err)
+	}
 }

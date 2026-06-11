@@ -1,0 +1,106 @@
+### PHASE B full gate (attempt 3, post chatwoot reconcile) — go version go1.26.4 darwin/arm64
+=== go build ./... ===
+BUILD_EXIT=0
+=== go vet ./... ===
+VET_EXIT=0
+=== go test ./... ===
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/cmd	0.557s
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/config	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/app	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chat	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/device	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/group	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/message	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/newsletter	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/send	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/user	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatstorage	(cached)
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot	4.989s
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot/pgimport	(cached)
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp	1.641s
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/cache	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/error	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/sqlite	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils	(cached)
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/mcp	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/mcp/helpers	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest	(cached)
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest/helpers	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest/middleware	(cached)
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/websocket	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/usecase	(cached)
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/validations	(cached)
+TEST_EXIT=0
+=== go test -tags=e2e ./... ===
+# github.com/aldinokemal/go-whatsapp-web-multidevice/e2e_test [github.com/aldinokemal/go-whatsapp-web-multidevice/e2e.test]
+e2e/integration_test.go:180:42: not enough arguments in call to c.FindOrCreateConversation
+	have (int)
+	want (int, string)
+e2e/integration_test.go:188:71: not enough arguments in call to c.CreateMessage
+	have (int, string, string, nil)
+	want (int, string, string, []string, chatwoot.MessageOptions)
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/cmd	1.350s
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/config	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/app	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chat	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/device	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/group	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/message	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/newsletter	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/send	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/user	[no test files]
+FAIL	github.com/aldinokemal/go-whatsapp-web-multidevice/e2e [build failed]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatstorage	1.930s
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot	4.496s
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot/pgimport	3.347s
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp	4.158s
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/cache	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/error	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/sqlite	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils	27.154s
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/mcp	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/mcp/helpers	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest	4.199s
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest/helpers	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest/middleware	2.594s
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/websocket	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/usecase	0.869s
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/validations	2.120s
+FAIL
+E2E_EXIT=1
+### PHASE B e2e (attempt 2) — go version go1.26.4 darwin/arm64
+=== go test -tags=e2e ./... ===
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/cmd	(cached)
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/config	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/app	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chat	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/device	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/group	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/message	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/newsletter	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/send	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/user	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/e2e	0.480s
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatstorage	(cached)
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot	(cached)
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot/pgimport	(cached)
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp	(cached)
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/cache	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/error	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/sqlite	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils	(cached)
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/mcp	[no test files]
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/mcp/helpers	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest	(cached)
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest/helpers	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest/middleware	(cached)
+?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/websocket	[no test files]
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/usecase	(cached)
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/validations	(cached)
+E2E_EXIT=0

@@ -3,6 +3,7 @@ bin/
 main
 main.exe
 src/gowa
+.claude
 
 # graphify generated artifacts (regenerable; rebuild via umbrella tools/graphify/)
 graphify-out/

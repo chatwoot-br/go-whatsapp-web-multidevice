@@ -13,7 +13,6 @@ import (
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
 	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
-	pkgError "github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/error"
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow/types/events"
@@ -302,10 +301,13 @@ func buildMediaFields(ctx context.Context, client *whatsmeow.Client, msg *waE2E.
 		if config.WhatsappAutoDownloadMedia {
 			extracted, err := utils.ExtractMedia(ctx, client, config.PathMedia, audioMedia)
 			if err != nil {
+				// Media expired/unavailable: skip the attachment but keep
+				// forwarding the message so its body/caption still reaches
+				// downstream consumers, instead of dropping the whole event.
 				logrus.Errorf("Failed to download audio: %v", err)
-				return pkgError.WebhookError(fmt.Sprintf("Failed to download audio: %v", err))
+			} else {
+				payload["audio"] = extracted.MediaPath
 			}
-			payload["audio"] = extracted.MediaPath
 		} else {
 			payload["audio"] = map[string]any{
 				"url": audioMedia.GetURL(),
@@ -317,10 +319,13 @@ func buildMediaFields(ctx context.Context, client *whatsmeow.Client, msg *waE2E.
 		if config.WhatsappAutoDownloadMedia {
 			extracted, err := utils.ExtractMedia(ctx, client, config.PathMedia, documentMedia)
 			if err != nil {
+				// Media expired/unavailable: skip the attachment but keep
+				// forwarding the message so its body/caption still reaches
+				// downstream consumers, instead of dropping the whole event.
 				logrus.Errorf("Failed to download document: %v", err)
-				return pkgError.WebhookError(fmt.Sprintf("Failed to download document: %v", err))
+			} else {
+				payload["document"] = buildAutoDownloadPayload(extracted)
 			}
-			payload["document"] = buildAutoDownloadPayload(extracted)
 		} else {
 			payload["document"] = map[string]any{
 				"url":      documentMedia.GetURL(),
@@ -333,10 +338,13 @@ func buildMediaFields(ctx context.Context, client *whatsmeow.Client, msg *waE2E.
 		if config.WhatsappAutoDownloadMedia {
 			extracted, err := utils.ExtractMedia(ctx, client, config.PathMedia, imageMedia)
 			if err != nil {
+				// Media expired/unavailable: skip the attachment but keep
+				// forwarding the message so its body/caption still reaches
+				// downstream consumers, instead of dropping the whole event.
 				logrus.Errorf("Failed to download image: %v", err)
-				return pkgError.WebhookError(fmt.Sprintf("Failed to download image: %v", err))
+			} else {
+				payload["image"] = buildAutoDownloadPayload(extracted)
 			}
-			payload["image"] = buildAutoDownloadPayload(extracted)
 		} else {
 			payload["image"] = map[string]any{
 				"url":     imageMedia.GetURL(),
@@ -349,10 +357,13 @@ func buildMediaFields(ctx context.Context, client *whatsmeow.Client, msg *waE2E.
 		if config.WhatsappAutoDownloadMedia {
 			extracted, err := utils.ExtractMedia(ctx, client, config.PathMedia, stickerMedia)
 			if err != nil {
+				// Media expired/unavailable: skip the attachment but keep
+				// forwarding the message so its body/caption still reaches
+				// downstream consumers, instead of dropping the whole event.
 				logrus.Errorf("Failed to download sticker: %v", err)
-				return pkgError.WebhookError(fmt.Sprintf("Failed to download sticker: %v", err))
+			} else {
+				payload["sticker"] = extracted.MediaPath
 			}
-			payload["sticker"] = extracted.MediaPath
 		} else {
 			payload["sticker"] = map[string]any{
 				"url": stickerMedia.GetURL(),
@@ -364,10 +375,13 @@ func buildMediaFields(ctx context.Context, client *whatsmeow.Client, msg *waE2E.
 		if config.WhatsappAutoDownloadMedia {
 			extracted, err := utils.ExtractMedia(ctx, client, config.PathMedia, videoMedia)
 			if err != nil {
+				// Media expired/unavailable: skip the attachment but keep
+				// forwarding the message so its body/caption still reaches
+				// downstream consumers, instead of dropping the whole event.
 				logrus.Errorf("Failed to download video: %v", err)
-				return pkgError.WebhookError(fmt.Sprintf("Failed to download video: %v", err))
+			} else {
+				payload["video"] = buildAutoDownloadPayload(extracted)
 			}
-			payload["video"] = buildAutoDownloadPayload(extracted)
 		} else {
 			payload["video"] = map[string]any{
 				"url":     videoMedia.GetURL(),
@@ -380,10 +394,13 @@ func buildMediaFields(ctx context.Context, client *whatsmeow.Client, msg *waE2E.
 		if config.WhatsappAutoDownloadMedia {
 			extracted, err := utils.ExtractMedia(ctx, client, config.PathMedia, ptvMedia)
 			if err != nil {
+				// Media expired/unavailable: skip the attachment but keep
+				// forwarding the message so its body/caption still reaches
+				// downstream consumers, instead of dropping the whole event.
 				logrus.Errorf("Failed to download video note: %v", err)
-				return pkgError.WebhookError(fmt.Sprintf("Failed to download video note: %v", err))
+			} else {
+				payload["video_note"] = buildAutoDownloadPayload(extracted)
 			}
-			payload["video_note"] = buildAutoDownloadPayload(extracted)
 		} else {
 			payload["video_note"] = map[string]any{
 				"url":     ptvMedia.GetURL(),
