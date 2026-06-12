@@ -322,7 +322,11 @@ func TestResolveUserJID(t *testing.T) {
 	})
 
 	t.Run("confirmed negative with validation is rejected", func(t *testing.T) {
-		p := &fakeProber{results: [][]types.IsOnWhatsAppResponse{oneResp("", false)}}
+		// Complete negative: WhatsApp answers for BOTH probed forms, neither
+		// registered. (556696679626's local part starts 9, so it is a mobile and
+		// expands to a 2-candidate probe; a single-entry response would be a partial
+		// → ambiguous, not an authoritative negative.)
+		p := &fakeProber{byPhone: map[string]bool{"556696679626": false, "5566996679626": false}}
 		if _, err := resolveUserJID(context.Background(), p, "556696679626@s.whatsapp.net", true); err == nil {
 			t.Fatal("expected rejection for confirmed negative with validation on")
 		}
@@ -430,5 +434,44 @@ func TestProbeOnWhatsApp_PrefersAsDialed(t *testing.T) {
 	}
 	if jid.User != "551145590462" {
 		t.Errorf("as-dialed should win: got %q, want 551145590462", jid.User)
+	}
+}
+
+// TestProbeOnWhatsApp_PartialResponseIsAmbiguous: when >1 candidate is probed and
+// USync echoes only SOME of them (e.g. the registered form is omitted while the
+// unregistered sibling comes back IsIn=false), the result is inconclusive, not an
+// authoritative negative — it must retry and end ambiguous (so the send falls open
+// instead of hard-failing a valid recipient). Pre-fix this returned probeNegative.
+func TestProbeOnWhatsApp_PartialResponseIsAmbiguous(t *testing.T) {
+	// 2 candidates queried; response carries only the (unregistered) sibling and
+	// omits the as-dialed form. Repeated across every attempt.
+	partial := []types.IsOnWhatsAppResponse{
+		{Query: "+551166665555", JID: types.JID{}, IsIn: false},
+	}
+	f := &fakeProber{results: [][]types.IsOnWhatsAppResponse{partial, partial, partial}}
+	_, outcome := probeOnWhatsApp(context.Background(), f, []string{"+5511966665555", "+551166665555"}, 0)
+	if outcome != probeAmbiguous {
+		t.Fatalf("partial response must be ambiguous (not negative), got %d", outcome)
+	}
+	if f.calls != onWhatsAppProbeAttempts {
+		t.Errorf("partial response should retry to the attempt cap: calls=%d, want %d", f.calls, onWhatsAppProbeAttempts)
+	}
+}
+
+// TestProbeOnWhatsApp_CompleteNegativeStillRejects guards the non-regression: when
+// the response covers EVERY queried candidate and none is registered, it is still
+// an authoritative negative.
+func TestProbeOnWhatsApp_CompleteNegativeStillRejects(t *testing.T) {
+	complete := []types.IsOnWhatsAppResponse{
+		{Query: "+5511966665555", JID: types.JID{}, IsIn: false},
+		{Query: "+551166665555", JID: types.JID{}, IsIn: false},
+	}
+	f := &fakeProber{results: [][]types.IsOnWhatsAppResponse{complete}}
+	_, outcome := probeOnWhatsApp(context.Background(), f, []string{"+5511966665555", "+551166665555"}, 0)
+	if outcome != probeNegative {
+		t.Fatalf("complete all-negative response must be probeNegative, got %d", outcome)
+	}
+	if f.calls != 1 {
+		t.Errorf("authoritative negative should not retry: calls=%d, want 1", f.calls)
 	}
 }

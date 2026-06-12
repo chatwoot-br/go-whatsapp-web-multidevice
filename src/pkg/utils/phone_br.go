@@ -165,11 +165,39 @@ func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []stri
 		if firstPositive != nil {
 			return firstPositive.JID, probePositive
 		}
-		// Non-empty response with no registered entry — authoritative negative.
+		// No positive entry. Treat as an authoritative negative ONLY when WhatsApp
+		// answered for EVERY queried candidate. With >1 candidate (the BR ninth-digit
+		// equivalence class) USync may return a PARTIAL response that omits the
+		// registered form while echoing the unregistered sibling as IsIn=false —
+		// that is inconclusive, not a confirmed negative, so retry rather than reject
+		// a valid recipient. (A single-candidate non-empty response always contains
+		// that candidate; an omission would have made it empty, handled above.)
+		if len(phones) > 1 && !allCandidatesAnswered(phones, data) {
+			logrus.Debugf("IsOnWhatsApp partial response for %v (%d/%d answered) — inconclusive, retrying", phones, len(data), len(phones))
+			continue
+		}
 		return types.JID{}, probeNegative
 	}
 
 	return types.JID{}, probeAmbiguous
+}
+
+// allCandidatesAnswered reports whether every queried phone appears in the USync
+// response (matched by Query, digits-only). whatsmeow builds the response from
+// the server-returned <user> nodes with no per-query echo guarantee, so a
+// non-empty response can omit a queried number; an omitted candidate makes a
+// no-positive result inconclusive rather than a confirmed negative.
+func allCandidatesAnswered(phones []string, data []types.IsOnWhatsAppResponse) bool {
+	answered := make(map[string]struct{}, len(data))
+	for i := range data {
+		answered[CleanPhoneForWhatsApp(data[i].Query)] = struct{}{}
+	}
+	for _, p := range phones {
+		if _, ok := answered[CleanPhoneForWhatsApp(p)]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // brPhoneCandidates returns the distinct E.164 phone numbers to probe on WhatsApp
