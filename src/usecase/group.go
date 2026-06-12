@@ -303,13 +303,15 @@ func (service serviceGroup) participantToJID(ctx context.Context, participants [
 	for _, participant := range participants {
 		formattedParticipant := participant + config.WhatsappTypeUser
 
-		if !utils.IsOnWhatsapp(client, formattedParticipant) {
+		// Resolve to WhatsApp's confirmed canonical JID (this probes both BR
+		// ninth-digit forms) rather than re-parsing the dialed string, so a contact
+		// registered under the sibling form is added under the form WhatsApp holds.
+		// A confirmed-not-on-WhatsApp number (validation on) returns an error.
+		participantJID, err := utils.ValidateAndNormalizeJID(client, formattedParticipant)
+		if err != nil {
 			return nil, pkgError.ErrUserNotRegistered
 		}
-
-		if participantJID, err := types.ParseJID(formattedParticipant); err == nil {
-			participantsJID = append(participantsJID, participantJID)
-		}
+		participantsJID = append(participantsJID, participantJID)
 	}
 	return participantsJID, nil
 }
