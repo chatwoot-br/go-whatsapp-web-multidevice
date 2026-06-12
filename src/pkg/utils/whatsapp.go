@@ -553,11 +553,10 @@ func isOnWhatsApp(ctx context.Context, prober onWhatsAppProber, jid string) bool
 		return false
 	}
 
-	// Probe both members of the BR ninth-digit equivalence class (brPhoneCandidates
-	// also handles E.164 + prefixing). Bounded retries smooth over transient USync
-	// misses; only a confirmed positive counts as "on WhatsApp".
-	candidates := brPhoneCandidates(phone)
-	_, outcome := probeOnWhatsApp(ctx, prober, candidates, onWhatsAppRetryBackoff)
+	// Probe both members of the BR ninth-digit equivalence class (probeBRPhone
+	// handles candidate expansion + E.164 prefixing). Bounded retries smooth over
+	// transient USync misses; only a confirmed positive counts as "on WhatsApp".
+	_, outcome := probeBRPhone(ctx, prober, phone, onWhatsAppRetryBackoff)
 	return outcome == probePositive
 }
 

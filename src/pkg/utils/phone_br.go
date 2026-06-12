@@ -188,22 +188,24 @@ func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []stri
 func brPhoneCandidates(phone string) []string {
 	asDialed := NormalizePhoneE164(phone)
 	out := []string{asDialed}
-	if asDialed == "" {
-		return out
-	}
-
 	digits := strings.TrimPrefix(asDialed, "+")
-	var sibling string
-	switch {
-	case len(digits) == 13 && strings.HasPrefix(digits, "55") && digits[4] == '9':
-		sibling = "+" + digits[:4] + digits[5:] // strip the 9 → 12-digit
-	case len(digits) == 12 && strings.HasPrefix(digits, "55"):
-		sibling = "+" + digits[:4] + "9" + digits[4:] // insert the 9 → 13-digit
-	}
-	if sibling != "" && sibling != asDialed {
-		out = append(out, sibling)
+
+	// Strip direction reuses normalizePhoneBR — the single source of the
+	// "13-digit BR mobile → drop the 9" rule; it's a no-op for any other shape.
+	if stripped := normalizePhoneBR(asDialed); stripped != asDialed {
+		out = append(out, stripped)
+	} else if len(digits) == 12 && strings.HasPrefix(digits, "55") {
+		// Insert direction (12-digit BR → add the 9) has no existing helper.
+		out = append(out, "+"+digits[:4]+"9"+digits[4:])
 	}
 	return out
+}
+
+// probeBRPhone expands phone into its BR ninth-digit candidates and probes them
+// in a single USync call. Callers that probe a phone should use this rather than
+// probeOnWhatsApp directly, so the both-forms behavior can't be forgotten.
+func probeBRPhone(ctx context.Context, prober onWhatsAppProber, phone string, backoff time.Duration) (types.JID, probeOutcome) {
+	return probeOnWhatsApp(ctx, prober, brPhoneCandidates(phone), backoff)
 }
 
 // resolveProbeOutcome maps a probe outcome to the final JID/error for the send
@@ -254,10 +256,9 @@ func resolveUserJID(ctx context.Context, prober onWhatsAppProber, jid string, va
 	// registered under either form. The 9-stripped form remains the deterministic
 	// fall-open target for an inconclusive/negative-without-validation probe, so a
 	// transient USync miss never hard-fails the send.
-	candidates := brPhoneCandidates(phone)
 	stripped := NormalizePhoneE164(normalizePhoneBR(phone))
 
-	canonicalJID, outcome := probeOnWhatsApp(ctx, prober, candidates, onWhatsAppRetryBackoff)
+	canonicalJID, outcome := probeBRPhone(ctx, prober, phone, onWhatsAppRetryBackoff)
 	return resolveProbeOutcome(jid, stripped, canonicalJID, outcome, validation)
 }
 
