@@ -205,18 +205,14 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 				continue
 			}
 
-			content := utils.ExtractMessageTextFromProto(msg.GetMessage())
-			mediaType, filename, url, mediaKey, fileSHA256, fileEncSHA256, fileLength := utils.ExtractMediaInfo(msg.GetMessage())
-
-			if content == "" && mediaType == "" {
-				continue
-			}
-
+			// Determine sender
 			sender := ""
+			senderJID := types.EmptyJID
 			isFromMe := msgKey.GetFromMe()
 			if isFromMe {
 				if client != nil && client.Store.ID != nil {
-					sender = client.Store.ID.ToNonAD().String()
+					senderJID = client.Store.ID.ToNonAD()
+					sender = senderJID.String() // Use full JID instead of just User part
 				} else {
 					log.Warnf("Skipping self-message %s: client ID unavailable", messageID)
 					continue
@@ -224,9 +220,11 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 			} else {
 				participant := msgKey.GetParticipant()
 				if participant != "" {
-					if senderJID, err := types.ParseJID(participant); err == nil {
-						senderJID = NormalizeJIDFromLIDWithContext(senderJID, client)
-						sender = senderJID.ToNonAD().String()
+					// For group messages, participant contains the actual sender.
+					if parsedSenderJID, err := types.ParseJID(participant); err == nil {
+						// Normalize sender JID (@lid → phone) via the fork's context-aware resolver
+						senderJID = NormalizeJIDFromLIDWithContext(parsedSenderJID, client)
+						sender = senderJID.ToNonAD().String() // Use full JID format for consistency
 					} else {
 						if participant != "" {
 							sender = participant
@@ -243,12 +241,57 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 						log.Warnf("Skipping group message %s in chat %s: no participant info available", messageID, chatJID)
 						continue
 					}
-					sender = jid.String()
+					// For individual chats, use the chat JID as sender with full format
+					senderJID = jid
+					sender = senderJID.String() // Use full JID format for consistency
 				}
 			}
 
 			timestamp := time.Unix(int64(msg.GetMessageTimestamp()), 0)
 
+			if msg.GetMessage().GetReactionMessage() != nil {
+				if senderJID.IsEmpty() {
+					parsed, err := types.ParseJID(sender)
+					if err != nil {
+						log.Warnf("Skipping reaction %s: failed to parse sender %q: %v", messageID, sender, err)
+						continue
+					}
+					senderJID = parsed
+				}
+
+				reactionEvt := &events.Message{
+					Info: types.MessageInfo{
+						MessageSource: types.MessageSource{
+							Chat:     jid,
+							Sender:   senderJID,
+							IsFromMe: isFromMe,
+							IsGroup:  jid.Server == types.GroupServer,
+						},
+						ID:        messageID,
+						PushName:  msg.GetPushName(),
+						Timestamp: timestamp,
+					},
+					Message: msg.GetMessage(),
+				}
+				if err := chatStorageRepo.CreateReaction(ctx, reactionEvt); err != nil {
+					log.Warnf("Failed to store history reaction %s for chat %s: %v", messageID, chatJID, err)
+				}
+				if timestamp.After(latestTimestamp) {
+					latestTimestamp = timestamp
+				}
+				continue
+			}
+
+			// Extract message content and media info
+			content := utils.ExtractMessageTextFromProto(msg.GetMessage())
+			mediaType, filename, url, mediaKey, fileSHA256, fileEncSHA256, fileLength := utils.ExtractMediaInfo(msg.GetMessage())
+
+			// Skip if there's no content and no media
+			if content == "" && mediaType == "" {
+				continue
+			}
+
+			// Track latest timestamp
 			if timestamp.After(latestTimestamp) {
 				latestTimestamp = timestamp
 			}

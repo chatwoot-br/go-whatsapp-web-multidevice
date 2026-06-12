@@ -177,7 +177,7 @@ func TestChatwootMessageRoundTrip(t *testing.T) {
 		t.Fatalf("contact id = %d, want 2001", contact.ID)
 	}
 
-	conv, err := c.FindOrCreateConversation(contact.ID)
+	conv, err := c.FindOrCreateConversation(contact.ID, "e2e-source")
 	if err != nil {
 		t.Fatalf("FindOrCreateConversation: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestChatwootMessageRoundTrip(t *testing.T) {
 		t.Fatalf("conv id = %d, want 3001", conv.ID)
 	}
 
-	msgID, err := c.CreateMessage(conv.ID, "hello from e2e", "outgoing", nil)
+	msgID, err := c.CreateMessage(conv.ID, "hello from e2e", "outgoing", nil, chatwoot.MessageOptions{})
 	if err != nil {
 		t.Fatalf("CreateMessage: %v", err)
 	}
