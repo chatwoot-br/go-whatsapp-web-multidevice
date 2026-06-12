@@ -330,51 +330,83 @@ func TestResolveUserJID(t *testing.T) {
 }
 
 // TestResolveUserJID_BR9thDigit is the regression for the production incident: a
-// BR contact whose WhatsApp account is registered ONLY under the 13-digit (with-9)
-// form must resolve regardless of which ninth-digit form the caller dialed. Before
-// the both-forms probe, the send path stripped the 9 and probed only the 12-digit
-// form (IsIn=false) → rejected with validation on. Both sub-tests fail on the
-// pre-fix code and pass after.
+// BR contact whose WhatsApp account is registered ONLY under one ninth-digit form
+// must resolve regardless of which form the caller dialed. Before the both-forms
+// probe, the send path stripped the 9 and probed only the 12-digit form
+// (IsIn=false) → rejected with validation on. The sibling is generated only for
+// MOBILE local parts (6-9); see the landline sub-test for the safety property.
 func TestResolveUserJID_BR9thDigit(t *testing.T) {
-	// Real account is the 13-digit form; the 12-digit form is NOT on WhatsApp.
+	// Mobile contact (local part starts 6) registered ONLY as the 13-digit form.
 	registered := map[string]bool{
-		"5511945590462": true,  // with the mobile 9
-		"551145590462":  false, // without the 9
+		"5511966665555": true,  // with the mobile 9
+		"551166665555":  false, // without the 9
 	}
 
 	t.Run("dialed 13-digit (with 9), only 13-digit registered, validation on", func(t *testing.T) {
 		p := &fakeProber{byPhone: registered}
-		got, err := resolveUserJID(context.Background(), p, "5511945590462@s.whatsapp.net", true)
+		got, err := resolveUserJID(context.Background(), p, "5511966665555@s.whatsapp.net", true)
 		if err != nil {
 			t.Fatalf("must resolve, not reject: %v", err)
 		}
-		if got.User != "5511945590462" || got.Server != "s.whatsapp.net" {
-			t.Errorf("got %s@%s, want 5511945590462@s.whatsapp.net", got.User, got.Server)
+		if got.User != "5511966665555" || got.Server != "s.whatsapp.net" {
+			t.Errorf("got %s@%s, want 5511966665555@s.whatsapp.net", got.User, got.Server)
 		}
 	})
 
-	t.Run("inverse: dialed 12-digit (no 9), only 13-digit registered, validation on", func(t *testing.T) {
+	t.Run("inverse: dialed 12-digit (no 9) mobile, only 13-digit registered", func(t *testing.T) {
 		p := &fakeProber{byPhone: registered}
-		got, err := resolveUserJID(context.Background(), p, "551145590462@s.whatsapp.net", true)
+		got, err := resolveUserJID(context.Background(), p, "551166665555@s.whatsapp.net", true)
 		if err != nil {
 			t.Fatalf("must resolve via the 9-inserted sibling, not reject: %v", err)
 		}
-		if got.User != "5511945590462" || got.Server != "s.whatsapp.net" {
-			t.Errorf("got %s@%s, want 5511945590462@s.whatsapp.net (canonical with-9 form)", got.User, got.Server)
+		if got.User != "5511966665555" || got.Server != "s.whatsapp.net" {
+			t.Errorf("got %s@%s, want 5511966665555@s.whatsapp.net (canonical with-9 form)", got.User, got.Server)
 		}
 	})
 
-	t.Run("isOnWhatsApp is true for the 12-digit form when only 13-digit is registered", func(t *testing.T) {
+	t.Run("isOnWhatsApp is true for the 12-digit mobile when only 13-digit is registered", func(t *testing.T) {
 		p := &fakeProber{byPhone: registered}
-		if !isOnWhatsApp(context.Background(), p, "551145590462@s.whatsapp.net") {
+		if !isOnWhatsApp(context.Background(), p, "551166665555@s.whatsapp.net") {
 			t.Error("isOnWhatsApp should report true via the 9-inserted sibling")
 		}
 	})
 
-	t.Run("genuinely-not-on-WhatsApp BR number is still rejected with validation on", func(t *testing.T) {
+	// The reported incident number's local part starts 4 (non-mobile range), so
+	// its 13-digit-dialed form still resolves (no sibling needed), but the inverse
+	// 12-digit-dialed form is intentionally NOT auto-resolved (gated) — see below.
+	t.Run("reported number: 13-digit-dialed still resolves despite the gate", func(t *testing.T) {
+		p := &fakeProber{byPhone: map[string]bool{"5511945590462": true, "551145590462": false}}
+		got, err := resolveUserJID(context.Background(), p, "5511945590462@s.whatsapp.net", true)
+		if err != nil {
+			t.Fatalf("13-digit-dialed must resolve: %v", err)
+		}
+		if got.User != "5511945590462" {
+			t.Errorf("got %s, want 5511945590462", got.User)
+		}
+	})
+
+	// SAFETY (the misroute guard): a 12-digit LANDLINE whose "+9" sibling is a
+	// DIFFERENT subscriber's registered mobile must NOT route to that stranger.
+	// The mobile-local gate drops the sibling, so only the (unregistered) landline
+	// is probed → rejected. Without the gate this returned the stranger's JID.
+	t.Run("landline does not misroute to its stranger +9 sibling", func(t *testing.T) {
+		p := &fakeProber{byPhone: map[string]bool{
+			"551133334444":  false, // the dialed landline — not on WhatsApp
+			"5511933334444": true,  // a DIFFERENT subscriber's mobile (must never be reached)
+		}}
+		got, err := resolveUserJID(context.Background(), p, "551133334444@s.whatsapp.net", true)
+		if err == nil {
+			t.Fatalf("landline must be rejected, not routed to a stranger; got %s", got.User)
+		}
+		if got.User == "5511933334444" {
+			t.Fatal("MISROUTE: resolved to a different subscriber's mobile")
+		}
+	})
+
+	t.Run("genuinely-not-on-WhatsApp BR mobile is still rejected with validation on", func(t *testing.T) {
 		// Neither ninth-digit form is registered (both echoed IsIn=false).
-		p := &fakeProber{byPhone: map[string]bool{"5511945590462": false, "551145590462": false}}
-		if _, err := resolveUserJID(context.Background(), p, "5511945590462@s.whatsapp.net", true); err == nil {
+		p := &fakeProber{byPhone: map[string]bool{"5511966665555": false, "551166665555": false}}
+		if _, err := resolveUserJID(context.Background(), p, "5511966665555@s.whatsapp.net", true); err == nil {
 			t.Fatal("expected rejection when neither form is on WhatsApp")
 		}
 	})
@@ -382,9 +414,16 @@ func TestResolveUserJID_BR9thDigit(t *testing.T) {
 
 // TestProbeOnWhatsApp_PrefersAsDialed verifies that when both ninth-digit forms
 // come back registered, the as-dialed candidate (phones[0]) wins over the sibling
-// — the ghost-number hardening.
+// — the ghost-number hardening. The sibling is listed FIRST in the response
+// (USync does not guarantee query order), so a plain first-positive fallback
+// would return the sibling; only the as-dialed preference returns the dialed
+// form. This makes the test fail if the preference branch is removed.
 func TestProbeOnWhatsApp_PrefersAsDialed(t *testing.T) {
-	f := &fakeProber{byPhone: map[string]bool{"5511945590462": true, "551145590462": true}}
+	resp := []types.IsOnWhatsAppResponse{
+		{Query: "+5511945590462", JID: types.NewJID("5511945590462", types.DefaultUserServer), IsIn: true},
+		{Query: "+551145590462", JID: types.NewJID("551145590462", types.DefaultUserServer), IsIn: true},
+	}
+	f := &fakeProber{results: [][]types.IsOnWhatsAppResponse{resp}}
 	jid, outcome := probeOnWhatsApp(context.Background(), f, []string{"+551145590462", "+5511945590462"}, 0)
 	if outcome != probePositive {
 		t.Fatalf("outcome = %d, want probePositive", outcome)

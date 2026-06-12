@@ -174,32 +174,41 @@ func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []stri
 
 // brPhoneCandidates returns the distinct E.164 phone numbers to probe on WhatsApp
 // for a Brazilian ninth-digit equivalence class, as-dialed first. For a 13-digit
-// BR mobile it adds the 9-stripped 12-digit sibling; for a 12-digit BR number it
+// BR mobile it adds the 9-stripped 12-digit sibling; for a 12-digit BR mobile it
 // adds the 9-inserted 13-digit sibling. Both directions are needed because a
 // contact's WhatsApp account may be registered under either form (registration
 // era / region), and a send must not depend on which form the caller dialed.
-// Non-BR / other shapes return just the as-dialed form, so behavior is unchanged
-// for them.
+// Non-BR / non-mobile / other shapes return just the as-dialed form.
 //
-// The add-9 direction is unconditional (parity with normalizePhoneBR's
-// unconditional strip): some BR mobiles have a subscriber part that does not start
-// 6-9, so a "mobile-only" gate would miss valid mobiles. A spurious candidate is
-// harmless — WhatsApp returns IsIn=false for it.
+// The sibling is generated ONLY when the 8-digit local part is in the mobile
+// range (starts 6-9; see isBRMobileLocal). A landline (local starts 2-5) has no
+// real ninth-digit form, so its "+9" sibling would be a DIFFERENT subscriber's
+// mobile — an ungated probe could confirm, or even route a send to, that
+// stranger. Trade-off: a mobile whose local part starts 2-5 won't auto-resolve
+// via its sibling; the as-dialed form is always probed, so the dialed-correct
+// case still works.
 func brPhoneCandidates(phone string) []string {
 	asDialed := NormalizePhoneE164(phone)
 	out := []string{asDialed}
 	digits := strings.TrimPrefix(asDialed, "+")
 
-	// Strip direction reuses normalizePhoneBR — the single source of the
-	// "13-digit BR mobile → drop the 9" rule; it's a no-op for any other shape.
-	if stripped := normalizePhoneBR(asDialed); stripped != asDialed {
-		out = append(out, stripped)
-	} else if len(digits) == 12 && strings.HasPrefix(digits, "55") {
-		// Insert direction (12-digit BR → add the 9) has no existing helper.
+	switch {
+	case len(digits) == 13 && strings.HasPrefix(digits, "55") && digits[4] == '9' && isBRMobileLocal(digits[5]):
+		// 13-digit BR mobile → also probe the 9-stripped 12-digit sibling.
+		// normalizePhoneBR owns the strip rule (no-op on any non-13-digit shape).
+		out = append(out, normalizePhoneBR(asDialed))
+	case len(digits) == 12 && strings.HasPrefix(digits, "55") && isBRMobileLocal(digits[4]):
+		// 12-digit BR mobile → also probe the 9-inserted 13-digit sibling.
 		out = append(out, "+"+digits[:4]+"9"+digits[4:])
 	}
 	return out
 }
+
+// isBRMobileLocal reports whether the first digit of a Brazilian 8-digit local
+// number is in the mobile range (6-9). Landlines start 2-5; gating ninth-digit
+// sibling generation on this prevents producing a sibling that belongs to a
+// different subscriber (a landline's "+9" form is a stranger's mobile).
+func isBRMobileLocal(b byte) bool { return b >= '6' && b <= '9' }
 
 // probeBRPhone expands phone into its BR ninth-digit candidates and probes them
 // in a single USync call. Callers that probe a phone should use this rather than

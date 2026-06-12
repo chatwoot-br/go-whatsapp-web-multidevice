@@ -579,12 +579,11 @@ func ValidateJidWithLogin(client *whatsmeow.Client, jid string) (types.JID, erro
 		return parsedJID, nil
 	}
 
-	// For user JIDs, delegate to the canonical resolver so the returned JID
-	// reflects the form WhatsApp confirmed (BR ninth-digit both-forms probe)
-	// rather than the raw parsed JID. It honors WhatsappAccountValidation and
-	// rejects a confirmed-not-on-WhatsApp number internally.
-	if parsedJID.Server == types.DefaultUserServer {
-		return ValidateAndNormalizeJID(client, jid)
+	// IsOnWhatsapp now probes both BR ninth-digit forms (see brPhoneCandidates),
+	// so this honest gate inherits the fix without changing the return contract,
+	// the validation-off short-circuit, or the no-probe-when-disabled behavior.
+	if config.WhatsappAccountValidation && !IsOnWhatsapp(client, jid) {
+		return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on whatsapp", jid))
 	}
 
 	return parsedJID, nil

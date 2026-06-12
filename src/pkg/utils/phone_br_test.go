@@ -71,11 +71,16 @@ func TestBrPhoneCandidates(t *testing.T) {
 		in   string
 		want []string
 	}{
-		{"13-digit BR mobile adds 12-digit sibling", "5511945590462", []string{"+5511945590462", "+551145590462"}},
-		{"13-digit BR mobile (DDD66) adds 12-digit sibling", "5566996679626", []string{"+5566996679626", "+556696679626"}},
-		{"12-digit BR adds 13-digit (9-inserted) sibling", "551145590462", []string{"+551145590462", "+5511945590462"}},
-		{"+ prefix preserved, still both forms", "+5511945590462", []string{"+5511945590462", "+551145590462"}},
-		{"jid suffix stripped, still both forms", "5511945590462@s.whatsapp.net", []string{"+5511945590462", "+551145590462"}},
+		// Mobile local part (starts 6-9) → both ninth-digit forms.
+		{"13-digit BR mobile adds 12-digit sibling", "5566996679626", []string{"+5566996679626", "+556696679626"}},
+		{"12-digit BR mobile adds 13-digit (9-inserted) sibling", "551166665555", []string{"+551166665555", "+5511966665555"}},
+		{"+ prefix preserved, mobile both forms", "+5566996679626", []string{"+5566996679626", "+556696679626"}},
+		{"jid suffix stripped, mobile both forms", "5566996679626@s.whatsapp.net", []string{"+5566996679626", "+556696679626"}},
+		// Non-mobile local part (starts 2-5) → gated to the as-dialed form only,
+		// so a landline never yields a stranger's "+9" mobile sibling.
+		{"12-digit BR landline (local starts 3) is gated to single", "551133334444", []string{"+551133334444"}},
+		{"13-digit BR with non-mobile local (post-9 = 4) is gated to single", "5511945590462", []string{"+5511945590462"}},
+		{"12-digit BR with non-mobile local (starts 4) is gated to single", "551145590462", []string{"+551145590462"}},
 		{"non-BR 13-digit is single candidate", "1199912345678", []string{"+1199912345678"}},
 		{"13-digit BR without 9 at position 4 is single candidate", "5566896679626", []string{"+5566896679626"}},
 		{"US 11-digit is single candidate", "14155552671", []string{"+14155552671"}},
