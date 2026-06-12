@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"reflect"
 	"testing"
 
 	"go.mau.fi/whatsmeow/types"
@@ -59,6 +60,33 @@ func TestNormalizePhoneBR(t *testing.T) {
 			got := normalizePhoneBR(tc.in)
 			if got != tc.out {
 				t.Errorf("normalizePhoneBR(%q) = %q, want %q", tc.in, got, tc.out)
+			}
+		})
+	}
+}
+
+func TestBrPhoneCandidates(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{"13-digit BR mobile adds 12-digit sibling", "5511945590462", []string{"+5511945590462", "+551145590462"}},
+		{"13-digit BR mobile (DDD66) adds 12-digit sibling", "5566996679626", []string{"+5566996679626", "+556696679626"}},
+		{"12-digit BR adds 13-digit (9-inserted) sibling", "551145590462", []string{"+551145590462", "+5511945590462"}},
+		{"+ prefix preserved, still both forms", "+5511945590462", []string{"+5511945590462", "+551145590462"}},
+		{"jid suffix stripped, still both forms", "5511945590462@s.whatsapp.net", []string{"+5511945590462", "+551145590462"}},
+		{"non-BR 13-digit is single candidate", "1199912345678", []string{"+1199912345678"}},
+		{"13-digit BR without 9 at position 4 is single candidate", "5566896679626", []string{"+5566896679626"}},
+		{"US 11-digit is single candidate", "14155552671", []string{"+14155552671"}},
+		{"12-digit non-BR is single candidate", "115512345678", []string{"+115512345678"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := brPhoneCandidates(tc.in)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("brPhoneCandidates(%q) = %v, want %v", tc.in, got, tc.want)
 			}
 		})
 	}
