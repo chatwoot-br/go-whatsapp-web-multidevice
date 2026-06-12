@@ -183,7 +183,8 @@ func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []stri
 }
 
 // allCandidatesAnswered reports whether every queried phone appears in the USync
-// response (matched by Query, digits-only). whatsmeow builds the response from
+// response (matched by Query, with '+'/whitespace stripped via
+// CleanPhoneForWhatsApp). whatsmeow builds the response from
 // the server-returned <user> nodes with no per-query echo guarantee, so a
 // non-empty response can omit a queried number; an omitted candidate makes a
 // no-positive result inconclusive rather than a confirmed negative.
