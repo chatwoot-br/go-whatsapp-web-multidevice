@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.7.0+2] - 2026-06-12
+
+### Fixed
+- **whatsapp: outbound sends to Brazilian contacts registered under a different ninth-digit form failed with "Phone X is not on WhatsApp" (#8).** `ValidateAndNormalizeJID` stripped the BR mobile 9th digit and probed ONLY the resulting 12-digit form, so a contact whose WhatsApp account is registered under the 13-digit (with-9) form got an authoritative `IsIn=false` and the send was rejected (with `WHATSAPP_ACCOUNT_VALIDATION` on). It now probes BOTH ninth-digit forms in a single USync call (`brPhoneCandidates` + `probeBRPhone`) and resolves to whichever WhatsApp confirms, preferring the as-dialed form; both directions (dialed-13/registered-12 and the inverse) are covered, and the `/user/check` endpoint + group-add guard inherit it. Verified live: `+5511945590462` (with 9) is on WhatsApp, `+551145590462` (without) is not.
+
+### Safety / correctness (review-driven hardening of the above)
+- **Ninth-digit sibling is mobile-gated.** The sibling form is generated only for mobile-range local numbers (8-digit local starting 6-9; `isBRMobileLocal`). A 12-digit landline's "+9" sibling is a *different* subscriber's mobile, so an ungated probe could confirm — or silently route a send to — a stranger; gating eliminates that misroute. Trade-off: a mobile whose local part starts 2-5 won't auto-resolve via its sibling (its as-dialed form is still probed).
+- **Partial USync responses no longer hard-fail a valid recipient.** With >1 candidate, a non-empty response that omits a queried form (whatsmeow emits one entry per server-resolved `<user>` node, with no per-query echo guarantee) is treated as inconclusive (retry → ambiguous → fall open), not an authoritative negative.
+- **Group-add uses WhatsApp's confirmed canonical JID.** `participantToJID` routes through `ValidateAndNormalizeJID` (probes both forms, returns the canonical JID) instead of re-parsing the raw dialed string, so a contact registered under the sibling form is added under the form WhatsApp holds. It also guards connectivity/login up front (clean error instead of a `MustLogin` panic on the join-request path) and surfaces the real resolution error rather than a blanket "user not registered".
+
 ## [v8.7.0+1] - 2026-06-11
 
 ### Upstream Sync
