@@ -298,18 +298,31 @@ func (service serviceGroup) participantToJID(ctx context.Context, participants [
 	if client == nil {
 		return nil, pkgError.ErrWaCLI
 	}
+	// ValidateAndNormalizeJID below calls MustLogin, which PANICS on a
+	// down/not-logged-in client. ManageGroupRequestParticipants reaches here
+	// without an upstream MustLogin, so fail with a clean domain error instead of
+	// panicking (the MCP entrypoint has no panic-recovery wrapper).
+	if !client.IsConnected() {
+		return nil, pkgError.ErrNotConnected
+	}
+	if !client.IsLoggedIn() {
+		return nil, pkgError.ErrNotLoggedIn
+	}
 
 	var participantsJID []types.JID
 	for _, participant := range participants {
 		formattedParticipant := participant + config.WhatsappTypeUser
 
-		if !utils.IsOnWhatsapp(client, formattedParticipant) {
-			return nil, pkgError.ErrUserNotRegistered
+		// Resolve to WhatsApp's confirmed canonical JID (this probes both BR
+		// ninth-digit forms) rather than re-parsing the dialed string, so a contact
+		// registered under the sibling form is added under the form WhatsApp holds.
+		// Surface the real error (e.g. "Phone X is not on WhatsApp" or an invalid-JID
+		// parse error) instead of collapsing every cause to "user not registered".
+		participantJID, err := utils.ValidateAndNormalizeJID(client, formattedParticipant)
+		if err != nil {
+			return nil, err
 		}
-
-		if participantJID, err := types.ParseJID(formattedParticipant); err == nil {
-			participantsJID = append(participantsJID, participantJID)
-		}
+		participantsJID = append(participantsJID, participantJID)
 	}
 	return participantsJID, nil
 }

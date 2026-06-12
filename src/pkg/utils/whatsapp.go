@@ -547,20 +547,16 @@ func isOnWhatsApp(ctx context.Context, prober onWhatsAppProber, jid string) bool
 		return true
 	}
 
-	// Extract phone number from JID and add + prefix for international format
+	// Extract phone number from JID.
 	phone := strings.TrimSuffix(jid, "@s.whatsapp.net")
 	if phone == "" {
 		return false
 	}
 
-	// whatsmeow expects international format with + prefix
-	if !strings.HasPrefix(phone, "+") {
-		phone = "+" + phone
-	}
-
-	// Bounded retries smooth over transient USync misses; only a confirmed
-	// positive counts as "on WhatsApp".
-	_, outcome := probeOnWhatsApp(ctx, prober, phone, onWhatsAppRetryBackoff)
+	// Probe both members of the BR ninth-digit equivalence class (probeBRPhone
+	// handles candidate expansion + E.164 prefixing). Bounded retries smooth over
+	// transient USync misses; only a confirmed positive counts as "on WhatsApp".
+	_, outcome := probeBRPhone(ctx, prober, phone, onWhatsAppRetryBackoff)
 	return outcome == probePositive
 }
 
@@ -583,6 +579,9 @@ func ValidateJidWithLogin(client *whatsmeow.Client, jid string) (types.JID, erro
 		return parsedJID, nil
 	}
 
+	// IsOnWhatsapp now probes both BR ninth-digit forms (see brPhoneCandidates),
+	// so this honest gate inherits the fix without changing the return contract,
+	// the validation-off short-circuit, or the no-probe-when-disabled behavior.
 	if config.WhatsappAccountValidation && !IsOnWhatsapp(client, jid) {
 		return types.JID{}, pkgError.InvalidJID(fmt.Sprintf("Phone %s is not on whatsapp", jid))
 	}

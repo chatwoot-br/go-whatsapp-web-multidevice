@@ -13,18 +13,43 @@ import (
 // fakeProber replays a scripted sequence of IsOnWhatsApp responses/errors so the
 // retry/classification logic can be exercised without a live whatsmeow session.
 // Attempt N reads index N from errs/results (missing index = nil/no error).
+//
+// When byPhone is non-nil the prober is instead INPUT-AWARE: each queried phone is
+// looked up (digits-only) and, if present, returned as a response entry with Query
+// set to the queried string and IsIn per the map (a registered entry gets the
+// queried digits as its canonical JID). Numbers absent from the map are omitted
+// from the response, mirroring USync, which need not echo numbers it has no record
+// for. This lets candidate routing (BR both-forms probe) be asserted.
 type fakeProber struct {
 	results [][]types.IsOnWhatsAppResponse
 	errs    []error
 	calls   int
+
+	byPhone map[string]bool // digits-only phone -> IsIn
 }
 
-func (f *fakeProber) IsOnWhatsApp(_ context.Context, _ []string) ([]types.IsOnWhatsAppResponse, error) {
+func (f *fakeProber) IsOnWhatsApp(_ context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
 	i := f.calls
 	f.calls++
 	var err error
 	if i < len(f.errs) {
 		err = f.errs[i]
+	}
+	if f.byPhone != nil {
+		var data []types.IsOnWhatsAppResponse
+		for _, p := range phones {
+			key := CleanPhoneForWhatsApp(p)
+			isIn, ok := f.byPhone[key]
+			if !ok {
+				continue
+			}
+			var j types.JID
+			if isIn {
+				j = types.NewJID(key, types.DefaultUserServer)
+			}
+			data = append(data, types.IsOnWhatsAppResponse{Query: p, JID: j, IsIn: isIn})
+		}
+		return data, err
 	}
 	var data []types.IsOnWhatsAppResponse
 	if i < len(f.results) {
@@ -107,7 +132,7 @@ func TestProbeOnWhatsApp(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := &fakeProber{results: tc.results, errs: tc.errs}
-			jid, outcome := probeOnWhatsApp(context.Background(), f, "+556696679626", 0)
+			jid, outcome := probeOnWhatsApp(context.Background(), f, []string{"+556696679626"}, 0)
 
 			if outcome != tc.wantOutcome {
 				t.Fatalf("outcome = %d, want %d", outcome, tc.wantOutcome)
@@ -211,7 +236,7 @@ func TestProbeOnWhatsApp_Deadline(t *testing.T) {
 		cancel() // budget already gone
 		// Always-empty prober would loop onWhatsAppProbeAttempts times if unbounded.
 		f := &fakeProber{}
-		_, outcome := probeOnWhatsApp(ctx, f, "+556696679626", 0)
+		_, outcome := probeOnWhatsApp(ctx, f, []string{"+556696679626"}, 0)
 		if outcome != probeAmbiguous {
 			t.Fatalf("outcome = %d, want probeAmbiguous", outcome)
 		}
@@ -226,7 +251,7 @@ func TestProbeOnWhatsApp_Deadline(t *testing.T) {
 		f := &fakeProber{}
 		// A 30s backoff forces the inter-attempt select; if the Done() arm didn't
 		// fire, this test would hang ~30s. It returns immediately.
-		_, outcome := probeOnWhatsApp(ctx, f, "+556696679626", 30*time.Second)
+		_, outcome := probeOnWhatsApp(ctx, f, []string{"+556696679626"}, 30*time.Second)
 		if outcome != probeAmbiguous {
 			t.Fatalf("outcome = %d, want probeAmbiguous", outcome)
 		}
@@ -297,9 +322,156 @@ func TestResolveUserJID(t *testing.T) {
 	})
 
 	t.Run("confirmed negative with validation is rejected", func(t *testing.T) {
-		p := &fakeProber{results: [][]types.IsOnWhatsAppResponse{oneResp("", false)}}
+		// Complete negative: WhatsApp answers for BOTH probed forms, neither
+		// registered. (556696679626's local part starts 9, so it is a mobile and
+		// expands to a 2-candidate probe; a single-entry response would be a partial
+		// → ambiguous, not an authoritative negative.)
+		p := &fakeProber{byPhone: map[string]bool{"556696679626": false, "5566996679626": false}}
 		if _, err := resolveUserJID(context.Background(), p, "556696679626@s.whatsapp.net", true); err == nil {
 			t.Fatal("expected rejection for confirmed negative with validation on")
 		}
 	})
+}
+
+// TestResolveUserJID_BR9thDigit is the regression for the production incident: a
+// BR contact whose WhatsApp account is registered ONLY under one ninth-digit form
+// must resolve regardless of which form the caller dialed. Before the both-forms
+// probe, the send path stripped the 9 and probed only the 12-digit form
+// (IsIn=false) → rejected with validation on. The sibling is generated only for
+// MOBILE local parts (6-9); see the landline sub-test for the safety property.
+func TestResolveUserJID_BR9thDigit(t *testing.T) {
+	// Mobile contact (local part starts 6) registered ONLY as the 13-digit form.
+	registered := map[string]bool{
+		"5511966665555": true,  // with the mobile 9
+		"551166665555":  false, // without the 9
+	}
+
+	t.Run("dialed 13-digit (with 9), only 13-digit registered, validation on", func(t *testing.T) {
+		p := &fakeProber{byPhone: registered}
+		got, err := resolveUserJID(context.Background(), p, "5511966665555@s.whatsapp.net", true)
+		if err != nil {
+			t.Fatalf("must resolve, not reject: %v", err)
+		}
+		if got.User != "5511966665555" || got.Server != "s.whatsapp.net" {
+			t.Errorf("got %s@%s, want 5511966665555@s.whatsapp.net", got.User, got.Server)
+		}
+	})
+
+	t.Run("inverse: dialed 12-digit (no 9) mobile, only 13-digit registered", func(t *testing.T) {
+		p := &fakeProber{byPhone: registered}
+		got, err := resolveUserJID(context.Background(), p, "551166665555@s.whatsapp.net", true)
+		if err != nil {
+			t.Fatalf("must resolve via the 9-inserted sibling, not reject: %v", err)
+		}
+		if got.User != "5511966665555" || got.Server != "s.whatsapp.net" {
+			t.Errorf("got %s@%s, want 5511966665555@s.whatsapp.net (canonical with-9 form)", got.User, got.Server)
+		}
+	})
+
+	t.Run("isOnWhatsApp is true for the 12-digit mobile when only 13-digit is registered", func(t *testing.T) {
+		p := &fakeProber{byPhone: registered}
+		if !isOnWhatsApp(context.Background(), p, "551166665555@s.whatsapp.net") {
+			t.Error("isOnWhatsApp should report true via the 9-inserted sibling")
+		}
+	})
+
+	// The reported incident number's local part starts 4 (non-mobile range), so
+	// its 13-digit-dialed form still resolves (no sibling needed), but the inverse
+	// 12-digit-dialed form is intentionally NOT auto-resolved (gated) — see below.
+	t.Run("reported number: 13-digit-dialed still resolves despite the gate", func(t *testing.T) {
+		p := &fakeProber{byPhone: map[string]bool{"5511945590462": true, "551145590462": false}}
+		got, err := resolveUserJID(context.Background(), p, "5511945590462@s.whatsapp.net", true)
+		if err != nil {
+			t.Fatalf("13-digit-dialed must resolve: %v", err)
+		}
+		if got.User != "5511945590462" {
+			t.Errorf("got %s, want 5511945590462", got.User)
+		}
+	})
+
+	// SAFETY (the misroute guard): a 12-digit LANDLINE whose "+9" sibling is a
+	// DIFFERENT subscriber's registered mobile must NOT route to that stranger.
+	// The mobile-local gate drops the sibling, so only the (unregistered) landline
+	// is probed → rejected. Without the gate this returned the stranger's JID.
+	t.Run("landline does not misroute to its stranger +9 sibling", func(t *testing.T) {
+		p := &fakeProber{byPhone: map[string]bool{
+			"551133334444":  false, // the dialed landline — not on WhatsApp
+			"5511933334444": true,  // a DIFFERENT subscriber's mobile (must never be reached)
+		}}
+		got, err := resolveUserJID(context.Background(), p, "551133334444@s.whatsapp.net", true)
+		if err == nil {
+			t.Fatalf("landline must be rejected, not routed to a stranger; got %s", got.User)
+		}
+		if got.User == "5511933334444" {
+			t.Fatal("MISROUTE: resolved to a different subscriber's mobile")
+		}
+	})
+
+	t.Run("genuinely-not-on-WhatsApp BR mobile is still rejected with validation on", func(t *testing.T) {
+		// Neither ninth-digit form is registered (both echoed IsIn=false).
+		p := &fakeProber{byPhone: map[string]bool{"5511966665555": false, "551166665555": false}}
+		if _, err := resolveUserJID(context.Background(), p, "5511966665555@s.whatsapp.net", true); err == nil {
+			t.Fatal("expected rejection when neither form is on WhatsApp")
+		}
+	})
+}
+
+// TestProbeOnWhatsApp_PrefersAsDialed verifies that when both ninth-digit forms
+// come back registered, the as-dialed candidate (phones[0]) wins over the sibling
+// — the ghost-number hardening. The sibling is listed FIRST in the response
+// (USync does not guarantee query order), so a plain first-positive fallback
+// would return the sibling; only the as-dialed preference returns the dialed
+// form. This makes the test fail if the preference branch is removed.
+func TestProbeOnWhatsApp_PrefersAsDialed(t *testing.T) {
+	resp := []types.IsOnWhatsAppResponse{
+		{Query: "+5511945590462", JID: types.NewJID("5511945590462", types.DefaultUserServer), IsIn: true},
+		{Query: "+551145590462", JID: types.NewJID("551145590462", types.DefaultUserServer), IsIn: true},
+	}
+	f := &fakeProber{results: [][]types.IsOnWhatsAppResponse{resp}}
+	jid, outcome := probeOnWhatsApp(context.Background(), f, []string{"+551145590462", "+5511945590462"}, 0)
+	if outcome != probePositive {
+		t.Fatalf("outcome = %d, want probePositive", outcome)
+	}
+	if jid.User != "551145590462" {
+		t.Errorf("as-dialed should win: got %q, want 551145590462", jid.User)
+	}
+}
+
+// TestProbeOnWhatsApp_PartialResponseIsAmbiguous: when >1 candidate is probed and
+// USync echoes only SOME of them (e.g. the registered form is omitted while the
+// unregistered sibling comes back IsIn=false), the result is inconclusive, not an
+// authoritative negative — it must retry and end ambiguous (so the send falls open
+// instead of hard-failing a valid recipient). Pre-fix this returned probeNegative.
+func TestProbeOnWhatsApp_PartialResponseIsAmbiguous(t *testing.T) {
+	// 2 candidates queried; response carries only the (unregistered) sibling and
+	// omits the as-dialed form. Repeated across every attempt.
+	partial := []types.IsOnWhatsAppResponse{
+		{Query: "+551166665555", JID: types.JID{}, IsIn: false},
+	}
+	f := &fakeProber{results: [][]types.IsOnWhatsAppResponse{partial, partial, partial}}
+	_, outcome := probeOnWhatsApp(context.Background(), f, []string{"+5511966665555", "+551166665555"}, 0)
+	if outcome != probeAmbiguous {
+		t.Fatalf("partial response must be ambiguous (not negative), got %d", outcome)
+	}
+	if f.calls != onWhatsAppProbeAttempts {
+		t.Errorf("partial response should retry to the attempt cap: calls=%d, want %d", f.calls, onWhatsAppProbeAttempts)
+	}
+}
+
+// TestProbeOnWhatsApp_CompleteNegativeStillRejects guards the non-regression: when
+// the response covers EVERY queried candidate and none is registered, it is still
+// an authoritative negative.
+func TestProbeOnWhatsApp_CompleteNegativeStillRejects(t *testing.T) {
+	complete := []types.IsOnWhatsAppResponse{
+		{Query: "+5511966665555", JID: types.JID{}, IsIn: false},
+		{Query: "+551166665555", JID: types.JID{}, IsIn: false},
+	}
+	f := &fakeProber{results: [][]types.IsOnWhatsAppResponse{complete}}
+	_, outcome := probeOnWhatsApp(context.Background(), f, []string{"+5511966665555", "+551166665555"}, 0)
+	if outcome != probeNegative {
+		t.Fatalf("complete all-negative response must be probeNegative, got %d", outcome)
+	}
+	if f.calls != 1 {
+		t.Errorf("authoritative negative should not retry: calls=%d, want 1", f.calls)
+	}
 }

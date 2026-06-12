@@ -101,9 +101,14 @@ const (
 // non-errored empty response can't keep a send blocked. backoff is the sleep
 // between attempts (tests pass 0). On probePositive the returned JID is
 // WhatsApp's canonical JID (may be empty if WhatsApp omitted it).
-func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phone string, backoff time.Duration) (types.JID, probeOutcome) {
+func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []string, backoff time.Duration) (types.JID, probeOutcome) {
 	deadlineCtx, cancel := context.WithTimeout(ctx, onWhatsAppTotalTimeout)
 	defer cancel()
+
+	var asDialed string
+	if len(phones) > 0 {
+		asDialed = phones[0]
+	}
 
 	var errCount int
 	for attempt := 0; attempt < onWhatsAppProbeAttempts; attempt++ {
@@ -121,12 +126,12 @@ func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phone string,
 		}
 
 		attemptCtx, attemptCancel := context.WithTimeout(deadlineCtx, onWhatsAppProbeTimeout)
-		data, err := prober.IsOnWhatsApp(attemptCtx, []string{phone})
+		data, err := prober.IsOnWhatsApp(attemptCtx, phones)
 		attemptCancel()
 
 		if err != nil {
 			errCount++
-			logrus.Warnf("IsOnWhatsApp probe failed for %s (attempt %d/%d): %v", phone, attempt+1, onWhatsAppProbeAttempts, err)
+			logrus.Warnf("IsOnWhatsApp probe failed for %v (attempt %d/%d): %v", phones, attempt+1, onWhatsAppProbeAttempts, err)
 			if errCount >= onWhatsAppProbeErrLimit {
 				break // bound the slow/error path
 			}
@@ -135,20 +140,110 @@ func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phone string,
 
 		// Empty response is inconclusive, not a confirmed negative — retry.
 		if len(data) == 0 {
-			logrus.Debugf("IsOnWhatsApp returned empty for %s (attempt %d/%d) — inconclusive, retrying", phone, attempt+1, onWhatsAppProbeAttempts)
+			logrus.Debugf("IsOnWhatsApp returned empty for %v (attempt %d/%d) — inconclusive, retrying", phones, attempt+1, onWhatsAppProbeAttempts)
 			continue
 		}
 
-		for _, v := range data {
-			if v.IsIn {
-				return v.JID, probePositive
+		// When multiple candidates are probed (BR ninth-digit equivalence class),
+		// prefer a positive match for the as-dialed form (phones[0]) over a sibling
+		// match — minimizes misrouting on WhatsApp's rare "ghost number", where an
+		// inserted-9 form can resolve to a different account. Falls back to the
+		// first registered entry if the as-dialed form isn't the one WhatsApp
+		// confirmed (or the response omits Query).
+		var firstPositive *types.IsOnWhatsAppResponse
+		for i := range data {
+			if !data[i].IsIn {
+				continue
+			}
+			if asDialed != "" && CleanPhoneForWhatsApp(data[i].Query) == CleanPhoneForWhatsApp(asDialed) {
+				return data[i].JID, probePositive
+			}
+			if firstPositive == nil {
+				firstPositive = &data[i]
 			}
 		}
-		// Non-empty response with no registered entry — authoritative negative.
+		if firstPositive != nil {
+			return firstPositive.JID, probePositive
+		}
+		// No positive entry. Treat as an authoritative negative ONLY when WhatsApp
+		// answered for EVERY queried candidate. With >1 candidate (the BR ninth-digit
+		// equivalence class) USync may return a PARTIAL response that omits the
+		// registered form while echoing the unregistered sibling as IsIn=false —
+		// that is inconclusive, not a confirmed negative, so retry rather than reject
+		// a valid recipient. (A single-candidate non-empty response always contains
+		// that candidate; an omission would have made it empty, handled above.)
+		if len(phones) > 1 && !allCandidatesAnswered(phones, data) {
+			logrus.Debugf("IsOnWhatsApp partial response for %v (%d/%d answered) — inconclusive, retrying", phones, len(data), len(phones))
+			continue
+		}
 		return types.JID{}, probeNegative
 	}
 
 	return types.JID{}, probeAmbiguous
+}
+
+// allCandidatesAnswered reports whether every queried phone appears in the USync
+// response (matched by Query, with '+'/whitespace stripped via
+// CleanPhoneForWhatsApp). whatsmeow builds the response from
+// the server-returned <user> nodes with no per-query echo guarantee, so a
+// non-empty response can omit a queried number; an omitted candidate makes a
+// no-positive result inconclusive rather than a confirmed negative.
+func allCandidatesAnswered(phones []string, data []types.IsOnWhatsAppResponse) bool {
+	answered := make(map[string]struct{}, len(data))
+	for i := range data {
+		answered[CleanPhoneForWhatsApp(data[i].Query)] = struct{}{}
+	}
+	for _, p := range phones {
+		if _, ok := answered[CleanPhoneForWhatsApp(p)]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// brPhoneCandidates returns the distinct E.164 phone numbers to probe on WhatsApp
+// for a Brazilian ninth-digit equivalence class, as-dialed first. For a 13-digit
+// BR mobile it adds the 9-stripped 12-digit sibling; for a 12-digit BR mobile it
+// adds the 9-inserted 13-digit sibling. Both directions are needed because a
+// contact's WhatsApp account may be registered under either form (registration
+// era / region), and a send must not depend on which form the caller dialed.
+// Non-BR / non-mobile / other shapes return just the as-dialed form.
+//
+// The sibling is generated ONLY when the 8-digit local part is in the mobile
+// range (starts 6-9; see isBRMobileLocal). A landline (local starts 2-5) has no
+// real ninth-digit form, so its "+9" sibling would be a DIFFERENT subscriber's
+// mobile — an ungated probe could confirm, or even route a send to, that
+// stranger. Trade-off: a mobile whose local part starts 2-5 won't auto-resolve
+// via its sibling; the as-dialed form is always probed, so the dialed-correct
+// case still works.
+func brPhoneCandidates(phone string) []string {
+	asDialed := NormalizePhoneE164(phone)
+	out := []string{asDialed}
+	digits := strings.TrimPrefix(asDialed, "+")
+
+	switch {
+	case len(digits) == 13 && strings.HasPrefix(digits, "55") && digits[4] == '9' && isBRMobileLocal(digits[5]):
+		// 13-digit BR mobile → also probe the 9-stripped 12-digit sibling.
+		// normalizePhoneBR owns the strip rule (no-op on any non-13-digit shape).
+		out = append(out, normalizePhoneBR(asDialed))
+	case len(digits) == 12 && strings.HasPrefix(digits, "55") && isBRMobileLocal(digits[4]):
+		// 12-digit BR mobile → also probe the 9-inserted 13-digit sibling.
+		out = append(out, "+"+digits[:4]+"9"+digits[4:])
+	}
+	return out
+}
+
+// isBRMobileLocal reports whether the first digit of a Brazilian 8-digit local
+// number is in the mobile range (6-9). Landlines start 2-5; gating ninth-digit
+// sibling generation on this prevents producing a sibling that belongs to a
+// different subscriber (a landline's "+9" form is a stranger's mobile).
+func isBRMobileLocal(b byte) bool { return b >= '6' && b <= '9' }
+
+// probeBRPhone expands phone into its BR ninth-digit candidates and probes them
+// in a single USync call. Callers that probe a phone should use this rather than
+// probeOnWhatsApp directly, so the both-forms behavior can't be forgotten.
+func probeBRPhone(ctx context.Context, prober onWhatsAppProber, phone string, backoff time.Duration) (types.JID, probeOutcome) {
+	return probeOnWhatsApp(ctx, prober, brPhoneCandidates(phone), backoff)
 }
 
 // resolveProbeOutcome maps a probe outcome to the final JID/error for the send
@@ -194,14 +289,15 @@ func resolveUserJID(ctx context.Context, prober onWhatsAppProber, jid string, va
 		return types.JID{}, pkgError.InvalidJID("Empty phone number")
 	}
 
-	// Apply BR 9th-digit strip first, then upstream E.164 (adds the leading +).
-	phone = normalizePhoneBR(phone)
-	phone = NormalizePhoneE164(phone)
+	// Probe BOTH members of the BR ninth-digit equivalence class (as-dialed +
+	// 9-stripped/9-inserted sibling) in one USync call, since the account may be
+	// registered under either form. The 9-stripped form remains the deterministic
+	// fall-open target for an inconclusive/negative-without-validation probe, so a
+	// transient USync miss never hard-fails the send.
+	stripped := NormalizePhoneE164(normalizePhoneBR(phone))
 
-	// Probe WhatsApp with bounded retries, then classify. An inconclusive probe
-	// falls through to the normalized JID rather than hard-failing the send.
-	canonicalJID, outcome := probeOnWhatsApp(ctx, prober, phone, onWhatsAppRetryBackoff)
-	return resolveProbeOutcome(jid, phone, canonicalJID, outcome, validation)
+	canonicalJID, outcome := probeBRPhone(ctx, prober, phone, onWhatsAppRetryBackoff)
+	return resolveProbeOutcome(jid, stripped, canonicalJID, outcome, validation)
 }
 
 // ValidateAndNormalizeJID queries WhatsApp for the canonical JID, applying
