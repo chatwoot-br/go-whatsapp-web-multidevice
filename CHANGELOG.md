@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.9.0+1] - 2026-07-02
+
+### Upstream Sync
+- **Synced the fork onto upstream `v8.9.0`** (latest upstream release tag) from the `v8.7.0` base. Single merge commit, no Phase B: upstream's 2-commit unreleased tail (a whatsmeow bump + #748 non-multipart `/send/file` panic fix) is left for the next sync. whatsmeow `v0.0.0-20260609` → `v0.0.0-20260622`; `golang.org/x/net` v0.55.0 → v0.56.0. Contract-drift check clean — upstream touched **no** webhook-forwarding code in this range (0 breaking / 0 behavioral / HMAC stable). See `.workstreams/2026-07-02-upstream-v8.9-sync/`.
+
+### Added (from upstream)
+- **Media `direct_path` persistence (#731)** — new `messages.direct_path` column (append-only migration) threaded through chatstorage; `ExtractMediaInfo` returns it and new `ResolveMediaDirectPath`/`BuildDownloadableMessage` helpers use it so media stays downloadable after WhatsApp URL expiry. Storage-internal; not part of any webhook payload.
+- **Call-reject API (#735)** — `POST /call/reject` (`ui/rest/call.go`, `usecase/call.go`, `domains/call/`, `CallReject.js` view) rejects a still-ringing call using `call_id`/`from` from the existing `call.offer` webhook. Inbound-only; emits no webhook.
+
+### Changed (from upstream)
+- **WhatsApp error 463 is no longer retried (#708)** — upstream deleted `send_retry.go`/`send_retry_test.go` (the fork never modified them) and added `reachout_error.go`: a 463 "reachout" send failure is surfaced honestly instead of burning blind retries.
+- Random API send timeouts under heavy incoming message load fixed (#732); `GET` chat messages returns an empty result instead of HTTP 500 when the chat row is absent (#740); native-chatwoot `pgimport` uuid-cast fix (#724 — module remains dormant).
+
+### Preserved (fork features)
+- BR ninth-digit phone probes (`brPhoneCandidates`/`probeBRPhone` wired in `ValidateAndNormalizeJID`), LID dedup + `history_sync_complete`, full history sync + `ON_DEMAND`, info cache, SOCKS/HTTP/HTTPS proxy, `chat_name`/`sender_name` webhook fields + HMAC `X-Hub-Signature-256`, `InitWaDB` bounded retry. GoWA-native Chatwoot module stays dormant (`CHATWOOT_ENABLED=false`); the fork's integration remains the active path.
+
 ## [v8.7.0+2] - 2026-06-12
 
 ### Fixed
