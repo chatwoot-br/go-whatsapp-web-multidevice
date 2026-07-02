@@ -25,6 +25,13 @@ func handler(ctx context.Context, instance *DeviceInstance, rawEvt any) {
 		return
 	}
 
+	// Detach from the caller's context here, at the single dispatch choke point,
+	// so no registration site can reintroduce request-scoped cancellation: event
+	// processing (history sync, LID resolution, storage writes) outlives the
+	// request/login call that created the client. WithoutCancel preserves values
+	// (device, etc.) but drops cancellation/deadline.
+	ctx = context.WithoutCancel(ctx)
+
 	// Ensure downstream handlers see the device context (used for device-scoped storage).
 	ctx = ContextWithDevice(ctx, instance)
 

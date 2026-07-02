@@ -123,11 +123,9 @@ func InitWaCLI(ctx context.Context, storeContainer, keysStoreContainer *sqlstore
 	deviceRepo := newDeviceChatStorage(instanceID, chatStorageRepo)
 	instance := NewDeviceInstance(instanceID, client, deviceRepo)
 
-	// Detach: event handlers outlive the caller's scope (see the equivalent
-	// note in DeviceManager.EnsureClient).
-	handlerCtx := context.WithoutCancel(ctx)
+	// handler() detaches from this context internally; no detach needed here.
 	client.AddEventHandler(func(rawEvt any) {
-		handler(handlerCtx, instance, rawEvt)
+		handler(ctx, instance, rawEvt)
 	})
 
 	// Register device instance in the manager for multi-device awareness
