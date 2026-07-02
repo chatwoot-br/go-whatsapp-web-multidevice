@@ -25,7 +25,7 @@ Usecases orchestrate validation, device/client lookup, WhatsApp operations, stor
 - Resolve WhatsApp clients from context with `whatsapp.ClientFromContext(ctx)`.
 - For chat history, derive device scope with `deviceIDFromContext(ctx)` and pass it to repository filters.
 - For send operations, sanitize/validate phone/JID, build whatsmeow payloads, send, then store sent messages with context when appropriate.
-- `wrapSendMessage` uses `whatsapp.SendMessageWithReachoutRetry`; keep 463 normalization in this layer aligned with infrastructure retry behavior.
+- `wrapSendMessage` calls `client.SendMessage` then `normalizeSendError`; keep 463 (reachout-timelock) handling aligned with `whatsapp.IsReachoutTimelockError` (upstream #708 surfaces 463 honestly rather than retrying).
 - Preserve existing error style: package errors from `pkg/error`, wrapped validation errors, and direct `fmt.Errorf` for contextual failures.
 
 ## ANTI-PATTERNS

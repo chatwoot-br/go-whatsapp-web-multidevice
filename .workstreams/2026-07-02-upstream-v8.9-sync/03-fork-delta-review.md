@@ -47,7 +47,7 @@ Original findings below.
 | LID chat dedup `deduplicateLIDChats` + `MergeLIDChat`/`GetLIDChats` (interface + wrappers + SQLite impl) | `history_sync.go`, `domains/chatstorage/`, `chatstorage_wrapper.go`, `sqlite_repository.go` | whatsmeow gives LID→PN mapping only; no chat-row dedup upstream |
 | Push-name cache + 3-tier chat lookup | `history_sync.go` | Upstream single-JID lookup only |
 | `RequireFullSync=true` on pairing (~1yr history) | `device_manager.go` | whatsmeow default false; upstream never sets it |
-| `NormalizeJIDFromLIDWithContext` (fresh 30s ctx for post-debounce paths) | `jid_utils.go` | Fork-unique; event ctx is cancelled by debounce time |
+| Bounded LID resolution `normalizeLIDBounded` (per-call 30s) on history-sync paths | `history_sync.go` (+ callers) | Fork-unique; `jid_utils.go` stays byte-identical to upstream. (Superseded the removed `NormalizeJIDFromLIDWithContext`; re-added by the code-review fix to restore the lost 30s bound.) |
 | `InitWaDB` bounded retry + fail-fast + credential redaction (+ `root.go` Fatalf pair) | `database.go`, `cmd/root.go` | Upstream still panics once, no retry |
 | WhatsApp-connection proxy (SOCKS5/HTTP/HTTPS) + `ProxyIP` surfacing (incl. DeviceManager.js) | `init.go`, `device_manager.go`, `device_instance.go`, `domains/device`, views | No proxy vars upstream (only HTTP `AppTrustedProxies`) |
 | `chat_name` webhook field for outgoing msgs (storage→contact lookup) + `sender_name` / `SenderName` on `MessageInfo` | `event_message*.go`, `domains/chat/chat.go`, `usecase/chat.go` | Upstream has only `from_name` (pushname) |
@@ -61,7 +61,7 @@ Original findings below.
 | e2e suite (HMAC round-trip, history_sync_complete, chatwoot REST, LID dedup, taxonomy) | `src/e2e/integration_test.go` | Fork-only harness |
 | CI identity: ghcr multi-arch, `vX.Y.Z+N` tag enforcement, ghcr set-latest, Helm chart-releaser | `.github/workflows/*` | Fork registry/versioning; no upstream conflict |
 | Fork docs (upstream-sync runbook, decisions, plans, webhook-payload fork sections, readme rows) | `docs/`, `readme.md` | Fork process/feature docs |
-| `chatwoot/sync.go` + `sync_rest_test.go` | — | **No fork delta** — identical to upstream |
+| `chatwoot/sync.go` media gate accepts `direct_path`-only rows | `infrastructure/chatwoot/sync.go` | Fork delta added in 68df5af (post-review); `sync_rest_test.go` still upstream-identical |
 
 ### whatsmeow bump obsoletes nothing
 The 20260622 whatsmeow supplies primitives the fork already uses (`GetPNForLID`, `SetProxyAddress`, `RequireFullSync`/`OnDemandReady` fields) but none of the app-level policy the fork carries (dedup, completion signaling, retry, probe classification, webhook shaping). The `IsOnWhatsApp` single-USync behavior the probe stack guards against is unchanged.
