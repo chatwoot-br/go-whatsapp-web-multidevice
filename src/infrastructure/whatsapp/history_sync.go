@@ -347,6 +347,11 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 // request history for a specific chat, e.g. after unavailable messages). ON_DEMAND messages
 // are forwarded individually to webhooks since they represent "new" messages not received in
 // real-time. WhatsApp protocol limitations may make these rare in practice (issue #654).
+//
+// NOTE (2026-07-02 fork-delta review): the request side is not wired — nothing in the fork
+// calls client.BuildHistorySyncRequest — so this handler only runs for the rare unsolicited
+// ON_DEMAND sync. Wiring an on-demand backfill endpoint is a deliberate future feature; see
+// .workstreams/2026-07-02-upstream-v8.9-sync/03-fork-delta-review.md.
 func processOnDemandHistorySync(ctx context.Context, data *waHistorySync.HistorySync, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client) error {
 	conversations := data.GetConversations()
 	log.Infof("[ON_DEMAND] Processing ON_DEMAND history sync with %d conversations", len(conversations))

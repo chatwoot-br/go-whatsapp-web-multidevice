@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - BR ninth-digit phone probes (`brPhoneCandidates`/`probeBRPhone` wired in `ValidateAndNormalizeJID`), LID dedup + `history_sync_complete`, full history sync + `ON_DEMAND`, info cache, SOCKS/HTTP/HTTPS proxy, `chat_name`/`sender_name` webhook fields, `InitWaDB` bounded retry. GoWA-native Chatwoot module stays dormant (`CHATWOOT_ENABLED=false`); the fork's integration remains the active path.
 - Provenance correction: HMAC `X-Hub-Signature-256` signing/verification is **upstream-owned** as of this base (byte-identical in both trees) — no longer a fork-carried feature; the fork retains only its extra test coverage. Full fork-delta review vs v8.9.0 (33 keep / 2 drop-candidates / 3 converged): `.workstreams/2026-07-02-upstream-v8.9-sync/03-fork-delta-review.md`.
 
+### Fork-surface reduction (review-driven, behavior-neutral)
+- **Reverted the LID caller swap.** Restored upstream's `NormalizeJIDFromLID(ctx, …)` wrapper and its exact call-site text at the ~10 sites the fork had pointed at the byte-identical `utils.ResolveLIDToPhone`, and dropped the fork's ctx-less `NormalizeJIDFromLIDWithContext` variant (the debounce-fire callers already pass `context.Background()`, so post-sync LID resolution still survives the cancelled event context). `jid_utils.go` and six `event_*.go` files are byte-identical to upstream again, shrinking every future sync's conflict surface.
+- **Removed the dormant short-term info cache** (`infrastructure/whatsapp/info_cache.go`, `pkg/cache/`) — shipped dormant in the v8.5 sync and never gained a caller; recoverable from git history if ever wired for real.
+- **Documented ON_DEMAND history sync as handler-only**: nothing calls `BuildHistorySyncRequest`, so the handler serves only rare unsolicited syncs; wiring a backfill endpoint is a deliberate future feature, not merge fallout.
+
 ## [v8.7.0+2] - 2026-06-12
 
 ### Fixed

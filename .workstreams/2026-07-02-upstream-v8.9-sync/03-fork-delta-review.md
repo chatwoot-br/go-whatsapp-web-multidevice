@@ -4,7 +4,15 @@ Raw diff: `fork-delta-vs-v8.9.0.diff` (this dir; `git diff upstream/v8.9.0 upgra
 
 **Verdict totals: 33 KEEP · 2 DROP-CANDIDATE · 3 already-converged (no delta left) · 2 KEEP-but-dormant.**
 
-## Action items
+## Action items — ALL ADDRESSED on this branch (2026-07-02)
+
+1. LID caller swap → **reverted** (`refactor(whatsapp): revert LID caller swap…`); `jid_utils.go` + 6 event files byte-identical to upstream; the `WithContext` variant was dropped entirely (debounce callers already pass `context.Background()`).
+2. HMAC provenance → **corrected** in CHANGELOG + runbook §1.3.
+3. Dormant code → info cache **removed** (`chore(whatsapp): remove dormant info cache`); ON_DEMAND **kept + documented** (handler has real runtime effect; request-side wiring deferred as a deliberate future feature — noted in `processOnDemandHistorySync` doc comment and runbook §1.3).
+
+Original findings below.
+
+## Action items (as found)
 
 1. **DROP-CANDIDATE (recommended revert): the LID caller swap.** The fork replaced `whatsapp.NormalizeJIDFromLID(ctx,…)` with `utils.ResolveLIDToPhone(ctx,…)` at ~10 call sites (`event_archive/chat_presence/delete/group/receipt/message.go`, `sqlite_repository.go`, `usecase/message.go`). Upstream's `utils.ResolveLIDToPhone` (`pkg/utils/whatsapp.go:696`) is **byte-identical** to the wrapper the fork deleted — zero behavior gain, and every swapped site is a file upstream actively edits, inflating future merge-conflict surface. `AGENTS.md:30` still prescribes the removed name. Reverting the call sites to upstream's wrapper while **keeping** the fork-only `NormalizeJIDFromLIDWithContext` (self-context resolver for post-debounce paths — genuinely needed) is behavior-neutral and shrinks the next sync's surface.
 2. **Bookkeeping: HMAC is upstream-owned now.** `GetMessageDigestOrSignature`, the `X-Hub-Signature-256` header set (`webhook.go:48`), and the verifier (`ui/rest/chatwoot.go:114-119`) are byte-identical to upstream — none appear in the fork diff. The CHANGELOG/runbook "preserved fork feature" claim is stale; the fork carries only *tests* around it (keep those). Corrected in the v8.9.0+1 CHANGELOG entry.
