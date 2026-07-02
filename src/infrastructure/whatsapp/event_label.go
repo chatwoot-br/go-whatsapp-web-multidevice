@@ -118,7 +118,7 @@ func addLabelChatFields(ctx context.Context, client *whatsmeow.Client, payload m
 	if chatJID.Server == "lid" {
 		payload["chat_lid"] = chatJID.String()
 		if client != nil {
-			chatJID = NormalizeJIDFromLIDWithContext(chatJID, client).ToNonAD()
+			chatJID = normalizeLIDBounded(ctx, chatJID, client).ToNonAD()
 		}
 	}
 

@@ -37,11 +37,17 @@ Internalize before touching code. These are settled decisions, not open question
 3. **Fork features to preserve through every merge** (the reason the fork exists):
    - BR phone normalization — `src/pkg/utils/phone_br.go` + caller sweep
    - LID dedup + `history_sync_complete` dispatch — `infrastructure/whatsapp/history_sync.go`
-   - Full history sync + `ON_DEMAND` capability
-   - Short-term info cache — `infrastructure/whatsapp/info_cache.go`, `pkg/cache/`
+     (LID *call sites* deliberately match upstream's `NormalizeJIDFromLID` text — don't re-swap)
+   - Full history sync + `ON_DEMAND` capability (handler-only: the request side —
+     `BuildHistorySyncRequest` — was never wired; wiring it is a future feature, not a merge task)
    - SOCKS5/HTTP/HTTPS proxy support for WhatsApp connections
-   - Webhook taxonomy: `chat_name`/`sender_name` payload fields + HMAC signing
+   - Webhook taxonomy: `chat_name`/`sender_name` payload fields (HMAC `X-Hub-Signature-256`
+     signing is **upstream-owned** since ≤v8.9.0 — the fork carries only extra tests)
    - Startup resilience: bounded `InitWaDB` retry, ambiguous-`IsOnWhatsApp` fall-through
+
+   Removed from this list by the 2026-07-02 fork-delta review (see
+   `.workstreams/2026-07-02-upstream-v8.9-sync/03-fork-delta-review.md`): the short-term
+   info cache (never gained a caller; deleted) and HMAC signing (converged upstream).
 4. **Release rail: `vX.Y.Z+N`.** The fork rebases its release version onto the upstream base
    tag and appends `+N` (e.g. `v8.5.0+5`). `AppVersion` lives in `src/config/settings.go`;
    changes are logged in `CHANGELOG.md` (Keep a Changelog). A pushed `v*` tag triggers

@@ -123,6 +123,7 @@ func InitWaCLI(ctx context.Context, storeContainer, keysStoreContainer *sqlstore
 	deviceRepo := newDeviceChatStorage(instanceID, chatStorageRepo)
 	instance := NewDeviceInstance(instanceID, client, deviceRepo)
 
+	// handler() detaches from this context internally; no detach needed here.
 	client.AddEventHandler(func(rawEvt any) {
 		handler(ctx, instance, rawEvt)
 	})

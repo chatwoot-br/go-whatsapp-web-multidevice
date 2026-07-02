@@ -16,9 +16,7 @@ import (
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
-	"google.golang.org/protobuf/proto"
 )
 
 // SyncService handles message history synchronization to Chatwoot
@@ -440,7 +438,7 @@ func (s *SyncService) syncChatPG(
 }
 
 func hasDownloadableChatwootMedia(msg *domainChatStorage.Message) bool {
-	return msg != nil && msg.MediaType != "" && msg.URL != "" && len(msg.MediaKey) > 0
+	return msg != nil && msg.MediaType != "" && utils.ResolveMediaDirectPath(msg.DirectPath, msg.URL) != "" && len(msg.MediaKey) > 0
 }
 
 func chatwootRESTMediaCandidates(messages []*domainChatStorage.Message, opts SyncOptions) []*domainChatStorage.Message {
@@ -567,8 +565,10 @@ func (s *SyncService) syncMessageWithOptions(
 
 	var attachments []string
 
-	// Handle media if enabled and present
-	if opts.IncludeMedia && msg.MediaType != "" && msg.URL != "" && len(msg.MediaKey) > 0 {
+	// Handle media if enabled and present. Must accept the same rows as
+	// hasDownloadableChatwootMedia (direct_path-only rows included), or the
+	// REST media pre-pass selects candidates this gate then refuses.
+	if opts.IncludeMedia && hasDownloadableChatwootMedia(msg) {
 		filePath, err := s.downloadMedia(ctx, msg, waClient)
 		if err != nil {
 			if requireMediaAttachment {
@@ -635,59 +635,26 @@ func (s *SyncService) syncMessageWithOptions(
 
 // downloadMedia downloads media for a message and returns the temp file path
 func (s *SyncService) downloadMedia(ctx context.Context, msg *domainChatStorage.Message, waClient *whatsmeow.Client) (string, error) {
-	if msg.URL == "" || len(msg.MediaKey) == 0 {
-		return "", fmt.Errorf("missing media URL or key")
+	directPath := utils.ResolveMediaDirectPath(msg.DirectPath, msg.URL)
+	if directPath == "" || len(msg.MediaKey) == 0 {
+		return "", fmt.Errorf("missing media direct path or key")
 	}
 
 	if waClient == nil {
 		return "", fmt.Errorf("WhatsApp client not available")
 	}
 
-	// Create downloadable message based on type
-	var downloadable whatsmeow.DownloadableMessage
-
-	switch msg.MediaType {
-	case "image":
-		downloadable = &waE2E.ImageMessage{
-			URL:           proto.String(msg.URL),
-			MediaKey:      msg.MediaKey,
-			FileSHA256:    msg.FileSHA256,
-			FileEncSHA256: msg.FileEncSHA256,
-			FileLength:    proto.Uint64(msg.FileLength),
-		}
-	case "video":
-		downloadable = &waE2E.VideoMessage{
-			URL:           proto.String(msg.URL),
-			MediaKey:      msg.MediaKey,
-			FileSHA256:    msg.FileSHA256,
-			FileEncSHA256: msg.FileEncSHA256,
-			FileLength:    proto.Uint64(msg.FileLength),
-		}
-	case "audio", "ptt":
-		downloadable = &waE2E.AudioMessage{
-			URL:           proto.String(msg.URL),
-			MediaKey:      msg.MediaKey,
-			FileSHA256:    msg.FileSHA256,
-			FileEncSHA256: msg.FileEncSHA256,
-			FileLength:    proto.Uint64(msg.FileLength),
-		}
-	case "document":
-		downloadable = &waE2E.DocumentMessage{
-			URL:           proto.String(msg.URL),
-			MediaKey:      msg.MediaKey,
-			FileSHA256:    msg.FileSHA256,
-			FileEncSHA256: msg.FileEncSHA256,
-			FileLength:    proto.Uint64(msg.FileLength),
-		}
-	case "sticker":
-		downloadable = &waE2E.StickerMessage{
-			URL:           proto.String(msg.URL),
-			MediaKey:      msg.MediaKey,
-			FileSHA256:    msg.FileSHA256,
-			FileEncSHA256: msg.FileEncSHA256,
-			FileLength:    proto.Uint64(msg.FileLength),
-		}
-	default:
+	downloadable, err := utils.BuildDownloadableMessage(
+		msg.MediaType,
+		msg.URL,
+		directPath,
+		msg.Filename,
+		msg.MediaKey,
+		msg.FileSHA256,
+		msg.FileEncSHA256,
+		msg.FileLength,
+	)
+	if err != nil {
 		return "", fmt.Errorf("unsupported media type: %s", msg.MediaType)
 	}
 

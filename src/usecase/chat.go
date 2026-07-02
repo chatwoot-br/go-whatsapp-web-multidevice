@@ -86,16 +86,7 @@ func (service serviceChat) ListChats(ctx context.Context, request domainChat.Lis
 	// Convert entities to domain objects
 	chatInfos := make([]domainChat.ChatInfo, 0, len(chats))
 	for _, chat := range chats {
-		chatInfo := domainChat.ChatInfo{
-			JID:                 chat.JID,
-			Name:                chatDisplayName(chat.JID, chat.Name),
-			LastMessageTime:     chat.LastMessageTime.Format(time.RFC3339),
-			EphemeralExpiration: chat.EphemeralExpiration,
-			CreatedAt:           chat.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:           chat.UpdatedAt.Format(time.RFC3339),
-			Archived:            chat.Archived,
-		}
-		chatInfos = append(chatInfos, chatInfo)
+		chatInfos = append(chatInfos, chatInfoFromEntity(chat))
 	}
 
 	// Create pagination response
@@ -132,9 +123,12 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 		logrus.WithError(err).WithField("chat_jid", request.ChatJID).Error("Failed to get chat info")
 		return response, err
 	}
-	if chat == nil {
-		return response, fmt.Errorf("chat with JID %s not found", request.ChatJID)
-	}
+	// chat may be nil here: the chat row has not been persisted for this
+	// device yet — e.g. a conversation that has only just started, or
+	// messages received before the chat record was upserted. Do NOT
+	// short-circuit to an empty response: message rows can already exist
+	// without the chat row, so fall through to the message query and only
+	// synthesize the chat metadata below.
 
 	// Create message filter from request
 	filter := &domainChatStorage.MessageFilter{
@@ -181,8 +175,10 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 		}
 	}
 
-	// Get total message count for pagination
-	totalCount, err := service.chatStorageRepo.GetChatMessageCount(request.ChatJID)
+	// Get total message count for pagination — device-scoped so the total
+	// matches the device-scoped page above (a global count would leak and
+	// inflate with another device's messages for the same chat_jid).
+	totalCount, err := service.chatStorageRepo.GetChatMessageCountByDevice(deviceID, request.ChatJID)
 	if err != nil {
 		logrus.WithError(err).WithField("chat_jid", request.ChatJID).Error("Failed to get message count")
 		// Continue with partial data
@@ -191,17 +187,24 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 
 	// Convert entities to domain objects
 	messageInfos := make([]domainChat.MessageInfo, 0, len(messages))
+	senderNames := make(map[string]string) // dedup sender lookups within this page
 	for _, message := range messages {
 		// Look up sender name from their individual chat or push name cache
 		senderName := ""
 		if message.Sender != "" && !message.IsFromMe {
-			// Try to find sender's individual chat to get their name
-			senderChat, _ := service.chatStorageRepo.GetChat(message.Sender)
-			if senderChat != nil && senderChat.Name != "" && !isPhoneNumberString(senderChat.Name) {
-				senderName = senderChat.Name
+			if cached, ok := senderNames[message.Sender]; ok {
+				senderName = cached
 			} else {
-				// Try push name cache as fallback
-				senderName = whatsapp.GetPushNameFromCache(extractUserFromJID(message.Sender))
+				// Device-scoped lookup so a sender name stored by another
+				// device is never surfaced in this device's message list.
+				senderChat, _ := service.chatStorageRepo.GetChatByDevice(deviceID, message.Sender)
+				if senderChat != nil && senderChat.Name != "" && !isPhoneNumberString(senderChat.Name) {
+					senderName = senderChat.Name
+				} else {
+					// Try push name cache as fallback
+					senderName = whatsapp.GetPushNameFromCache(extractUserFromJID(message.Sender))
+				}
+				senderNames[message.Sender] = senderName
 			}
 		}
 
@@ -235,15 +238,14 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 		messageInfos = append(messageInfos, messageInfo)
 	}
 
-	// Create chat info for response
+	// Create chat info for response; synthesize minimal metadata when the
+	// chat row is absent (messages may still have been returned above).
 	chatInfo := domainChat.ChatInfo{
-		JID:                 chat.JID,
-		Name:                chatDisplayName(chat.JID, chat.Name),
-		LastMessageTime:     chat.LastMessageTime.Format(time.RFC3339),
-		EphemeralExpiration: chat.EphemeralExpiration,
-		CreatedAt:           chat.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:           chat.UpdatedAt.Format(time.RFC3339),
-		Archived:            chat.Archived,
+		JID:  request.ChatJID,
+		Name: chatDisplayName(request.ChatJID, ""),
+	}
+	if chat != nil {
+		chatInfo = chatInfoFromEntity(chat)
 	}
 
 	// Create pagination response
@@ -265,6 +267,21 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 	}).Info("Retrieved chat messages successfully")
 
 	return response, nil
+}
+
+// chatInfoFromEntity maps a stored chat row to the API ChatInfo shape. Shared
+// by ListChats and GetChatMessages so a new ChatInfo field is populated in one
+// place instead of drifting between two inline literals.
+func chatInfoFromEntity(chat *domainChatStorage.Chat) domainChat.ChatInfo {
+	return domainChat.ChatInfo{
+		JID:                 chat.JID,
+		Name:                chatDisplayName(chat.JID, chat.Name),
+		LastMessageTime:     chat.LastMessageTime.Format(time.RFC3339),
+		EphemeralExpiration: chat.EphemeralExpiration,
+		CreatedAt:           chat.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:           chat.UpdatedAt.Format(time.RFC3339),
+		Archived:            chat.Archived,
+	}
 }
 
 func deviceIDFromContext(ctx context.Context) string {

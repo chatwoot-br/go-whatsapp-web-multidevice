@@ -15,7 +15,6 @@ import (
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/validations"
 	"github.com/sirupsen/logrus"
-	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/proto/waSyncAction"
@@ -151,7 +150,7 @@ func (service serviceMessage) RevokeMessage(ctx context.Context, request domainM
 		} else {
 			// Stored senders can still be @lid; whatsmeow's Revoke needs
 			// the phone-number form or it rejects the request at the wire.
-			senderJID = utils.ResolveLIDToPhone(ctx, parsed, client)
+			senderJID = whatsapp.NormalizeJIDFromLID(ctx, parsed, client)
 		}
 	}
 
@@ -276,8 +275,10 @@ func (service serviceMessage) DownloadMedia(ctx context.Context, request domainM
 		return response, err
 	}
 
-	// Query the message from chat storage
-	message, err := service.chatStorageRepo.GetMessageByID(request.MessageID)
+	// Query the message from chat storage, scoped to the requesting device so
+	// one device cannot download another device's media by guessing/replaying
+	// a message ID for a shared contact JID.
+	message, err := service.chatStorageRepo.GetMessageByIDAndDevice(deviceIDFromContext(ctx), request.MessageID)
 	if err != nil {
 		return response, fmt.Errorf("message not found: %v", err)
 	}
@@ -286,8 +287,12 @@ func (service serviceMessage) DownloadMedia(ctx context.Context, request domainM
 		return response, fmt.Errorf("message with ID %s not found", request.MessageID)
 	}
 
-	// Check if message has media
-	if message.MediaType == "" || message.URL == "" {
+	directPath := utils.ResolveMediaDirectPath(message.DirectPath, message.URL)
+
+	// Check if message has media. Require MediaKey up front too: without it
+	// whatsmeow's Download fails deep in decryption with a confusing "invalid
+	// media hmac" instead of this clear "no downloadable media" error.
+	if message.MediaType == "" || directPath == "" || len(message.MediaKey) == 0 {
 		return response, fmt.Errorf("message %s does not contain downloadable media", request.MessageID)
 	}
 
@@ -305,57 +310,22 @@ func (service serviceMessage) DownloadMedia(ctx context.Context, request domainM
 		return response, fmt.Errorf("failed to create directory: %v", err)
 	}
 
-	// Create a downloadable message interface based on media type
-	var downloadableMsg any
-
-	switch message.MediaType {
-	case "image":
-		downloadableMsg = &waE2E.ImageMessage{
-			URL:           proto.String(message.URL),
-			MediaKey:      message.MediaKey,
-			FileSHA256:    message.FileSHA256,
-			FileEncSHA256: message.FileEncSHA256,
-			FileLength:    proto.Uint64(message.FileLength),
-		}
-	case "video":
-		downloadableMsg = &waE2E.VideoMessage{
-			URL:           proto.String(message.URL),
-			MediaKey:      message.MediaKey,
-			FileSHA256:    message.FileSHA256,
-			FileEncSHA256: message.FileEncSHA256,
-			FileLength:    proto.Uint64(message.FileLength),
-		}
-	case "audio":
-		downloadableMsg = &waE2E.AudioMessage{
-			URL:           proto.String(message.URL),
-			MediaKey:      message.MediaKey,
-			FileSHA256:    message.FileSHA256,
-			FileEncSHA256: message.FileEncSHA256,
-			FileLength:    proto.Uint64(message.FileLength),
-		}
-	case "document":
-		downloadableMsg = &waE2E.DocumentMessage{
-			URL:           proto.String(message.URL),
-			MediaKey:      message.MediaKey,
-			FileSHA256:    message.FileSHA256,
-			FileEncSHA256: message.FileEncSHA256,
-			FileLength:    proto.Uint64(message.FileLength),
-			FileName:      proto.String(message.Filename),
-		}
-	case "sticker":
-		downloadableMsg = &waE2E.StickerMessage{
-			URL:           proto.String(message.URL),
-			MediaKey:      message.MediaKey,
-			FileSHA256:    message.FileSHA256,
-			FileEncSHA256: message.FileEncSHA256,
-			FileLength:    proto.Uint64(message.FileLength),
-		}
-	default:
+	downloadableMsg, err := utils.BuildDownloadableMessage(
+		message.MediaType,
+		message.URL,
+		directPath,
+		message.Filename,
+		message.MediaKey,
+		message.FileSHA256,
+		message.FileEncSHA256,
+		message.FileLength,
+	)
+	if err != nil {
 		return response, fmt.Errorf("unsupported media type: %s", message.MediaType)
 	}
 
 	// Download the media using existing utils.ExtractMedia function
-	extractedMedia, err := utils.ExtractMedia(ctx, client, dateDir, downloadableMsg.(whatsmeow.DownloadableMessage))
+	extractedMedia, err := utils.ExtractMedia(ctx, client, dateDir, downloadableMsg)
 	if err != nil {
 		return response, fmt.Errorf("failed to download media: %v", err)
 	}

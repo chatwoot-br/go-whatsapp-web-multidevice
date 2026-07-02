@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.9.0+1] - 2026-07-02
+
+### Upstream Sync
+- **Synced the fork onto upstream `v8.9.0`** (latest upstream release tag) from the `v8.7.0` base. Single merge commit, no Phase B: upstream's 2-commit unreleased tail (a whatsmeow bump + #748 non-multipart `/send/file` panic fix) is left for the next sync. whatsmeow `v0.0.0-20260609` → `v0.0.0-20260622`; `golang.org/x/net` v0.55.0 → v0.56.0. Contract-drift check clean — upstream touched **no** webhook-forwarding code in this range (0 breaking / 0 behavioral / HMAC stable). See `.workstreams/2026-07-02-upstream-v8.9-sync/`.
+
+### Added (from upstream)
+- **Media `direct_path` persistence (#731)** — new `messages.direct_path` column (append-only migration) threaded through chatstorage; `ExtractMediaInfo` returns it and new `ResolveMediaDirectPath`/`BuildDownloadableMessage` helpers use it so media stays downloadable after WhatsApp URL expiry. Storage-internal; not part of any webhook payload.
+- **Call-reject API (#735)** — `POST /call/reject` (`ui/rest/call.go`, `usecase/call.go`, `domains/call/`, `CallReject.js` view) rejects a still-ringing call using `call_id`/`from` from the existing `call.offer` webhook. Inbound-only; emits no webhook.
+
+### Changed (from upstream)
+- **WhatsApp error 463 is no longer retried (#708)** — upstream deleted `send_retry.go`/`send_retry_test.go` (the fork never modified them) and added `reachout_error.go`: a 463 "reachout" send failure is surfaced honestly instead of burning blind retries.
+- Random API send timeouts under heavy incoming message load fixed (#732); `GET` chat messages returns an empty result instead of HTTP 500 when the chat row is absent (#740); native-chatwoot `pgimport` uuid-cast fix (#724 — module remains dormant).
+
+### Preserved (fork features)
+- BR ninth-digit phone probes (`brPhoneCandidates`/`probeBRPhone` wired in `ValidateAndNormalizeJID`), LID dedup + `history_sync_complete`, full history sync + `ON_DEMAND`, SOCKS/HTTP/HTTPS proxy, `chat_name`/`sender_name` webhook fields, `InitWaDB` bounded retry. GoWA-native Chatwoot module stays dormant (`CHATWOOT_ENABLED=false`); the fork's integration remains the active path. (The dormant info cache is **removed** this release — see below.)
+- Provenance correction: HMAC `X-Hub-Signature-256` signing/verification is **upstream-owned** as of this base (byte-identical in both trees) — no longer a fork-carried feature; the fork retains only its extra test coverage. Full fork-delta review vs v8.9.0 (33 keep / 2 drop-candidates / 3 converged): `.workstreams/2026-07-02-upstream-v8.9-sync/03-fork-delta-review.md`.
+
+### Fixed (Codex review on the sync PR; first three are upstream-forwardable)
+- **whatsapp: event handlers no longer run under a cancelled request context.** `EnsureClient`/`InitWaCLI` registered the WhatsApp event handler with the caller's context; when reached from `/app/login`, every later event (history sync, LID resolution, storage writes) ran under the already-cancelled request context — LID chats stored unresolved for REST-paired devices. Both registration sites now detach with `context.WithoutCancel`.
+- **chat: `GET /chat/:jid/messages` returns stored rows when the chat record is absent.** Upstream #740's `chat == nil` early-return hid message rows that exist before the chat upsert — the Chatwoot history import would silently import 0 messages. Falls through to the message query and synthesizes minimal chat metadata; regression test added.
+- **chatwoot: direct_path-only media no longer fails the REST import.** The media pre-pass accepted rows with only `direct_path`+`media_key` (upstream #731) but the download gate still required a non-empty `url`, guaranteeing "required media attachment is unavailable"; the gate now reuses the same predicate. (Dormant module in fork deployments.)
+- **call: malformed `caller_jid` on `POST /call/reject` returns 400, not 500**, and the trimmed request values are the ones actually used.
+
+### Fork-surface reduction (review-driven, behavior-neutral)
+- **Reverted the LID caller swap.** Restored upstream's `NormalizeJIDFromLID(ctx, …)` wrapper and its exact call-site text at the ~10 sites the fork had pointed at the byte-identical `utils.ResolveLIDToPhone`, and dropped the fork's ctx-less `NormalizeJIDFromLIDWithContext` variant. `jid_utils.go` and six `event_*.go` files are byte-identical to upstream again, shrinking every future sync's conflict surface. (The 30s per-lookup bound that variant provided is restored on the history-sync paths by `normalizeLIDBounded` — see the code-review fixes below.)
+- **Removed the dormant short-term info cache** (`infrastructure/whatsapp/info_cache.go`, `pkg/cache/`) — shipped dormant in the v8.5 sync and never gained a caller; recoverable from git history if ever wired for real.
+- **Documented ON_DEMAND history sync as handler-only**: nothing calls `BuildHistorySyncRequest`, so the handler serves only rare unsolicited syncs; wiring a backfill endpoint is a deliberate future feature, not merge fallout.
+
+### Fixed (xhigh code review of the merge)
+- **Restored `SetMaxOpenConns` default to 1 for chat storage.** Upstream #732 changed the default to 5, but the fork's emulated upserts (`StoreChat`/`StoreMessage`/`StoreReaction` do UPDATE-then-INSERT with no transaction or `ON CONFLICT`) and `MergeLIDChat`'s tx-scoped reads are only safe under a single connection — the `MergeLIDChat` comment already documented that invariant. At 5 connections a burst of concurrent sends to the same not-yet-stored recipient could both fall through UPDATE and both INSERT, dropping the loser's row with only a warning. Kept the `CHAT_STORAGE_MAX_OPEN_CONNS` override for when the upserts are made atomic.
+- **Device-scoped three chat/message reads that leaked across devices** on a shared chat-storage DB: `GetChatMessages` pagination total (`GetChatMessageCount` → `GetChatMessageCountByDevice`) and sender-name lookup (`GetChat` → `GetChatByDevice`), and `DownloadMedia`'s message fetch (`GetMessageByID` → `GetMessageByIDAndDevice`, closing a cross-device media-download hole). Also deduped the per-message sender lookup within a page.
+- **Restored the 30s bound on history-sync LID resolution.** New `normalizeLIDBounded` wraps each `@lid`→phone lookup in a per-call 30s deadline at the history-sync call sites (the paths run under a detached or `context.Background()` context with no deadline), so a slow/contended LID store lookup can no longer stall the sync pipeline indefinitely — while keeping `jid_utils.go` byte-identical to upstream.
+- **Moved the event-handler context detach into the shared `handler()` dispatcher** instead of the two `AddEventHandler` registration sites, so a future third registration site can't reintroduce request-scoped cancellation.
+- **`DownloadMedia` now requires `MediaKey` up front**, returning a clear "no downloadable media" error instead of failing deep in whatsmeow with "invalid media hmac" for a `direct_path`-only, key-less row.
+- **Extracted `chatInfoFromEntity`** shared by `ListChats` and `GetChatMessages` (was two drifting inline literals); dropped the redundant second trim in `ValidateRejectCall` (the usecase already trims what it passes on).
+
 ## [v8.7.0+2] - 2026-06-12
 
 ### Fixed

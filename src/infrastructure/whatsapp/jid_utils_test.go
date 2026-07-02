@@ -1,6 +1,7 @@
 package whatsapp
 
 import (
+	"context"
 	"testing"
 
 	"go.mau.fi/whatsmeow/types"
@@ -17,11 +18,11 @@ func ensureLogger() {
 	}
 }
 
-// TestNormalizeJIDFromLIDWithContext_PassthroughNonLID asserts that any JID
-// whose server is NOT "lid" is returned verbatim — the function only does work
-// for LID JIDs. Exercised against a nil client to also lock the "no resolution
+// TestNormalizeJIDFromLID_PassthroughNonLID asserts that any JID whose server
+// is NOT "lid" is returned verbatim — the function only does work for LID
+// JIDs. Exercised against a nil client to also lock the "no resolution
 // attempted on phone JIDs even with nil client" invariant.
-func TestNormalizeJIDFromLIDWithContext_PassthroughNonLID(t *testing.T) {
+func TestNormalizeJIDFromLID_PassthroughNonLID(t *testing.T) {
 	cases := []types.JID{
 		types.NewJID("5511999999999", types.DefaultUserServer),
 		types.NewJID("120363111111111", types.GroupServer),
@@ -29,7 +30,7 @@ func TestNormalizeJIDFromLIDWithContext_PassthroughNonLID(t *testing.T) {
 	}
 	for _, in := range cases {
 		t.Run(in.Server, func(t *testing.T) {
-			got := NormalizeJIDFromLIDWithContext(in, nil)
+			got := NormalizeJIDFromLID(context.Background(), in, nil)
 			if got.User != in.User || got.Server != in.Server {
 				t.Errorf("got %s, want %s (function must passthrough non-LID JIDs)", got.String(), in.String())
 			}
@@ -37,14 +38,14 @@ func TestNormalizeJIDFromLIDWithContext_PassthroughNonLID(t *testing.T) {
 	}
 }
 
-// TestNormalizeJIDFromLIDWithContext_NilClient asserts the safety-check branch:
-// LID JID + nil client must NOT panic and must return the original JID
-// unchanged. (Production calls this from deduplicateLIDChats which is
-// short-circuited when client is nil — but the inner function is defensive.)
-func TestNormalizeJIDFromLIDWithContext_NilClient(t *testing.T) {
+// TestNormalizeJIDFromLID_NilClient asserts the safety-check branch: LID JID +
+// nil client must NOT panic and must return the original JID unchanged.
+// (Production calls this from deduplicateLIDChats which is short-circuited
+// when client is nil — but the inner function is defensive.)
+func TestNormalizeJIDFromLID_NilClient(t *testing.T) {
 	ensureLogger()
 	in := types.JID{User: "215946727821336", Server: "lid"}
-	got := NormalizeJIDFromLIDWithContext(in, nil)
+	got := NormalizeJIDFromLID(context.Background(), in, nil)
 	if got.User != in.User || got.Server != in.Server {
 		t.Errorf("got %s, want %s (nil client must return input unchanged)", got.String(), in.String())
 	}

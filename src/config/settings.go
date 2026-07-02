@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	AppVersion             = "v8.7.0+2"
+	AppVersion             = "v8.9.0+1"
 	AppPort                = "3000"
 	AppHost                = "0.0.0.0"
 	AppDebug               = false
@@ -59,6 +59,13 @@ var (
 	ChatStorageURI               = "file:storages/chatstorage.db"
 	ChatStorageEnableForeignKeys = true
 	ChatStorageEnableWAL         = true
+	// ChatStorageMaxOpenConns defaults to 1. The chatstorage layer's emulated
+	// upserts (StoreChat/StoreMessage/StoreReaction do UPDATE-then-INSERT with no
+	// transaction or ON CONFLICT) and MergeLIDChat's tx-scoped reads are only safe
+	// under a single connection; >1 lets two writers race the same primary key and
+	// silently drop a row. Overridable via CHAT_STORAGE_MAX_OPEN_CONNS once those
+	// writes are made atomic. (Upstream defaults this to 5.)
+	ChatStorageMaxOpenConns = 1
 
 	ChatwootEnabled   = false
 	ChatwootURL       = ""

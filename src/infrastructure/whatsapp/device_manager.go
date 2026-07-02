@@ -533,6 +533,9 @@ func (m *DeviceManager) EnsureClient(ctx context.Context, deviceID string) (*Dev
 		inst.SetChatStorage(repo)
 	}
 
+	// handler() detaches from this context internally (event handlers outlive
+	// the caller's scope — EnsureClient is reached from request-scoped paths
+	// like /app/login), so no detach is needed here.
 	client.AddEventHandler(func(rawEvt any) {
 		handler(ctx, inst, rawEvt)
 	})

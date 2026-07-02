@@ -15,7 +15,7 @@ presence pulse scheduling, webhook forwarding, and the event-side chatstorage wr
 | Event routing | `event_handler.go`, `event_*.go` | Add new event types to the central switch. |
 | Message webhooks | `event_message.go`, `webhook_forward.go` | Payload construction, media fields, signatures, event filters. |
 | Chatwoot forward retry | `webhook_forward.go` | Queue-backed retries for WhatsApp-to-Chatwoot forward failures. |
-| Send retry / 463 | `send_retry.go`, `key_cache.go` | Reachout timelock retry and privacy-token store wiring. |
+| Send error 463 | `reachout_error.go`, `key_cache.go` | Reachout-timelock (463) classification and privacy-token store wiring. Note: 463 is surfaced honestly, not retried (upstream #708 removed `send_retry.go`). |
 | Presence behavior | `event_handler.go`, `event_chat_presence.go`, `presence_pulse.go` | Connect-time presence, chat presence webhooks, scheduled daily pulses. |
 | History import | `history_sync.go` | Stores chats/messages for history sync batches. |
 | JID conversion | `jid_utils.go`, `context_device.go` | LID normalization and request/device context. |

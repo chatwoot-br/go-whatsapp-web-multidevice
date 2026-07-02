@@ -89,6 +89,25 @@ func handleHistorySync(ctx context.Context, evt *events.HistorySync, chatStorage
 //  2. deduplicateLIDChats         — collapse @lid chats into their phone counterparts
 //  3. forwardHistorySyncCompleteToWebhook — dispatch the fork-specific event
 //  4. clearPushNameCache          — bound memory across sync cycles
+
+// lidResolveTimeout bounds a single @lid→phone store lookup on the history-sync
+// paths. Those paths run under either the detached (deadline-free) event context
+// or context.Background() from the debounce timer, so without a per-call bound a
+// slow/contended LID store lookup could stall the sync pipeline indefinitely.
+const lidResolveTimeout = 30 * time.Second
+
+// normalizeLIDBounded resolves an @lid JID under a per-call deadline. It leaves
+// jid_utils.go's NormalizeJIDFromLID byte-identical to upstream while restoring
+// the bound the fork's removed NormalizeJIDFromLIDWithContext used to provide.
+func normalizeLIDBounded(ctx context.Context, jid types.JID, client *whatsmeow.Client) types.JID {
+	if jid.Server != "lid" {
+		return jid
+	}
+	ctx, cancel := context.WithTimeout(ctx, lidResolveTimeout)
+	defer cancel()
+	return NormalizeJIDFromLID(ctx, jid, client)
+}
+
 func scheduleHistorySyncWebhook(chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client, syncType string) {
 	historySyncDebounceMu.Lock()
 	defer historySyncDebounceMu.Unlock()
@@ -139,7 +158,8 @@ func processHistorySync(ctx context.Context, data *waHistorySync.HistorySync, ch
 }
 
 // processConversationMessages processes and stores conversation messages from history sync.
-// Uses NormalizeJIDFromLIDWithContext so LID resolution survives a cancelled event context.
+// It runs synchronously under the (detached) event-handler context; LID lookups are
+// individually bounded via normalizeLIDBounded so a slow store lookup can't stall the sync.
 func processConversationMessages(ctx context.Context, data *waHistorySync.HistorySync, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client) error {
 	conversations := data.GetConversations()
 	log.Infof("Processing %d conversations from history sync", len(conversations))
@@ -169,7 +189,7 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 			continue
 		}
 
-		jid = NormalizeJIDFromLIDWithContext(jid, client)
+		jid = normalizeLIDBounded(ctx, jid, client)
 		chatJID := jid.String()
 
 		displayName := conv.GetDisplayName()
@@ -222,8 +242,8 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 				if participant != "" {
 					// For group messages, participant contains the actual sender.
 					if parsedSenderJID, err := types.ParseJID(participant); err == nil {
-						// Normalize sender JID (@lid → phone) via the fork's context-aware resolver
-						senderJID = NormalizeJIDFromLIDWithContext(parsedSenderJID, client)
+						// Normalize sender JID (@lid → phone)
+						senderJID = normalizeLIDBounded(ctx, parsedSenderJID, client)
 						sender = senderJID.ToNonAD().String() // Use full JID format for consistency
 					} else {
 						if participant != "" {
@@ -284,7 +304,7 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 
 			// Extract message content and media info
 			content := utils.ExtractMessageTextFromProto(msg.GetMessage())
-			mediaType, filename, url, mediaKey, fileSHA256, fileEncSHA256, fileLength := utils.ExtractMediaInfo(msg.GetMessage())
+			mediaType, filename, mediaURL, directPath, mediaKey, fileSHA256, fileEncSHA256, fileLength := utils.ExtractMediaInfo(msg.GetMessage())
 
 			// Skip if there's no content and no media
 			if content == "" && mediaType == "" {
@@ -306,7 +326,8 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 				IsFromMe:      isFromMe,
 				MediaType:     mediaType,
 				Filename:      filename,
-				URL:           url,
+				URL:           mediaURL,
+				DirectPath:    directPath,
 				MediaKey:      mediaKey,
 				FileSHA256:    fileSHA256,
 				FileEncSHA256: fileEncSHA256,
@@ -345,6 +366,11 @@ func processConversationMessages(ctx context.Context, data *waHistorySync.Histor
 // request history for a specific chat, e.g. after unavailable messages). ON_DEMAND messages
 // are forwarded individually to webhooks since they represent "new" messages not received in
 // real-time. WhatsApp protocol limitations may make these rare in practice (issue #654).
+//
+// NOTE (2026-07-02 fork-delta review): the request side is not wired — nothing in the fork
+// calls client.BuildHistorySyncRequest — so this handler only runs for the rare unsolicited
+// ON_DEMAND sync. Wiring an on-demand backfill endpoint is a deliberate future feature; see
+// .workstreams/2026-07-02-upstream-v8.9-sync/03-fork-delta-review.md.
 func processOnDemandHistorySync(ctx context.Context, data *waHistorySync.HistorySync, chatStorageRepo domainChatStorage.IChatStorageRepository, client *whatsmeow.Client) error {
 	conversations := data.GetConversations()
 	log.Infof("[ON_DEMAND] Processing ON_DEMAND history sync with %d conversations", len(conversations))
@@ -357,7 +383,7 @@ func processOnDemandHistorySync(ctx context.Context, data *waHistorySync.History
 	if len(config.WhatsappWebhook) > 0 {
 		deviceID := ""
 		if client != nil && client.Store != nil && client.Store.ID != nil {
-			deviceJID := NormalizeJIDFromLIDWithContext(client.Store.ID.ToNonAD(), client)
+			deviceJID := normalizeLIDBounded(ctx, client.Store.ID.ToNonAD(), client)
 			deviceID = deviceJID.ToNonAD().String()
 		}
 
@@ -397,7 +423,7 @@ func forwardOnDemandMessageToWebhook(ctx context.Context, msg *waWeb.WebMessageI
 
 	chatJID := msgKey.GetRemoteJID()
 	if jid, err := types.ParseJID(chatJID); err == nil {
-		normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
+		normalizedJID := normalizeLIDBounded(ctx, jid, client)
 		chatJID = normalizedJID.String()
 	}
 
@@ -406,7 +432,7 @@ func forwardOnDemandMessageToWebhook(ctx context.Context, msg *waWeb.WebMessageI
 		sender = client.Store.ID.ToNonAD().String()
 	} else if participant := msgKey.GetParticipant(); participant != "" {
 		if jid, err := types.ParseJID(participant); err == nil {
-			normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
+			normalizedJID := normalizeLIDBounded(ctx, jid, client)
 			sender = normalizedJID.String()
 		}
 	}
@@ -490,7 +516,7 @@ func processPushNames(ctx context.Context, data *waHistorySync.HistorySync, chat
 		var existingChat *domainChatStorage.Chat
 
 		// Try 1: Normalized JID
-		normalizedJID := NormalizeJIDFromLIDWithContext(jid, client)
+		normalizedJID := normalizeLIDBounded(ctx, jid, client)
 		existingChat, _ = chatStorageRepo.GetChatByDevice(deviceID, normalizedJID.String())
 
 		// Try 2: Standard s.whatsapp.net format
@@ -637,7 +663,7 @@ func deduplicateLIDChats(ctx context.Context, chatStorageRepo domainChatStorage.
 			continue
 		}
 
-		phoneJID := NormalizeJIDFromLIDWithContext(lidJID, client)
+		phoneJID := normalizeLIDBounded(ctx, lidJID, client)
 
 		// If resolution succeeded (different JID returned), attempt to merge.
 		if phoneJID.Server != "lid" {
