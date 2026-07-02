@@ -565,8 +565,10 @@ func (s *SyncService) syncMessageWithOptions(
 
 	var attachments []string
 
-	// Handle media if enabled and present
-	if opts.IncludeMedia && msg.MediaType != "" && msg.URL != "" && len(msg.MediaKey) > 0 {
+	// Handle media if enabled and present. Must accept the same rows as
+	// hasDownloadableChatwootMedia (direct_path-only rows included), or the
+	// REST media pre-pass selects candidates this gate then refuses.
+	if opts.IncludeMedia && hasDownloadableChatwootMedia(msg) {
 		filePath, err := s.downloadMedia(ctx, msg, waClient)
 		if err != nil {
 			if requireMediaAttachment {
