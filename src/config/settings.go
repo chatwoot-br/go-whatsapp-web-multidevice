@@ -59,7 +59,13 @@ var (
 	ChatStorageURI               = "file:storages/chatstorage.db"
 	ChatStorageEnableForeignKeys = true
 	ChatStorageEnableWAL         = true
-	ChatStorageMaxOpenConns      = 5 // Max concurrent SQLite connections for chat storage (WAL allows concurrent readers + 1 writer)
+	// ChatStorageMaxOpenConns defaults to 1. The chatstorage layer's emulated
+	// upserts (StoreChat/StoreMessage/StoreReaction do UPDATE-then-INSERT with no
+	// transaction or ON CONFLICT) and MergeLIDChat's tx-scoped reads are only safe
+	// under a single connection; >1 lets two writers race the same primary key and
+	// silently drop a row. Overridable via CHAT_STORAGE_MAX_OPEN_CONNS once those
+	// writes are made atomic. (Upstream defaults this to 5.)
+	ChatStorageMaxOpenConns = 1
 
 	ChatwootEnabled   = false
 	ChatwootURL       = ""
