@@ -139,19 +139,12 @@ func (r *chatUsecaseRepoStub) GetMessages(*domainChatStorage.MessageFilter) ([]*
 	return r.messages, nil
 }
 
-func (r *chatUsecaseRepoStub) GetChatMessageCount(string) (int64, error) {
+func (r *chatUsecaseRepoStub) GetChatMessageCountByDevice(_, _ string) (int64, error) {
 	return int64(len(r.messages)), nil
 }
 
 func (r *chatUsecaseRepoStub) CreateReaction(context.Context, *events.Message) error {
 	return nil
-}
-
-// GetChat is exercised by the fork's per-message sender-name lookup in
-// GetChatMessages; returning (nil, nil) makes that fall through to the push-name
-// cache without affecting the reaction-mapping assertions under test.
-func (r *chatUsecaseRepoStub) GetChat(string) (*domainChatStorage.Chat, error) {
-	return nil, nil
 }
 
 // TestChatDisplayName pins the chat-list name fallback (issue #675): a stored

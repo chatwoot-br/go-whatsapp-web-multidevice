@@ -275,8 +275,10 @@ func (service serviceMessage) DownloadMedia(ctx context.Context, request domainM
 		return response, err
 	}
 
-	// Query the message from chat storage
-	message, err := service.chatStorageRepo.GetMessageByID(request.MessageID)
+	// Query the message from chat storage, scoped to the requesting device so
+	// one device cannot download another device's media by guessing/replaying
+	// a message ID for a shared contact JID.
+	message, err := service.chatStorageRepo.GetMessageByIDAndDevice(deviceIDFromContext(ctx), request.MessageID)
 	if err != nil {
 		return response, fmt.Errorf("message not found: %v", err)
 	}
@@ -287,8 +289,10 @@ func (service serviceMessage) DownloadMedia(ctx context.Context, request domainM
 
 	directPath := utils.ResolveMediaDirectPath(message.DirectPath, message.URL)
 
-	// Check if message has media
-	if message.MediaType == "" || directPath == "" {
+	// Check if message has media. Require MediaKey up front too: without it
+	// whatsmeow's Download fails deep in decryption with a confusing "invalid
+	// media hmac" instead of this clear "no downloadable media" error.
+	if message.MediaType == "" || directPath == "" || len(message.MediaKey) == 0 {
 		return response, fmt.Errorf("message %s does not contain downloadable media", request.MessageID)
 	}
 
