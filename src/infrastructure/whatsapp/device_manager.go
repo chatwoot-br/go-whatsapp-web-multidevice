@@ -533,8 +533,14 @@ func (m *DeviceManager) EnsureClient(ctx context.Context, deviceID string) (*Dev
 		inst.SetChatStorage(repo)
 	}
 
+	// Event handlers outlive the caller's scope: EnsureClient is reached from
+	// request-scoped paths (e.g. /app/login via usecase/app.go), whose context
+	// is cancelled when the request returns. Detach so long-lived event
+	// processing (history sync, LID resolution, storage writes) never runs
+	// under an already-cancelled request context.
+	handlerCtx := context.WithoutCancel(ctx)
 	client.AddEventHandler(func(rawEvt any) {
-		handler(ctx, inst, rawEvt)
+		handler(handlerCtx, inst, rawEvt)
 	})
 
 	inst.SetOnLoggedOut(func(deviceID string) {
