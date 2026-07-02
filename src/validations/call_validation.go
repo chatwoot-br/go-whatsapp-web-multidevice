@@ -2,7 +2,6 @@ package validations
 
 import (
 	"context"
-	"strings"
 
 	domainCall "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/call"
 	pkgError "github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/error"
@@ -10,8 +9,8 @@ import (
 )
 
 func ValidateRejectCall(ctx context.Context, callerJID string, callID string) error {
-	callerJID = strings.TrimSpace(callerJID)
-	callID = strings.TrimSpace(callID)
+	// Caller (usecase/call.go RejectCall) trims before calling and passes the
+	// trimmed values onward, so this validator only asserts presence.
 	request := domainCall.RejectCallRequest{
 		CallerJID: callerJID,
 		CallID:    callID,
