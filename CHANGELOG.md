@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Random API send timeouts under heavy incoming message load fixed (#732); `GET` chat messages returns an empty result instead of HTTP 500 when the chat row is absent (#740); native-chatwoot `pgimport` uuid-cast fix (#724 — module remains dormant).
 
 ### Preserved (fork features)
-- BR ninth-digit phone probes (`brPhoneCandidates`/`probeBRPhone` wired in `ValidateAndNormalizeJID`), LID dedup + `history_sync_complete`, full history sync + `ON_DEMAND`, info cache, SOCKS/HTTP/HTTPS proxy, `chat_name`/`sender_name` webhook fields + HMAC `X-Hub-Signature-256`, `InitWaDB` bounded retry. GoWA-native Chatwoot module stays dormant (`CHATWOOT_ENABLED=false`); the fork's integration remains the active path.
+- BR ninth-digit phone probes (`brPhoneCandidates`/`probeBRPhone` wired in `ValidateAndNormalizeJID`), LID dedup + `history_sync_complete`, full history sync + `ON_DEMAND`, info cache, SOCKS/HTTP/HTTPS proxy, `chat_name`/`sender_name` webhook fields, `InitWaDB` bounded retry. GoWA-native Chatwoot module stays dormant (`CHATWOOT_ENABLED=false`); the fork's integration remains the active path.
+- Provenance correction: HMAC `X-Hub-Signature-256` signing/verification is **upstream-owned** as of this base (byte-identical in both trees) — no longer a fork-carried feature; the fork retains only its extra test coverage. Full fork-delta review vs v8.9.0 (33 keep / 2 drop-candidates / 3 converged): `.workstreams/2026-07-02-upstream-v8.9-sync/03-fork-delta-review.md`.
 
 ## [v8.7.0+2] - 2026-06-12
 
