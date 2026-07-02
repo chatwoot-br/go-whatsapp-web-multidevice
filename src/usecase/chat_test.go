@@ -76,6 +76,55 @@ func TestGetChatMessagesMapsReactions(t *testing.T) {
 	}
 }
 
+// TestGetChatMessagesWithoutChatRow pins the missing-chat-row behavior:
+// message rows can exist before the chat record is upserted (or the row can
+// be absent entirely), and the endpoint must still return them with
+// synthesized chat metadata — not short-circuit to an empty response. The
+// Chatwoot history import reads this endpoint, so an empty short-circuit
+// silently imports 0 messages.
+func TestGetChatMessagesWithoutChatRow(t *testing.T) {
+	deviceID := "device-a@s.whatsapp.net"
+	chatJID := "628123456789@s.whatsapp.net"
+	now := time.Date(2026, time.May, 16, 8, 0, 0, 0, time.UTC)
+	repo := &chatUsecaseRepoStub{
+		chat: nil, // chat row not persisted yet
+		messages: []*domainChatStorage.Message{
+			{
+				ID:        "msg-1",
+				ChatJID:   chatJID,
+				DeviceID:  deviceID,
+				Sender:    chatJID,
+				Content:   "hello",
+				Timestamp: now,
+				CreatedAt: now,
+				UpdatedAt: now,
+			},
+		},
+	}
+	service := NewChatService(repo)
+	ctx := whatsapp.ContextWithDevice(context.Background(), whatsapp.NewDeviceInstance(deviceID, nil, nil))
+
+	response, err := service.GetChatMessages(ctx, domainChat.GetChatMessagesRequest{
+		ChatJID: chatJID,
+		Limit:   50,
+	})
+	if err != nil {
+		t.Fatalf("get chat messages: %v", err)
+	}
+	if len(response.Data) != 1 {
+		t.Fatalf("expected stored message to be returned despite missing chat row, got %d", len(response.Data))
+	}
+	if response.Pagination.Total != 1 {
+		t.Fatalf("expected total=1, got %d", response.Pagination.Total)
+	}
+	if response.ChatInfo.JID != chatJID {
+		t.Fatalf("expected synthesized chat info JID %q, got %q", chatJID, response.ChatInfo.JID)
+	}
+	if response.ChatInfo.Name == "" {
+		t.Fatalf("expected synthesized chat info name, got empty string")
+	}
+}
+
 type chatUsecaseRepoStub struct {
 	domainChatStorage.IChatStorageRepository
 	chat     *domainChatStorage.Chat

@@ -132,26 +132,12 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 		logrus.WithError(err).WithField("chat_jid", request.ChatJID).Error("Failed to get chat info")
 		return response, err
 	}
-	if chat == nil {
-		// The chat row has not been persisted for this device yet — e.g. a
-		// conversation that has only just started, or messages received
-		// before the chat record was upserted. Returning an error here makes
-		// the endpoint respond with HTTP 500 for what is really an empty
-		// chat, so callers that poll a not-yet-stored conversation get a
-		// hard failure instead of an empty list. Treat it as "no messages
-		// yet" and return a valid empty response instead.
-		response.Data = make([]domainChat.MessageInfo, 0)
-		response.Pagination = domainChat.PaginationResponse{
-			Limit:  request.Limit,
-			Offset: request.Offset,
-			Total:  0,
-		}
-		response.ChatInfo = domainChat.ChatInfo{
-			JID:  request.ChatJID,
-			Name: chatDisplayName(request.ChatJID, ""),
-		}
-		return response, nil
-	}
+	// chat may be nil here: the chat row has not been persisted for this
+	// device yet — e.g. a conversation that has only just started, or
+	// messages received before the chat record was upserted. Do NOT
+	// short-circuit to an empty response: message rows can already exist
+	// without the chat row, so fall through to the message query and only
+	// synthesize the chat metadata below.
 
 	// Create message filter from request
 	filter := &domainChatStorage.MessageFilter{
@@ -252,15 +238,22 @@ func (service serviceChat) GetChatMessages(ctx context.Context, request domainCh
 		messageInfos = append(messageInfos, messageInfo)
 	}
 
-	// Create chat info for response
+	// Create chat info for response; synthesize minimal metadata when the
+	// chat row is absent (messages may still have been returned above).
 	chatInfo := domainChat.ChatInfo{
-		JID:                 chat.JID,
-		Name:                chatDisplayName(chat.JID, chat.Name),
-		LastMessageTime:     chat.LastMessageTime.Format(time.RFC3339),
-		EphemeralExpiration: chat.EphemeralExpiration,
-		CreatedAt:           chat.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:           chat.UpdatedAt.Format(time.RFC3339),
-		Archived:            chat.Archived,
+		JID:  request.ChatJID,
+		Name: chatDisplayName(request.ChatJID, ""),
+	}
+	if chat != nil {
+		chatInfo = domainChat.ChatInfo{
+			JID:                 chat.JID,
+			Name:                chatDisplayName(chat.JID, chat.Name),
+			LastMessageTime:     chat.LastMessageTime.Format(time.RFC3339),
+			EphemeralExpiration: chat.EphemeralExpiration,
+			CreatedAt:           chat.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:           chat.UpdatedAt.Format(time.RFC3339),
+			Archived:            chat.Archived,
+		}
 	}
 
 	// Create pagination response
