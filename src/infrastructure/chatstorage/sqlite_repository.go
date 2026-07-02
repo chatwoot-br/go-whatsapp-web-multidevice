@@ -1272,8 +1272,8 @@ func (r *SQLiteRepository) CreateMessage(ctx context.Context, evt *events.Messag
 	}
 
 	// Normalize chat and sender JIDs (convert @lid to @s.whatsapp.net)
-	normalizedChatJID := utils.ResolveLIDToPhone(ctx, evt.Info.Chat, client)
-	normalizedSender := utils.ResolveLIDToPhone(ctx, evt.Info.Sender, client)
+	normalizedChatJID := whatsapp.NormalizeJIDFromLID(ctx, evt.Info.Chat, client)
+	normalizedSender := whatsapp.NormalizeJIDFromLID(ctx, evt.Info.Sender, client)
 
 	chatJID := normalizedChatJID.String()
 	// Store the full sender JID (user@server) to ensure consistency between received and sent messages
@@ -1596,7 +1596,7 @@ func (r *SQLiteRepository) reactionFromEvent(ctx context.Context, evt *events.Me
 	if chatJID.IsEmpty() {
 		return nil, fmt.Errorf("reaction chat jid is required")
 	}
-	normalizedChatJID := whatsapp.NormalizeJIDFromLIDWithContext(chatJID, client)
+	normalizedChatJID := whatsapp.NormalizeJIDFromLID(ctx, chatJID, client)
 
 	reactorJID := evt.Info.Sender
 	if reactorJID.IsEmpty() && evt.Info.IsFromMe && client != nil && client.Store != nil && client.Store.ID != nil {
@@ -1605,7 +1605,7 @@ func (r *SQLiteRepository) reactionFromEvent(ctx context.Context, evt *events.Me
 	if reactorJID.IsEmpty() {
 		return nil, fmt.Errorf("reaction sender jid is required")
 	}
-	normalizedReactorJID := whatsapp.NormalizeJIDFromLIDWithContext(reactorJID, client)
+	normalizedReactorJID := whatsapp.NormalizeJIDFromLID(ctx, reactorJID, client)
 
 	return &domainChatStorage.Reaction{
 		MessageID:  key.GetID(),
@@ -1646,10 +1646,10 @@ func (r *SQLiteRepository) CreateIncomingCallRecord(ctx context.Context, evt *ev
 		)
 	}
 
-	normalizedChat := utils.ResolveLIDToPhone(ctx, peerJID, client)
+	normalizedChat := whatsapp.NormalizeJIDFromLID(ctx, peerJID, client)
 	chatJID := normalizedChat.String()
 
-	normalizedCreator := utils.ResolveLIDToPhone(ctx, evt.CallCreator, client)
+	normalizedCreator := whatsapp.NormalizeJIDFromLID(ctx, evt.CallCreator, client)
 	sender := normalizedCreator.ToNonAD().String()
 	if sender == "" {
 		sender = evt.CallCreator.ToNonAD().String()
@@ -1793,7 +1793,7 @@ func (r *SQLiteRepository) StoreSentMessageWithContext(ctx context.Context, mess
 	}
 
 	// Normalize recipient JID (convert @lid to @s.whatsapp.net)
-	normalizedJID := utils.ResolveLIDToPhone(ctx, jid, client)
+	normalizedJID := whatsapp.NormalizeJIDFromLID(ctx, jid, client)
 	chatJID := normalizedJID.String()
 
 	// Get chat name (no pushname available for sent messages) - device scoped

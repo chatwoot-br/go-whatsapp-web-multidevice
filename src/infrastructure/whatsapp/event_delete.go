@@ -5,7 +5,6 @@ import (
 	"time"
 
 	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
-	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types/events"
 )
@@ -29,7 +28,7 @@ func createDeletePayload(ctx context.Context, evt *events.DeleteForMe, message *
 	payload["timestamp"] = time.Now().Format(time.RFC3339)
 
 	// Resolve sender JID (convert LID to phone number if needed)
-	normalizedSenderJID := utils.ResolveLIDToPhone(ctx, evt.SenderJID, client)
+	normalizedSenderJID := NormalizeJIDFromLID(ctx, evt.SenderJID, client)
 	payload["from"] = normalizedSenderJID.ToNonAD().String()
 
 	// Include original message information if available

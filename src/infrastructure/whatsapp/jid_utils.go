@@ -2,20 +2,14 @@ package whatsapp
 
 import (
 	"context"
-	"time"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 )
 
-// NormalizeJIDFromLIDWithContext converts @lid JIDs to @s.whatsapp.net JIDs using its
-// own context with a 30-second timeout. Used from history-sync post-completion paths
-// (deduplicateLIDChats, forwardHistorySyncCompleteToWebhook) where the originating
-// event context may already be cancelled.
-//
-// Fork-unique surface. The plain ctx-passing form was dropped in favor of
-// upstream's utils.ResolveLIDToPhone (byte-identical functionality).
-func NormalizeJIDFromLIDWithContext(jid types.JID, client *whatsmeow.Client) types.JID {
+// NormalizeJIDFromLID converts @lid JIDs to their corresponding @s.whatsapp.net JIDs
+// Returns the original JID if it's not an @lid or if LID lookup fails
+func NormalizeJIDFromLID(ctx context.Context, jid types.JID, client *whatsmeow.Client) types.JID {
 	// Only process @lid JIDs
 	if jid.Server != "lid" {
 		return jid
@@ -26,11 +20,6 @@ func NormalizeJIDFromLIDWithContext(jid types.JID, client *whatsmeow.Client) typ
 		log.Warnf("Cannot resolve LID %s: client not available", jid.String())
 		return jid
 	}
-
-	// Create dedicated context with generous timeout
-	// This prevents "context canceled" errors from short-lived event contexts
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	// Attempt to get the phone number for this LID
 	pn, err := client.Store.LIDs.GetPNForLID(ctx, jid)

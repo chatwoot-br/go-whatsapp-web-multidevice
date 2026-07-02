@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
-	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
@@ -49,7 +48,7 @@ func jidsToStrings(ctx context.Context, jids []types.JID, client *whatsmeow.Clie
 	result := make([]string, len(jids))
 	for i, jid := range jids {
 		// Resolve LID to phone number if possible
-		normalizedJID := utils.ResolveLIDToPhone(ctx, jid, client)
+		normalizedJID := NormalizeJIDFromLID(ctx, jid, client)
 		result[i] = normalizedJID.ToNonAD().String()
 	}
 	return result

@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
@@ -56,7 +55,7 @@ func createReceiptPayload(ctx context.Context, evt *events.Receipt, deviceID str
 	}
 
 	// Resolve sender JID (convert LID to phone number if needed)
-	normalizedSenderJID := utils.ResolveLIDToPhone(ctx, senderJID, client)
+	normalizedSenderJID := NormalizeJIDFromLID(ctx, senderJID, client)
 	payload["from"] = normalizedSenderJID.ToNonAD().String()
 
 	// Receipt type

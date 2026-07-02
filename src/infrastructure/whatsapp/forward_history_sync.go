@@ -23,7 +23,7 @@ import (
 func forwardHistorySyncCompleteToWebhook(ctx context.Context, client *whatsmeow.Client, syncType string) {
 	deviceID := ""
 	if client != nil && client.Store != nil && client.Store.ID != nil {
-		deviceJID := NormalizeJIDFromLIDWithContext(client.Store.ID.ToNonAD(), client)
+		deviceJID := NormalizeJIDFromLID(ctx, client.Store.ID.ToNonAD(), client)
 		deviceID = deviceJID.ToNonAD().String()
 	}
 

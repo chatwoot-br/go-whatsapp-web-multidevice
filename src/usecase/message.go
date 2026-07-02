@@ -150,7 +150,7 @@ func (service serviceMessage) RevokeMessage(ctx context.Context, request domainM
 		} else {
 			// Stored senders can still be @lid; whatsmeow's Revoke needs
 			// the phone-number form or it rejects the request at the wire.
-			senderJID = utils.ResolveLIDToPhone(ctx, parsed, client)
+			senderJID = whatsapp.NormalizeJIDFromLID(ctx, parsed, client)
 		}
 	}
 
