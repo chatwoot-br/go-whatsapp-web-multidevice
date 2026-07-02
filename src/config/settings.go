@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	AppVersion             = "v8.7.0+2"
+	AppVersion             = "v8.9.0"
 	AppPort                = "3000"
 	AppHost                = "0.0.0.0"
 	AppDebug               = false
@@ -59,6 +59,7 @@ var (
 	ChatStorageURI               = "file:storages/chatstorage.db"
 	ChatStorageEnableForeignKeys = true
 	ChatStorageEnableWAL         = true
+	ChatStorageMaxOpenConns      = 5 // Max concurrent SQLite connections for chat storage (WAL allows concurrent readers + 1 writer)
 
 	ChatwootEnabled   = false
 	ChatwootURL       = ""
