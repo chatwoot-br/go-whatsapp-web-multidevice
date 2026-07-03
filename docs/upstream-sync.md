@@ -62,6 +62,8 @@ Internalize before touching code. These are settled decisions, not open question
 | **Tag-name collision** | Legacy fork tags `v7.8.0`/`v7.8.2` point to *fork* commits; upstream's same-named tags point elsewhere. `git fetch upstream --tags` fails: *"would clobber existing tag."* | Fetch upstream tags into a **namespace** (§4). Never force-overwrite fork tags. Never push an upstream tag to `origin`. |
 | **whatsmeow API drift** | The fork's event + history-sync layer calls deep into `go.mau.fi/whatsmeow`, which upstream bumps almost every release. **This is the real risk — not text conflicts.** Code can merge cleanly and still fail to compile/behave against the newer whatsmeow. | `go build ./... && go vet ./...` against the new whatsmeow is the **first** gate, before any feature work. |
 | **Chatwoot / webhook reconciliation** | Upstream evolves its own chatwoot code and occasionally changes webhook payload shape. | Partition it out (§6); keep native dormant; re-run contract-drift (§7). |
+| **Device-scoping model mismatch** | The fork is multi-tenant: chat/message rows share one DB scoped by `device_id`. Upstream is single-device and its usecases call the **non-scoped** repo methods (`GetChat`, `GetMessageByID`, `GetChatMessageCount`). The fork's usecases hold the **raw** `SQLiteRepository` (not a device-scoping wrapper), so `device_id` is threaded by hand — a merged upstream edit silently reintroduces a global query → **cross-device data leak that compiles and passes tests**. (v8.9.0 shipped three: pagination total, sender-name, media download.) | Post-merge audit (§7.5): every chat/message read in `usecase/` must use a `*ByDevice` variant. |
+| **Upstream flips a default the fork relies on** | Upstream changes a config default that the fork's design depends on. v8.9.0/#732 raised `ChatStorageMaxOpenConns` 1→5, but the fork's emulated upserts (`StoreChat`/`StoreMessage`/`StoreReaction` = UPDATE-then-INSERT, no tx / no `ON CONFLICT`) and `MergeLIDChat`'s tx-scoped reads are only safe at **one connection** — 5 is a silent data-loss race. | Post-merge audit (§7.5): diff `.env.example` + `config/settings.go` defaults vs `origin/main`; treat any flipped default as a finding even if the new value is upstream's. |
 | **Production push** | Pushing `gitops`/release tags auto-deploys; force-push is forbidden. | PR to `origin/main`; tag/push is a human-gated production action (§8). |
 
 ---
@@ -177,10 +179,34 @@ output, verify it still matches what `chatwoot-app`'s fork-owned controller pars
 
 ---
 
+## 7.5. Post-merge correctness audit — green gates are not enough
+
+`go build`/`vet`/`test` passing means the merge **compiles and existing tests pass**. It does
+**not** mean the merged upstream code respects the fork's multi-tenant model or its storage
+invariants. The v8.9.0 sync was fully green and still shipped three cross-device leaks, a
+data-loss concurrency race, and a lost timeout bound — all found only by an explicit audit +
+`/code-review`. Do this every run, after the gates, before the PR is called merge-ready:
+
+1. **Device-scoping sweep.** For every chat/message read the diff touches in `usecase/`, confirm
+   it uses a `*ByDevice` method (`GetChatByDevice`, `GetMessageByIDAndDevice`,
+   `GetChatMessageCountByDevice`), not the global variant. The fork's usecases hold the **raw**
+   repo, so nothing enforces this — `git grep -nE '\.(GetChat|GetMessageByID|GetChatMessageCount)\(' src/usecase` and check each hit is intentional.
+2. **Default-flip diff.** `git diff origin/main...HEAD -- src/.env.example src/config/settings.go src/pkg/sqlite/` — any changed default (pool size, busy_timeout, webhook events, validation
+   flags) is a finding to reason about, even when the new value is upstream's. `ChatStorageMaxOpenConns` **must stay 1** until the emulated upserts are made atomic.
+3. **whatsmeow-workaround check.** Fork workarounds wrap deep whatsmeow calls (LID resolution,
+   `IsOnWhatsApp` probing, bounded lookups). Confirm the merge didn't drop a bound/retry the fork
+   relied on (v8.9.0 lost the 30s LID-lookup deadline — restored via `normalizeLIDBounded`).
+4. **Fork-delta review + `/code-review`.** Run a fork-delta review (`git diff upstream/v<TARGET> HEAD`
+   → per-change KEEP / DROP / converged) and an `xhigh` `/code-review` of the merge. Both catch the
+   above classes. Worked example: `.workstreams/2026-07-02-upstream-v8.9-sync/03-fork-delta-review.md`.
+
+---
+
 ## 8. Gates: automatable vs human-owned
 
 **PR-ready** (can finish in-session) = code-complete, conflicts resolved, `go build`+`vet`+`test`
-green, contract-drift clean, CHANGELOG + `AppVersion` bumped, **local** `v<TARGET>+N` tag created.
+green, **post-merge audit clean (§7.5)**, contract-drift clean, CHANGELOG + `AppVersion` bumped,
+**local** `v<TARGET>+N` tag created.
 
 **Merge-ready / shippable** (human-owned, cannot close here):
 
@@ -208,6 +234,7 @@ Each run creates `.workstreams/<YYYY-MM-DD>-upstream-v<X.Y>-sync/` containing at
   conflict surface, partition decision, dep deltas (esp. whatsmeow).
 - `logs/` — captured `go build` / `go vet` / `go test` output per gate.
 - contract-drift note (if Phase B / webhook changes), modeled on the v8.5 run's `11-`.
+- fork-delta review + post-merge audit note (§7.5), modeled on the v8.9 run's `03-fork-delta-review.md`.
 
 Keep dated runs as the audit trail; this `docs/upstream-sync.md` stays the reusable template.
 
@@ -245,3 +272,5 @@ cd src && go mod tidy && go build ./... && go vet ./... && go test ./...
 - `docs/chatwoot.md` — chatwoot integration reference
 - `docs/webhook-payload.md` — webhook payload contract
 - `.workstreams/2026-05-14-upstream-v8.5-sync/` — full worked example (incl. contract-drift)
+- `.workstreams/2026-07-02-upstream-v8.9-sync/` — worked example with fork-delta review + post-merge
+  audit (device-scoping leaks, `MaxOpenConns` race, lost LID bound found on a fully-green merge)

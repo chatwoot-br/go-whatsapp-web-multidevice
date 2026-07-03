@@ -33,8 +33,9 @@ Usecases orchestrate validation, device/client lookup, WhatsApp operations, stor
 - Do not fall back to the global client when a request has an explicit device context.
 - Do not skip validation because the REST handler already parsed the body.
 - Do not return Fiber/MCP response objects from usecases.
-- Do not perform unscoped chat/message reads from this layer unless the operation documents why global ID lookup is protocol-safe.
+- Do not perform unscoped chat/message reads from this layer unless the operation documents why global ID lookup is protocol-safe. This layer holds the **raw** `SQLiteRepository` (no device-scoping wrapper), so scoping is manual: use `GetChatByDevice` / `GetMessageByIDAndDevice` / `GetChatMessageCountByDevice`, never the bare `GetChat` / `GetMessageByID` / `GetChatMessageCount`. The global variants leak across devices on the shared DB (three such leaks shipped in the v8.9.0 upstream merge — `GetChatMessages` total + sender-name, `DownloadMedia` fetch).
 - Do not replace device-scoped reply lookup with `GetMessageByID`; quoted replies must not bind a message from another device.
+- Watch upstream merges: single-device upstream calls the bare (non-`ByDevice`) methods, so a merged edit silently reintroduces a global query that still compiles and passes tests — audit per `docs/upstream-sync.md` §7.5.
 
 ## TESTING
 
