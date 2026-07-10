@@ -105,14 +105,14 @@ func TestHandleWebhookForwardSkipsBroadcastRegardlessOfChatwoot(t *testing.T) {
 	statusChat := types.NewJID("status", types.BroadcastServer)
 	for _, chatwootEnabled := range []bool{false, true} {
 		config.ChatwootEnabled = chatwootEnabled
-		handleWebhookForward(context.Background(), textEventForTest("broadcast-1", statusChat), nil)
+		handleWebhookForward(context.Background(), textEventForTest("broadcast-1", statusChat), nil, nil)
 	}
 
 	// Control: a regular DM must still be forwarded, so the guard is proven
 	// to filter broadcasts specifically rather than everything.
 	config.ChatwootEnabled = false
 	dmChat := types.NewJID("628123456789", types.DefaultUserServer)
-	handleWebhookForward(context.Background(), textEventForTest("dm-1", dmChat), nil)
+	handleWebhookForward(context.Background(), textEventForTest("dm-1", dmChat), nil, nil)
 
 	select {
 	case payload := <-delivered:

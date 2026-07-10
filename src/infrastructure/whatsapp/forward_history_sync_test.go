@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
+	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
 )
 
 // TestForwardHistorySyncCompleteToWebhook_PayloadShape locks the fork-specific
@@ -29,7 +30,7 @@ func TestForwardHistorySyncCompleteToWebhook_PayloadShape(t *testing.T) {
 	var captured map[string]any
 	var capturedURL string
 	origSubmit := submitWebhookFn
-	submitWebhookFn = func(_ context.Context, payload map[string]any, url string) error {
+	submitWebhookFn = func(_ context.Context, payload map[string]any, url string, _ *domainChatStorage.DeviceWebhookConfig) error {
 		captured = payload
 		capturedURL = url
 		return nil
@@ -84,7 +85,7 @@ func TestForwardHistorySyncCompleteToWebhook_RespectsWhitelist(t *testing.T) {
 
 	called := false
 	origSubmit := submitWebhookFn
-	submitWebhookFn = func(context.Context, map[string]any, string) error {
+	submitWebhookFn = func(context.Context, map[string]any, string, *domainChatStorage.DeviceWebhookConfig) error {
 		called = true
 		return nil
 	}
@@ -113,7 +114,7 @@ func TestForwardHistorySyncCompleteToWebhook_AllowedWhenWhitelistEmpty(t *testin
 
 	called := false
 	origSubmit := submitWebhookFn
-	submitWebhookFn = func(context.Context, map[string]any, string) error {
+	submitWebhookFn = func(context.Context, map[string]any, string, *domainChatStorage.DeviceWebhookConfig) error {
 		called = true
 		return nil
 	}

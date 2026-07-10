@@ -47,7 +47,7 @@ func (service serviceNewsletter) GetMessages(ctx context.Context, request domain
 		return response, pkgError.ErrWaCLI
 	}
 
-	JID, err := utils.ValidateJidWithLogin(client, request.NewsletterID)
+	JID, err := utils.ValidateAndNormalizeJID(client, request.NewsletterID)
 	if err != nil {
 		return response, err
 	}
