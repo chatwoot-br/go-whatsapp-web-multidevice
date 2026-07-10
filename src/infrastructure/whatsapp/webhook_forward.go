@@ -133,6 +133,28 @@ func forwardPayloadToConfiguredWebhooks(ctx context.Context, payload map[string]
 // webhookStorageForTest is injectable for unit testing without a real DeviceManager.
 var webhookStorageForTest func(deviceJID string) (*domainChatStorage.DeviceRecord, error)
 
+// deviceWebhookConfigCacheEntry caches a device's resolved webhook config — including
+// the common "no device webhook" nil result — so the per-event lookup does not hit the
+// devices table. That query runs for every forwarded event (messages, receipts, typing)
+// on the chatstorage pool, which is capped at MaxOpenConns=1, so an uncached lookup
+// head-of-line queues against message writes under bursts.
+type deviceWebhookConfigCacheEntry struct {
+	config    *domainChatStorage.DeviceWebhookConfig
+	expiresAt time.Time
+}
+
+var (
+	deviceWebhookConfigCache    sync.Map
+	deviceWebhookConfigCacheTTL = 30 * time.Second
+)
+
+// InvalidateDeviceWebhookConfigCache drops all cached device webhook configs. Called
+// after a device webhook config write so the change applies on the next event rather
+// than after the TTL. Writes are rare, so clearing the whole cache is fine.
+func InvalidateDeviceWebhookConfigCache() {
+	deviceWebhookConfigCache.Clear()
+}
+
 // getDeviceRecordForTest resolves the device record, using test override if set.
 func getDeviceRecordForTest(deviceJID string) (*domainChatStorage.DeviceRecord, error) {
 	if webhookStorageForTest != nil {
@@ -153,21 +175,43 @@ func getWebhookConfigForDevice(deviceJID string) (*domainChatStorage.DeviceWebho
 		return nil, nil
 	}
 
+	// Cache both hits and nil results; bypass when the test seam is active so
+	// stubbed lookups stay deterministic across tests. Errors are never cached —
+	// the caller's fall-back-to-global keeps its retry-on-next-event semantics.
+	useCache := webhookStorageForTest == nil
+	if useCache {
+		if entry, ok := deviceWebhookConfigCache.Load(deviceJID); ok {
+			cached := entry.(deviceWebhookConfigCacheEntry)
+			if time.Now().Before(cached.expiresAt) {
+				return cached.config, nil
+			}
+			deviceWebhookConfigCache.Delete(deviceJID)
+		}
+	}
+
 	record, err := getDeviceRecordForTest(deviceJID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get device record: %w", err)
 	}
+
+	var webhookConfig *domainChatStorage.DeviceWebhookConfig
 	if record != nil && record.WebhookURL != nil && *record.WebhookURL != "" {
 		logrus.Debugf("Using device-specific webhook config for %s", deviceJID)
-		return &domainChatStorage.DeviceWebhookConfig{
+		webhookConfig = &domainChatStorage.DeviceWebhookConfig{
 			WebhookURL:                record.WebhookURL,
 			WebhookSecret:             record.WebhookSecret,
 			WebhookEvents:             record.WebhookEvents,
 			WebhookInsecureSkipVerify: record.WebhookInsecureSkipVerify,
-		}, nil
+		}
 	}
 
-	return nil, nil
+	if useCache {
+		deviceWebhookConfigCache.Store(deviceJID, deviceWebhookConfigCacheEntry{
+			config:    webhookConfig,
+			expiresAt: time.Now().Add(deviceWebhookConfigCacheTTL),
+		})
+	}
+	return webhookConfig, nil
 }
 
 // getWebhookURLsFromConfig extracts webhook URLs from the config.

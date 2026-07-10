@@ -60,15 +60,17 @@ func (s *serviceDevice) AddDevice(ctx context.Context, deviceID string, webhook 
 	// Apply the device-specific webhook configuration if provided. Failures are
 	// surfaced instead of logged away: the caller was promised the webhook config,
 	// so a silent partial success would leave the API reporting a webhook that was
-	// never persisted.
+	// never persisted. Keyed by inst.ID(), not the requested deviceID: an empty
+	// deviceID means CreateDevice generated the slot id.
 	if webhook != nil {
 		storage := s.manager.GetStorage()
 		if storage == nil {
-			return nil, fmt.Errorf("device %s created but storage is unavailable to save webhook config", deviceID)
+			return nil, fmt.Errorf("device %s created but storage is unavailable to save webhook config", inst.ID())
 		}
-		if err := storage.SetDeviceWebhookConfig(deviceID, webhook); err != nil {
-			return nil, fmt.Errorf("device %s created but webhook config could not be saved: %w", deviceID, err)
+		if err := storage.SetDeviceWebhookConfig(inst.ID(), webhook); err != nil {
+			return nil, fmt.Errorf("device %s created but webhook config could not be saved: %w", inst.ID(), err)
 		}
+		whatsapp.InvalidateDeviceWebhookConfigCache()
 	}
 
 	device := convertInstance(inst)
@@ -205,6 +207,7 @@ func (s *serviceDevice) SetDeviceWebhook(ctx context.Context, deviceID string, w
 	if err := storage.SetDeviceWebhookURL(deviceID, urlPtr); err != nil {
 		return fmt.Errorf("failed to set device webhook: %w", err)
 	}
+	whatsapp.InvalidateDeviceWebhookConfigCache()
 
 	websocket.Broadcast <- websocket.BroadcastMessage{
 		Code:    "DEVICE_WEBHOOK_UPDATED",
@@ -266,6 +269,7 @@ func (s *serviceDevice) SetDeviceWebhookConfig(ctx context.Context, deviceID str
 	if err := storage.SetDeviceWebhookConfig(deviceID, config); err != nil {
 		return fmt.Errorf("failed to set device webhook config: %w", err)
 	}
+	whatsapp.InvalidateDeviceWebhookConfigCache()
 
 	websocket.Broadcast <- websocket.BroadcastMessage{
 		Code:    "DEVICE_WEBHOOK_CONFIG_UPDATED",

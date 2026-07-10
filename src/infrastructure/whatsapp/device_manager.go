@@ -177,11 +177,13 @@ func (m *DeviceManager) deleteStoreRowsForJID(ctx context.Context, jid string) e
 			if dev.ID.ToNonAD().String() != jid {
 				continue
 			}
+			// No break: the store keys rows by full AD JID, so one account can hold
+			// several rows (stale rows from interrupted pairings). A survivor would be
+			// matched back by LoadExistingDevices on restart and resurrect the session.
 			if err := container.DeleteDevice(ctx, dev); err != nil {
 				logrus.WithError(err).Warnf("[DEVICE_MANAGER] failed to delete jid %s from %s store", jid, label)
 				firstErr = errors.Join(firstErr, err)
 			}
-			break
 		}
 	}
 
@@ -209,8 +211,25 @@ func (m *DeviceManager) PurgeDevice(ctx context.Context, deviceID string) error 
 	// Resolve the device's WhatsApp JID before tearing anything down so we can delete
 	// its whatsmeow store rows by JID even when no live client is attached.
 	var jid string
-	if inst, ok := m.GetDevice(deviceID); ok && inst != nil {
+	inst, ok := m.GetDevice(deviceID)
+	if !ok || inst == nil {
+		// Same stale-id fallback as keepSlotLogout: the registry may key this slot by
+		// uuid while the caller addresses it by JID. Without it, DELETE by JID leaves
+		// the whatsmeow store rows behind and LoadExistingDevices resurrects the
+		// "deleted" session on restart.
+		if parsed, err := types.ParseJID(deviceID); err == nil && parsed.User != "" {
+			jid = parsed.ToNonAD().String()
+			if byJID, found := m.getDeviceByJID(jid); found && byJID != nil {
+				inst = byJID
+			}
+		}
+	}
+	if inst != nil {
 		jid = inst.JID()
+		// The registry slot may be keyed differently from the id the caller used
+		// (uuid slot addressed by JID via the fallback above) — clean up under the
+		// real key so the slot doesn't survive the purge.
+		deviceID = inst.ID()
 		if cli := inst.GetClient(); cli != nil {
 			// The WhatsApp unlink is best-effort: a dead/expired session may fail
 			// here, but that must not block local cleanup or fail the purge.
