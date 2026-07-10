@@ -163,14 +163,21 @@ func handleWebhookForward(ctx context.Context, evt *events.Message, chatStorageR
 		}
 	}
 
-	if (len(config.WhatsappWebhook) > 0 || config.ChatwootEnabled) &&
-		!strings.Contains(evt.Info.SourceString(), "broadcast") {
-		go func(e *events.Message, repo domainChatStorage.IChatStorageRepository, c *whatsmeow.Client) {
-			webhookCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if err := forwardMessageToWebhook(webhookCtx, c, e, repo); err != nil {
-				logrus.Error("Failed forward to webhook: ", err)
-			}
-		}(evt, chatStorageRepo, client)
+	// Broadcast/status messages are never forwarded, regardless of Chatwoot:
+	// the Chatwoot pipeline rejects status@broadcast (a relayed status post
+	// would only spawn a noise "Status" contact), and plain webhook consumers
+	// must not receive broadcast noise just because Chatwoot is enabled.
+	if strings.Contains(evt.Info.SourceString(), "broadcast") {
+		return
 	}
+
+	// Forward to webhook if any webhook is configured (global or per-device)
+	// The forwardPayloadToConfiguredWebhooks function itself handles the no-op case
+	go func(e *events.Message, repo domainChatStorage.IChatStorageRepository, c *whatsmeow.Client) {
+		webhookCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := forwardMessageToWebhook(webhookCtx, c, e, repo); err != nil {
+			logrus.Error("Failed forward to webhook: ", err)
+		}
+	}(evt, chatStorageRepo, client)
 }
