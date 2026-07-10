@@ -241,10 +241,18 @@ func (m *DeviceManager) PurgeDevice(ctx context.Context, deviceID string) error 
 	}
 
 	// Delete chatstorage data for this device (local cleanup — surfaced on failure).
+	// Chat/message rows are keyed by the NonAD JID while the devices-table row is
+	// keyed by the slot id — a paired uuid slot needs the delete under both keys.
 	if m.storage != nil {
 		if err := m.storage.DeleteDeviceData(deviceID); err != nil {
 			logrus.WithError(err).Warnf("[DEVICE_MANAGER] failed to delete chatstorage for device %s", deviceID)
 			recordErr(err)
+		}
+		if jid != "" && jid != deviceID {
+			if err := m.storage.DeleteDeviceData(jid); err != nil {
+				logrus.WithError(err).Warnf("[DEVICE_MANAGER] failed to delete chatstorage for jid %s", jid)
+				recordErr(err)
+			}
 		}
 	}
 
