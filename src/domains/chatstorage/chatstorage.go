@@ -100,9 +100,13 @@ type MediaInfo struct {
 
 // DeviceRecord tracks a registered device for persistence purposes.
 type DeviceRecord struct {
-	DeviceID                 string    `db:"device_id"`
-	DisplayName              string    `db:"display_name"`
-	JID                      string    `db:"jid"`
+	DeviceID    string `db:"device_id"`
+	DisplayName string `db:"display_name"`
+	JID         string `db:"jid"`
+	// LastJID is the storage JID the slot was last paired under, retained through
+	// keep-slot logout (which clears JID) so a later full purge can still delete
+	// the JID-scoped chat data that logout intentionally kept.
+	LastJID                  string    `db:"last_jid"`
 	WebhookURL               *string   `db:"webhook_url"`
 	WebhookSecret            string    `db:"webhook_secret"`
 	WebhookEvents            string    `db:"webhook_events"`

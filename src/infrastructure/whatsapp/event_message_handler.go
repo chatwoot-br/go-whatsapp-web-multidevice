@@ -171,6 +171,14 @@ func handleWebhookForward(ctx context.Context, evt *events.Message, chatStorageR
 		return
 	}
 
+	// Gate BEFORE payload construction, not just before delivery: building the
+	// message payload downloads media to disk (the webhook path is the only
+	// downloader of non-image media), so with no consumer at all the goroutine
+	// must not start. Per-device webhooks are covered via a cached device scan.
+	if !hasAnyWebhookConsumer() {
+		return
+	}
+
 	// Forward to webhook if any webhook is configured (global or per-device)
 	// The forwardPayloadToConfiguredWebhooks function itself handles the no-op case
 	go func(e *events.Message, repo domainChatStorage.IChatStorageRepository, c *whatsmeow.Client) {

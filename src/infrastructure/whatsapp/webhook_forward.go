@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
@@ -85,11 +86,20 @@ func getContactMutex(phone string) *sync.Mutex {
 // It only returns an error when all webhook deliveries fail. Partial failures are logged and suppressed so
 // successful targets still receive the event.
 func forwardPayloadToConfiguredWebhooks(ctx context.Context, payload map[string]any, eventName string) error {
+	// Nothing can deliver this event — skip enrichment, whitelist checks, and the
+	// per-event "Forwarding to 0 webhooks" log line entirely.
+	if !hasAnyWebhookConsumer() {
+		return nil
+	}
+
 	deviceJID, _ := payload["device_id"].(string)
 	webhookConfig, err := getWebhookConfigForDevice(deviceJID)
 	if err != nil {
 		// A config lookup failure is not a delivery failure: fall back to the global
 		// webhook config so the event still reaches the global targets and Chatwoot.
+		// (getWebhookConfigForDevice already served the last-known device config when
+		// it had one cached, so this branch means we have no knowledge of a device
+		// override at all.)
 		logrus.Warnf("Failed to get webhook config for device %s, falling back to global config: %v", deviceJID, err)
 		webhookConfig = nil
 	}
@@ -153,6 +163,64 @@ var (
 // than after the TTL. Writes are rare, so clearing the whole cache is fine.
 func InvalidateDeviceWebhookConfigCache() {
 	deviceWebhookConfigCache.Clear()
+	// atomic.Value cannot store nil: an entry with a zero expiry reads as expired.
+	anyDeviceWebhookCache.Store(&anyDeviceWebhookEntry{})
+}
+
+// anyDeviceWebhookCache holds a *anyDeviceWebhookEntry; an expired (or absent)
+// entry means "not computed".
+var anyDeviceWebhookCache atomic.Value
+
+type anyDeviceWebhookEntry struct {
+	exists    bool
+	expiresAt time.Time
+}
+
+// anyDeviceWebhookConfigured reports whether ANY device row has a webhook URL set,
+// TTL-cached so the check is a single atomic load on the hot path. It is the
+// per-device leg of hasAnyWebhookConsumer; a false negative here would drop
+// device-webhook deliveries, so on a scan error it conservatively returns true.
+func anyDeviceWebhookConfigured() bool {
+	if entry, _ := anyDeviceWebhookCache.Load().(*anyDeviceWebhookEntry); entry != nil && time.Now().Before(entry.expiresAt) {
+		return entry.exists
+	}
+
+	dm := GetDeviceManager()
+	if dm == nil || dm.storage == nil {
+		return false
+	}
+	records, err := dm.storage.ListDeviceRecords()
+	if err != nil {
+		logrus.WithError(err).Warn("Failed to scan devices for webhook configs; assuming one exists")
+		// Cache the conservative answer too: a persistently failing scan must not
+		// re-run per event on the single-connection pool.
+		anyDeviceWebhookCache.Store(&anyDeviceWebhookEntry{exists: true, expiresAt: time.Now().Add(deviceWebhookConfigCacheTTL)})
+		return true
+	}
+	exists := false
+	for _, rec := range records {
+		if rec != nil && rec.WebhookURL != nil && *rec.WebhookURL != "" {
+			exists = true
+			break
+		}
+	}
+	anyDeviceWebhookCache.Store(&anyDeviceWebhookEntry{exists: exists, expiresAt: time.Now().Add(deviceWebhookConfigCacheTTL)})
+	return exists
+}
+
+// hasAnyWebhookConsumer reports whether any consumer (global webhook, Chatwoot, or a
+// per-device webhook) could receive a forwarded event. Event handlers check it before
+// building payloads: payload construction downloads media to disk, so on deployments
+// with no consumers at all the old pre-#671 zero-cost fast path is restored here.
+func hasAnyWebhookConsumer() bool {
+	if len(config.WhatsappWebhook) > 0 || config.ChatwootEnabled {
+		return true
+	}
+	if webhookStorageForTest != nil {
+		// Test seam active: a stubbed device lookup implies device webhooks exist.
+		return true
+	}
+	return anyDeviceWebhookConfigured()
 }
 
 // getDeviceRecordForTest resolves the device record, using test override if set.
@@ -178,6 +246,8 @@ func getWebhookConfigForDevice(deviceJID string) (*domainChatStorage.DeviceWebho
 	// Cache both hits and nil results; bypass when the test seam is active so
 	// stubbed lookups stay deterministic across tests. Errors are never cached —
 	// the caller's fall-back-to-global keeps its retry-on-next-event semantics.
+	// Expired entries are kept (overwritten on the next successful refresh) so a
+	// lookup error can fall back to the last-known config below.
 	useCache := webhookStorageForTest == nil
 	if useCache {
 		if entry, ok := deviceWebhookConfigCache.Load(deviceJID); ok {
@@ -185,12 +255,21 @@ func getWebhookConfigForDevice(deviceJID string) (*domainChatStorage.DeviceWebho
 			if time.Now().Before(cached.expiresAt) {
 				return cached.config, nil
 			}
-			deviceWebhookConfigCache.Delete(deviceJID)
 		}
 	}
 
 	record, err := getDeviceRecordForTest(deviceJID)
 	if err != nil {
+		// Serve the last-known config (even expired) rather than erroring: the
+		// caller's error path falls back to the GLOBAL webhook, and for a device
+		// that had a webhook override that would divert its events to a different
+		// consumer on a transient storage hiccup. Checked regardless of the test
+		// seam so the grace path is testable.
+		if entry, ok := deviceWebhookConfigCache.Load(deviceJID); ok {
+			cached := entry.(deviceWebhookConfigCacheEntry)
+			logrus.Warnf("Device webhook config lookup failed for %s; serving last-known config: %v", deviceJID, err)
+			return cached.config, nil
+		}
 		return nil, fmt.Errorf("failed to get device record: %w", err)
 	}
 

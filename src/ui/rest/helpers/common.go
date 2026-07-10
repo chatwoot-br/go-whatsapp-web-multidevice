@@ -2,10 +2,12 @@ package helpers
 
 import (
 	"context"
+	"errors"
 	"mime/multipart"
 	"time"
 
 	domainApp "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/app"
+	pkgError "github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/error"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow"
 )
@@ -18,10 +20,16 @@ func SetAutoConnectAfterBooting(service domainApp.IAppUsecase) {
 		return
 	}
 	for _, device := range devices {
-		if err := service.Reconnect(context.Background(), device.Device); err != nil {
-			logrus.Warnf("auto-connect failed for device %s: %v", device.Device, err)
-		} else {
+		err := service.Reconnect(context.Background(), device.Device)
+		switch {
+		case err == nil:
 			logrus.Infof("auto-connected device %s", device.Device)
+		case errors.Is(err, pkgError.ErrSessionDeleted):
+			// Expected keep-slot state after a (remote) logout: the slot is waiting
+			// for a new pairing, not failing — don't warn on every boot.
+			logrus.Infof("auto-connect skipped for device %s: logged out, awaiting re-pair", device.Device)
+		default:
+			logrus.Warnf("auto-connect failed for device %s: %v", device.Device, err)
 		}
 	}
 }

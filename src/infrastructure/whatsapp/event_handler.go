@@ -224,7 +224,16 @@ func handleLoggedOut(instance *DeviceInstance) {
 
 	// TriggerLoggedOut fires the manager's keep-slot callback (resets the in-memory
 	// client + clears the persisted JID, but keeps the slot id and display name).
-	instance.TriggerLoggedOut()
+	// If no callback is wired, run the same cleanup directly — the registry/store
+	// reconciliation must not depend on in-memory wiring (issue #10: an orphaned
+	// device record survives restarts and blocks re-pairing).
+	if !instance.TriggerLoggedOut() {
+		if dm := GetDeviceManager(); dm != nil {
+			if err := dm.keepSlotLogout(context.Background(), deviceID); err != nil {
+				logrus.WithError(err).Warnf("[REMOTE_LOGOUT] keep-slot cleanup failed for %s", deviceID)
+			}
+		}
+	}
 
 	websocket.Broadcast <- websocket.BroadcastMessage{
 		Code:    "DEVICE_LOGGED_OUT",

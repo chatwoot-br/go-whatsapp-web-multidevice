@@ -72,6 +72,9 @@ type IChatStorageRepository interface {
 	// GetDeviceRecordByJID fetches a device record by its JID.
 	GetDeviceRecordByJID(jid string) (*DeviceRecord, error)
 	DeleteDeviceRecord(deviceID string) error
+	// SetDeviceLastJID records the storage JID a slot was last paired under, so a
+	// full purge after a keep-slot logout can still delete JID-scoped chat data.
+	SetDeviceLastJID(deviceID, lastJID string) error
 	// SetDeviceWebhookURL sets the webhook URL for a device.
 	SetDeviceWebhookURL(deviceID string, webhookURL *string) error
 	// GetDeviceWebhookURL retrieves the webhook URL for a device.

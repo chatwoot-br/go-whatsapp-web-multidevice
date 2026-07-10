@@ -276,6 +276,11 @@ func (r *deviceChatStorage) DeleteDeviceRecord(deviceID string) error {
 	return r.base.DeleteDeviceRecord(deviceID)
 }
 
+// SetDeviceLastJID delegates to the base repository.
+func (r *deviceChatStorage) SetDeviceLastJID(deviceID, lastJID string) error {
+	return r.base.SetDeviceLastJID(deviceID, lastJID)
+}
+
 // MergeLIDChat / GetLIDChats — fork-only LID deduplication wrappers.
 // Defaults deviceID to the wrapper's bound device when empty.
 func (r *deviceChatStorage) MergeLIDChat(deviceID, lidJID, phoneJID string) error {

@@ -243,25 +243,73 @@ func (m *DeviceManager) PurgeDevice(ctx context.Context, deviceID string) error 
 	// Delete chatstorage data for this device (local cleanup — surfaced on failure).
 	// Chat/message rows are keyed by the NonAD JID while the devices-table row is
 	// keyed by the slot id — a paired uuid slot needs the delete under both keys.
+	// A keep-slot logout clears the live jid but records it as last_jid, so a
+	// logout-then-delete sequence still purges the retained conversation history.
 	if m.storage != nil {
-		if err := m.storage.DeleteDeviceData(deviceID); err != nil {
-			logrus.WithError(err).Warnf("[DEVICE_MANAGER] failed to delete chatstorage for device %s", deviceID)
+		var lastJID string
+		if record, err := m.storage.GetDeviceRecord(deviceID); err != nil {
+			logrus.WithError(err).Warnf("[DEVICE_MANAGER] failed to read device record for %s during purge", deviceID)
 			recordErr(err)
+		} else if record != nil {
+			lastJID = record.LastJID
+			if jid == "" {
+				jid = record.JID
+			}
 		}
-		if jid != "" && jid != deviceID {
-			if err := m.storage.DeleteDeviceData(jid); err != nil {
-				logrus.WithError(err).Warnf("[DEVICE_MANAGER] failed to delete chatstorage for jid %s", jid)
+		for _, key := range uniqueNonEmpty(deviceID, jid, lastJID) {
+			if err := m.storage.DeleteDeviceData(key); err != nil {
+				logrus.WithError(err).Warnf("[DEVICE_MANAGER] failed to delete chatstorage under key %s", key)
 				recordErr(err)
 			}
+		}
+		// The whatsmeow rows for a previously logged-out pairing were already deleted
+		// at logout time; deleting again by last_jid is idempotent.
+		if lastJID != "" && lastJID != jid {
+			recordErr(m.deleteStoreRowsForJID(ctx, lastJID))
 		}
 	}
 
 	// Delete whatsmeow store/keys rows by JID (local cleanup — surfaced on failure).
 	recordErr(m.deleteStoreRowsForJID(ctx, jid))
 
-	// Remove from registry last
+	// Keep the slot (registry entry + device record) when any local cleanup failed:
+	// it holds the id↔jid mapping a retry needs to find the surviving rows. Deleting
+	// it on partial failure would report an error the caller can never act on.
+	if firstErr != nil {
+		return firstErr
+	}
+
+	// Delete the persisted device record, surfacing the error (a silently surviving
+	// record re-pins the "deleted" slot on the next restart), then drop the
+	// in-memory registry entry. RemoveDevice's own record delete is then a no-op.
+	if m.storage != nil {
+		if err := m.storage.DeleteDeviceRecord(deviceID); err != nil {
+			return fmt.Errorf("delete device record %s: %w", deviceID, err)
+		}
+	}
 	m.RemoveDevice(deviceID)
-	return firstErr
+	return nil
+}
+
+// uniqueNonEmpty returns the distinct non-empty values among keys, in order.
+func uniqueNonEmpty(keys ...string) []string {
+	var out []string
+	for _, k := range keys {
+		if k == "" {
+			continue
+		}
+		duplicate := false
+		for _, seen := range out {
+			if seen == k {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // LogoutDeviceKeepSlot logs the device out of WhatsApp (clearing its session/keys)
@@ -327,7 +375,7 @@ func (m *DeviceManager) keepSlotLogout(ctx context.Context, deviceID string) err
 
 	var firstErr error
 	firstErr = errors.Join(firstErr, m.deleteStoreRowsForJID(ctx, jid))
-	firstErr = errors.Join(firstErr, m.resetDeviceKeepSlot(deviceID))
+	firstErr = errors.Join(firstErr, m.resetDeviceKeepSlot(deviceID, jid))
 	return firstErr
 }
 
@@ -335,7 +383,9 @@ func (m *DeviceManager) keepSlotLogout(ctx context.Context, deviceID string) err
 // identity (jid) while keeping the device slot (id + display name) in both the
 // in-memory registry and the persisted device registry. EnsureClient rebuilds a
 // fresh client on the next login, so the slot can be re-paired under the same id.
-func (m *DeviceManager) resetDeviceKeepSlot(deviceID string) error {
+// lastJID (the jid being cleared) is persisted separately so a later full purge can
+// still find and delete the JID-scoped chat data this logout intentionally retains.
+func (m *DeviceManager) resetDeviceKeepSlot(deviceID, lastJID string) error {
 	inst, ok := m.GetDevice(deviceID)
 	if !ok || inst == nil {
 		return fmt.Errorf("device %s not found", deviceID)
@@ -351,6 +401,11 @@ func (m *DeviceManager) resetDeviceKeepSlot(deviceID string) error {
 			UpdatedAt:   time.Now(),
 		}); err != nil {
 			return fmt.Errorf("persist logged-out device %s: %w", deviceID, err)
+		}
+		if strings.TrimSpace(lastJID) != "" {
+			if err := m.storage.SetDeviceLastJID(deviceID, lastJID); err != nil {
+				return fmt.Errorf("persist last jid for logged-out device %s: %w", deviceID, err)
+			}
 		}
 	}
 	return nil

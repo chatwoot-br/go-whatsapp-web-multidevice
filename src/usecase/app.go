@@ -299,7 +299,9 @@ func (service *serviceApp) Reconnect(_ context.Context, deviceID string) (err er
 	}
 
 	if client.Store == nil || client.Store.ID == nil {
-		return fmt.Errorf("device %s is not logged in (session deleted)", deviceID)
+		// A logged-out slot is an expected keep-slot state, not an internal error:
+		// only a new pairing can recover it, so point the caller at the login flow.
+		return pkgError.ErrSessionDeleted
 	}
 
 	client.Disconnect()

@@ -26,6 +26,7 @@ type keepSlotStubStorage struct {
 	savedRecords   []*domainChatStorage.DeviceRecord
 	deletedData    []string
 	deletedRecords []string
+	lastJIDs       map[string]string
 }
 
 func (s *keepSlotStubStorage) SaveDeviceRecord(rec *domainChatStorage.DeviceRecord) error {
@@ -42,6 +43,18 @@ func (s *keepSlotStubStorage) DeleteDeviceData(deviceID string) error {
 func (s *keepSlotStubStorage) DeleteDeviceRecord(deviceID string) error {
 	s.deletedRecords = append(s.deletedRecords, deviceID)
 	return nil
+}
+
+func (s *keepSlotStubStorage) SetDeviceLastJID(deviceID, lastJID string) error {
+	if s.lastJIDs == nil {
+		s.lastJIDs = map[string]string{}
+	}
+	s.lastJIDs[deviceID] = lastJID
+	return nil
+}
+
+func (s *keepSlotStubStorage) GetDeviceRecord(deviceID string) (*domainChatStorage.DeviceRecord, error) {
+	return &domainChatStorage.DeviceRecord{DeviceID: deviceID, LastJID: s.lastJIDs[deviceID]}, nil
 }
 
 // assertStoreLacksJID fails if any device row in the container still matches the given
@@ -160,7 +173,7 @@ func TestResetDeviceKeepSlot_PropagatesSaveError(t *testing.T) {
 	const slotID = "slot-persist-err"
 	manager.devices[slotID] = &DeviceInstance{id: slotID, jid: "6281999999993@s.whatsapp.net", createdAt: time.Now()}
 
-	if err := manager.resetDeviceKeepSlot(slotID); err == nil || !strings.Contains(err.Error(), "disk full") {
+	if err := manager.resetDeviceKeepSlot(slotID, "6281999999993@s.whatsapp.net"); err == nil || !strings.Contains(err.Error(), "disk full") {
 		t.Fatalf("expected resetDeviceKeepSlot to propagate save error, got %v", err)
 	}
 
@@ -181,6 +194,59 @@ func TestPurgeDevice_SurfacesLocalCleanupFailure(t *testing.T) {
 
 	if err := manager.PurgeDevice(ctx, slotID); err == nil || !strings.Contains(err.Error(), "chatstorage down") {
 		t.Fatalf("expected PurgeDevice to surface the local cleanup failure, got %v", err)
+	}
+
+	// On partial failure the slot must survive: it carries the id↔jid mapping a
+	// retry needs to find the surviving rows. Removing it would make the returned
+	// error unactionable (the caller could never purge the leftovers again).
+	if _, ok := manager.GetDevice(slotID); !ok {
+		t.Fatal("expected slot to be kept after a failed purge so the delete can be retried")
+	}
+	if len(storage.deletedRecords) != 0 {
+		t.Fatalf("expected device record to be kept after a failed purge, got deletions: %v", storage.deletedRecords)
+	}
+}
+
+// Scenario: keep-slot logout retains the JID-scoped chat history by design, then a
+// later DELETE must still purge it. The logout clears the live jid but records it as
+// last_jid; the purge must read it back and delete the chat data under BOTH the slot
+// id and that retained JID (plus any whatsmeow rows left for it).
+func TestPurgeDevice_AfterKeepSlotLogout_DeletesRetainedJIDData(t *testing.T) {
+	ctx := context.Background()
+	primaryStore := newTestSQLStore(t)
+
+	adJID := types.NewADJID("6281999999995", types.WhatsAppDomain, 13)
+	nonAD := adJID.ToNonAD().String()
+	if err := newTestStoreDevice(primaryStore, adJID, "primary").Save(ctx); err != nil {
+		t.Fatalf("save primary device: %v", err)
+	}
+
+	storage := &keepSlotStubStorage{}
+	manager := NewDeviceManager(primaryStore, nil, storage)
+
+	const slotID = "slot-uuid-3"
+	manager.devices[slotID] = &DeviceInstance{id: slotID, jid: nonAD, displayName: "tIAtendo", createdAt: time.Now()}
+
+	if err := manager.LogoutDeviceKeepSlot(ctx, slotID); err != nil {
+		t.Fatalf("LogoutDeviceKeepSlot returned error: %v", err)
+	}
+	if got := storage.lastJIDs[slotID]; got != nonAD {
+		t.Fatalf("expected logout to persist last_jid %s, got %q", nonAD, got)
+	}
+
+	if err := manager.PurgeDevice(ctx, slotID); err != nil {
+		t.Fatalf("PurgeDevice returned error: %v", err)
+	}
+
+	deleted := map[string]bool{}
+	for _, key := range storage.deletedData {
+		deleted[key] = true
+	}
+	if !deleted[slotID] || !deleted[nonAD] {
+		t.Fatalf("expected chat data deleted under both slot id %s and retained jid %s, got %v", slotID, nonAD, storage.deletedData)
+	}
+	if _, ok := manager.GetDevice(slotID); ok {
+		t.Fatal("expected slot removed after purge")
 	}
 }
 

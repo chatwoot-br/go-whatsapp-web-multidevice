@@ -223,15 +223,20 @@ func (d *DeviceInstance) SetOnLoggedOut(callback func(deviceID string)) {
 	d.onLoggedOut = callback
 }
 
-func (d *DeviceInstance) TriggerLoggedOut() {
+// TriggerLoggedOut invokes the registered logout callback and reports whether one
+// was wired — callers use a false return to run the cleanup themselves, so registry
+// reconciliation never silently depends on in-memory wiring.
+func (d *DeviceInstance) TriggerLoggedOut() bool {
 	d.mu.RLock()
 	callback := d.onLoggedOut
 	deviceID := d.id
 	d.mu.RUnlock()
 
-	if callback != nil {
-		callback(deviceID)
+	if callback == nil {
+		return false
 	}
+	callback(deviceID)
+	return true
 }
 
 // ProxyIP returns the cached external IP address when using a proxy.
