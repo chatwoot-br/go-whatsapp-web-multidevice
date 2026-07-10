@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.10.0+1] - 2026-07-10
+
+### Upstream Sync
+- **Synced the fork onto upstream `v8.10.0`** (latest upstream release tag) from the `v8.9.0` base. Single merge commit, no Phase B: upstream's 7-commit unreleased tail (per-device login endpoints, `WHATSAPP_PROXY` #664, `WHATSAPP_WEBHOOK_IGNORE_JIDS` #736, send-link fix #661, chat composer UI, forward-by-ID #755, a newer whatsmeow bump) rides the next sync. whatsmeow `v0.0.0-20260622` → `v0.0.0-20260630`. Unlike v8.9.0, webhook-path changes landed **inside** the tag, so the contract-drift check ran in Phase A: **0 breaking / 2 benign-behavioral / HMAC stable** — the global-webhook path the Chatwoot controller consumes is byte-compatible (nil device config ⇒ old whitelist semantics, global URLs, global secret). See `.workstreams/2026-07-10-upstream-v8.10-sync/`.
+
+### Added (from upstream)
+- **Per-device webhooks (#671 + review fixes)** — `devices` table gains `webhook_url`/`webhook_secret`/`webhook_events`/`webhook_insecure_skip_verify` (append-only migrations 31–34); `POST /devices` accepts webhook fields, `PATCH`/`GET /devices/:id/webhook` manage them; delivery resolves per-device config by JID with fallback to the global webhook. **Fleet note:** a device webhook *replaces* the global URL for that device (documented upstream semantics) — fleet instances are unaffected until a device row sets `webhook_url`.
+- **Passkey pairing (#754)** — `PairPasskey*` events handled + websocket broadcasts; `GET /app/passkey`, `POST /app/passkey/response|confirm` endpoints.
+- **MCP send/manipulation tools (#722)** + migration of MCP handlers to mcp-go request helpers; incoming location messages persisted.
+- **Newsletter latest-messages endpoint (#749)**; keep-slot logout (#728 — our upstreamed fix): remote logout disconnects and preserves the device slot + chat history (the old fork-side `TruncateAllDataWithLogging("REMOTE_LOGOUT")` wipe is gone **by design**); broadcast/status messages never reach webhooks regardless of Chatwoot (e4c62f8); `POST /send/file` no longer panics on non-multipart bodies (#748); chatwoot `@newsletter` JID guard (native module remains dormant).
+
+### Preserved (fork features)
+- BR ninth-digit phone stack, LID dedup + `history_sync_complete`, full history sync + `ON_DEMAND`, SOCKS/HTTP/HTTPS proxy, `chat_name`/`sender_name` webhook fields (repo-threaded `forwardMessageToWebhook` kept through upstream's forward-path restructure), `normalizeLIDBounded` 30s LID deadline, `InitWaDB` bounded retry, receipt `Device == 0` guard, detached event-dispatcher context, `ChatStorageMaxOpenConns = 1`. GoWA-native Chatwoot stays dormant (`CHATWOOT_ENABLED=false`). Post-merge audit (§7.5) clean: device-scoping sweep, default-flip diff, whatsmeow-workaround check — details in `.workstreams/2026-07-10-upstream-v8.10-sync/03-fork-delta-review.md`.
+
+### Fixed (xhigh code review of the merge; first four are upstream-forwardable)
+- **device: `POST /devices` with webhook fields and an auto-generated id no longer 500s and orphans the slot** — the webhook config was persisted under the caller-supplied (empty) id instead of the created `inst.ID()`.
+- **whatsapp: per-device webhook config lookups are TTL-cached (30s)** — the merge ran an uncached `devices`-table SELECT per forwarded event (every message, receipt, typing burst) on the `MaxOpenConns=1` chatstorage pool, head-of-line queuing against message writes; cache stores nil results too, is invalidated on webhook-config writes, and is bypassed under the test seam.
+- **whatsapp: logout/delete now remove *all* whatsmeow store rows for the account** — `deleteStoreRowsForJID` stopped after the first NonAD match, so a stale same-account row survived and `LoadExistingDevices` resurrected the session on restart.
+- **whatsapp: `DELETE /devices/{jid}` on a uuid-keyed slot purges for real** — `PurgeDevice` gained `keepSlotLogout`'s stale-id JID fallback and cleans up under the resolved registry key (previously: silent success leaving store rows + the live slot).
+- **utils: disconnected clients get a clean 401 on group/newsletter endpoints** — `MustLogin` now gates before `ValidateAndNormalizeJID`'s non-user-JID early return (upstream `ValidateJidWithLogin` parity; previously a raw 500 from deep inside whatsmeow).
+- **whatsapp: purge deletes chat data under both the slot id and the NonAD JID** (sweep pass on the fix above — chat/message rows are JID-keyed while the devices row is slot-keyed; purging a paired uuid slot previously left the tenant's conversation history in the shared DB).
+- **mcp: tool-handler panics no longer kill the process** — `server.WithRecovery()` added; the usecase layer panics on auth failures (`MustLogin`), which only REST's Recovery middleware caught, so one disconnected-client tool call in MCP mode took down every device session.
+- Merge adaptations: upstream tests updated to fork signatures (`handleWebhookForward` 4-arg, `submitWebhookFn` +`DeviceWebhookConfig`); `newsletter.GetMessages` follows the fork's `ValidateAndNormalizeJID` caller convention.
+
+### Known upstream issues (verified, reported — not fixed here; per-device-webhook users only)
+- `PATCH /devices/:id/webhook` has PUT semantics (plain fields — omitting `webhook_secret`/`webhook_events` wipes them); a URL-less webhook config is accepted and echoed but never applied; device `webhook_insecure_skip_verify=false` cannot re-enable TLS verification when the global flag is true (docs promise "override"); an empty device `webhook_events` falls back to the global whitelist while openapi.yaml promises "all events"; an empty device `webhook_secret` signs tenant-URL deliveries with the global secret; MCP mode never drains `websocket.Broadcast`, so passkey/pair events stall whatsmeow's handler queue ~5min each (pre-existing, more send sites now); the UI passkey confirm posts to the currently-selected device rather than the broadcast's `device_id`; with **no** webhook/Chatwoot consumers configured, every media message is still downloaded to `statics/media` for a payload that is then discarded; the four new MCP send tools (video/document/audio/poll) skip `SanitizePhone`, so bare group ids parse as user JIDs; `GetDeviceRecordByJID` has no `ORDER BY` and can pick a config-less duplicate row when the same JID exists under two device rows.
+
 ## [v8.9.0+1] - 2026-07-02
 
 ### Upstream Sync
