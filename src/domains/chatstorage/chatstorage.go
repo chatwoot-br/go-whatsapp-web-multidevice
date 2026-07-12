@@ -106,21 +106,21 @@ type DeviceRecord struct {
 	// LastJID is the storage JID the slot was last paired under, retained through
 	// keep-slot logout (which clears JID) so a later full purge can still delete
 	// the JID-scoped chat data that logout intentionally kept.
-	LastJID                  string    `db:"last_jid"`
-	WebhookURL               *string   `db:"webhook_url"`
-	WebhookSecret            string    `db:"webhook_secret"`
-	WebhookEvents            string    `db:"webhook_events"`
+	LastJID                   string    `db:"last_jid"`
+	WebhookURL                *string   `db:"webhook_url"`
+	WebhookSecret             string    `db:"webhook_secret"`
+	WebhookEvents             string    `db:"webhook_events"`
 	WebhookInsecureSkipVerify bool      `db:"webhook_insecure_skip_verify"`
-	CreatedAt                time.Time `db:"created_at"`
-	UpdatedAt                time.Time `db:"updated_at"`
+	CreatedAt                 time.Time `db:"created_at"`
+	UpdatedAt                 time.Time `db:"updated_at"`
 }
 
 // DeviceWebhookConfig holds the complete webhook configuration for a device.
 type DeviceWebhookConfig struct {
-	WebhookURL               *string `json:"webhook_url,omitempty"`
-	WebhookSecret           string  `json:"webhook_secret,omitempty"`
-	WebhookEvents           string  `json:"webhook_events,omitempty"`
-	WebhookInsecureSkipVerify bool   `json:"webhook_insecure_skip_verify,omitempty"`
+	WebhookURL                *string `json:"webhook_url,omitempty"`
+	WebhookSecret             string  `json:"webhook_secret,omitempty"`
+	WebhookEvents             string  `json:"webhook_events,omitempty"`
+	WebhookInsecureSkipVerify bool    `json:"webhook_insecure_skip_verify,omitempty"`
 }
 
 // MessageFilter represents query filters for messages
