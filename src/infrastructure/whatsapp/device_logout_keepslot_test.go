@@ -74,6 +74,25 @@ func (s *keepSlotStubStorage) GetDeviceRecord(deviceID string) (*domainChatStora
 	}, nil
 }
 
+func (s *keepSlotStubStorage) ListDeviceRecords() ([]*domainChatStorage.DeviceRecord, error) {
+	seen := map[string]bool{}
+	var out []*domainChatStorage.DeviceRecord
+	for id := range s.recordJIDs {
+		seen[id] = true
+	}
+	for id := range s.lastJIDs {
+		seen[id] = true
+	}
+	for id := range seen {
+		out = append(out, &domainChatStorage.DeviceRecord{
+			DeviceID: id,
+			JID:      s.recordJIDs[id],
+			LastJID:  s.lastJIDs[id],
+		})
+	}
+	return out, nil
+}
+
 // assertStoreLacksJID fails if any device row in the container still matches the given
 // NonAD JID. Matching mirrors deleteStoreRowsForJID / LoadExistingDevices.
 func assertStoreLacksJID(t *testing.T, ctx context.Context, c *sqlstore.Container, nonADJID string) {
@@ -413,6 +432,85 @@ func TestResetDeviceKeepSlot_SameRetainedJIDKeepsData(t *testing.T) {
 
 	if len(storage.deletedData) != 0 {
 		t.Fatalf("expected no chat data deletion when the retained JID is unchanged, got %v", storage.deletedData)
+	}
+}
+
+// Scenario: the re-pair (A -> B) logout fails midway — purging A's superseded data errors
+// out. The row must never be left naming NO account: if `jid` were cleared before `last_jid`
+// advanced to B, the row would hold jid=” + last_jid=A, and the retry (jid first, then
+// last_jid) would recover A — permanently losing the pointer to B's retained chat data.
+// Clearing the live jid LAST means every intermediate failure leaves B recoverable.
+func TestResetDeviceKeepSlot_FailedSupersededPurgeKeepsCurrentJIDRecoverable(t *testing.T) {
+	const slotID = "slot-purge-fails"
+	const jidA = "6281999999811@s.whatsapp.net"
+	const jidB = "6281999999812@s.whatsapp.net"
+
+	storage := &keepSlotStubStorage{
+		lastJIDs:      map[string]string{slotID: jidA},
+		recordJIDs:    map[string]string{slotID: jidB},
+		deleteDataErr: errors.New("chatstorage down"), // purging A's data fails
+	}
+	manager := NewDeviceManager(nil, nil, storage)
+	manager.devices[slotID] = &DeviceInstance{id: slotID, jid: jidB, createdAt: time.Now()}
+
+	if err := manager.resetDeviceKeepSlot(slotID, jidB); err == nil {
+		t.Fatal("expected the superseded-purge failure to be surfaced")
+	}
+
+	// The row must still name B (the live account), so the retry can recover it.
+	record, err := storage.GetDeviceRecord(slotID)
+	if err != nil {
+		t.Fatalf("GetDeviceRecord: %v", err)
+	}
+	if record.JID != jidB {
+		t.Fatalf("expected the live jid %s to survive the failed logout (retry recovers from it), got %q", jidB, record.JID)
+	}
+	if record.LastJID == jidB {
+		t.Fatal("last_jid must not advance to B while A's data purge is still failing")
+	}
+}
+
+// Scenario: DELETE addressed by WhatsApp JID, for a slot that was already logged out. The
+// slot's live JID is empty, so it can only be found via last_jid. Without that lookup the
+// purge deletes chat data but removes devices[<jid>] / the <jid> record — neither of which
+// exists — and reports success while the real uuid slot stays listed and persisted.
+func TestPurgeDevice_ByJID_ResolvesLoggedOutSlotViaLastJID(t *testing.T) {
+	ctx := context.Background()
+	primaryStore := newTestSQLStore(t)
+
+	adJID := types.NewADJID("6281999999820", types.WhatsAppDomain, 18)
+	nonAD := adJID.ToNonAD().String()
+
+	const slotID = "slot-logged-out-uuid"
+	// Post-logout state: slot kept under its uuid, live jid cleared, account in last_jid.
+	storage := &keepSlotStubStorage{
+		lastJIDs:   map[string]string{slotID: nonAD},
+		recordJIDs: map[string]string{slotID: ""},
+	}
+	manager := NewDeviceManager(primaryStore, nil, storage)
+	manager.devices[slotID] = &DeviceInstance{id: slotID, jid: "", displayName: "tIAtendo", createdAt: time.Now()}
+
+	// The caller deletes by the JID the slot used to hold.
+	if err := manager.PurgeDevice(ctx, nonAD); err != nil {
+		t.Fatalf("PurgeDevice by jid returned error: %v", err)
+	}
+
+	if _, ok := manager.GetDevice(slotID); ok {
+		t.Fatal("expected the uuid slot to be removed — DELETE by JID must not report success while the slot survives")
+	}
+	deletedRecords := map[string]bool{}
+	for _, id := range storage.deletedRecords {
+		deletedRecords[id] = true
+	}
+	if !deletedRecords[slotID] {
+		t.Fatalf("expected the device record for slot %s to be deleted, got %v", slotID, storage.deletedRecords)
+	}
+	deletedData := map[string]bool{}
+	for _, key := range storage.deletedData {
+		deletedData[key] = true
+	}
+	if !deletedData[nonAD] {
+		t.Fatalf("expected chat data under the retained jid %s to be purged, got %v", nonAD, storage.deletedData)
 	}
 }
 

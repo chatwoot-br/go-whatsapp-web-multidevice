@@ -81,6 +81,30 @@ func (m *DeviceManager) getDeviceByJID(jid string) (*DeviceInstance, bool) {
 	return nil, false
 }
 
+// getDeviceByLastJID resolves the slot that was last paired to jid but is currently
+// logged out, by consulting the persisted last_jid. A logged-out slot has no live JID,
+// so getDeviceByJID cannot see it — yet callers still legitimately address it by the
+// WhatsApp JID it used to hold (DELETE /devices/{jid} after a logout).
+func (m *DeviceManager) getDeviceByLastJID(jid string) (*DeviceInstance, bool) {
+	if m.storage == nil || strings.TrimSpace(jid) == "" {
+		return nil, false
+	}
+	records, err := m.storage.ListDeviceRecords()
+	if err != nil {
+		logrus.WithError(err).Warnf("[DEVICE_MANAGER] failed to list device records resolving last_jid %s", jid)
+		return nil, false
+	}
+	for _, record := range records {
+		if record == nil || record.LastJID != jid {
+			continue
+		}
+		if inst, ok := m.GetDevice(record.DeviceID); ok && inst != nil {
+			return inst, true
+		}
+	}
+	return nil, false
+}
+
 // IsHealthy returns true if the device manager is initialized and has a valid store connection.
 // Note: This is a service initialization check, not a live connectivity check.
 // Returning true indicates the internal store is ready, but does not guarantee
@@ -221,6 +245,13 @@ func (m *DeviceManager) PurgeDevice(ctx context.Context, deviceID string) error 
 			jid = parsed.ToNonAD().String()
 			if byJID, found := m.getDeviceByJID(jid); found && byJID != nil {
 				inst = byJID
+			} else if byLast, found := m.getDeviceByLastJID(jid); found && byLast != nil {
+				// A slot that was already LOGGED OUT has no live JID, so the lookup above
+				// cannot match it — the account now lives only in last_jid. Without this,
+				// DELETE by JID after a logout purges the chat data but removes
+				// devices[<jid>] (nothing) and the <jid> record (nothing), reporting
+				// success while the real uuid slot stays listed and persisted.
+				inst = byLast
 			}
 		}
 	}
@@ -416,16 +447,28 @@ func (m *DeviceManager) resetDeviceKeepSlot(deviceID, lastJID string) error {
 	inst.ResetClient()
 
 	if m.storage != nil && strings.TrimSpace(deviceID) != "" {
-		if err := m.storage.SaveDeviceRecord(&domainChatStorage.DeviceRecord{
-			DeviceID:    deviceID,
-			DisplayName: inst.DisplayName(),
-			JID:         "",
-			CreatedAt:   inst.CreatedAt(),
-			UpdatedAt:   time.Now(),
-		}); err != nil {
-			return fmt.Errorf("persist logged-out device %s: %w", deviceID, err)
-		}
+		// ORDER MATTERS. The row must never be left naming NO account: `jid` is the only
+		// pointer to the live identity and `last_jid` the only pointer to the retained one,
+		// so clearing `jid` before `last_jid` is recorded opens a window where a failure in
+		// between (purge error, SetDeviceLastJID error) leaves jid='' with a STALE last_jid
+		// — and the logout retry, which reads jid first and falls back to last_jid, would
+		// then recover the *previous* account and never name this one's retained chat data
+		// again. So: retire the superseded identity, record the new one, and only then clear
+		// the live jid. Every intermediate failure now leaves `jid` still populated, which
+		// the retry recovers from.
 		if strings.TrimSpace(lastJID) != "" {
+			// Ensure the row exists and still names the live account first: SetDeviceLastJID
+			// only UPDATEs (it returns ErrNoRows on a missing row), and the slot may never
+			// have been persisted — e.g. one rebuilt from the whatsmeow store.
+			if err := m.storage.SaveDeviceRecord(&domainChatStorage.DeviceRecord{
+				DeviceID:    deviceID,
+				DisplayName: inst.DisplayName(),
+				JID:         lastJID,
+				CreatedAt:   inst.CreatedAt(),
+				UpdatedAt:   time.Now(),
+			}); err != nil {
+				return fmt.Errorf("persist device %s before logout: %w", deviceID, err)
+			}
 			// last_jid holds ONE retained identity, and PurgeDevice deletes chat data
 			// under it. Overwriting a different retained JID (slot logged out of account
 			// A, re-paired to B, logged out again) would strand A's conversation history
@@ -438,6 +481,17 @@ func (m *DeviceManager) resetDeviceKeepSlot(deviceID, lastJID string) error {
 			if err := m.storage.SetDeviceLastJID(deviceID, lastJID); err != nil {
 				return fmt.Errorf("persist last jid for logged-out device %s: %w", deviceID, err)
 			}
+		}
+		// Clear the live jid LAST (SaveDeviceRecord writes jid, never last_jid), so every
+		// failure above leaves the row still naming the live account for the retry to find.
+		if err := m.storage.SaveDeviceRecord(&domainChatStorage.DeviceRecord{
+			DeviceID:    deviceID,
+			DisplayName: inst.DisplayName(),
+			JID:         "",
+			CreatedAt:   inst.CreatedAt(),
+			UpdatedAt:   time.Now(),
+		}); err != nil {
+			return fmt.Errorf("persist logged-out device %s: %w", deviceID, err)
 		}
 	}
 	return nil

@@ -18,17 +18,26 @@ import (
 )
 
 func submitWebhook(ctx context.Context, payload map[string]any, url string, webhookConfig *chatstorage.DeviceWebhookConfig) error {
-	// Determine effective config - use device-specific if set, otherwise fall back to global
+	// Determine effective config - use device-specific if set, otherwise fall back to global.
+	//
+	// A non-nil webhookConfig means this delivery is going to the DEVICE's own URL (it is
+	// only built when the device row carries a webhook_url, and it is what selects the
+	// target URLs), so the device config is authoritative for that URL — including its
+	// zero values. Merging field-by-field instead ("only override when truthy/non-empty")
+	// silently lets global settings govern a URL they do not own:
+	//   - webhook_insecure_skip_verify=false could never restore TLS verification while the
+	//     global flag was true, so a self-signed global webhook disabled certificate checks
+	//     for every device webhook as well;
+	//   - an empty webhook_secret signed the device's deliveries with the GLOBAL secret, so
+	//     a consumer reading its (empty) secret from GET /devices/{id}/webhook could not
+	//     validate the HMAC without being handed the unrelated global key.
+	// The global path (webhookConfig == nil) is unchanged.
 	insecureSkipVerify := config.WhatsappWebhookInsecureSkipVerify
 	webhookSecret := config.WhatsappWebhookSecret
 
 	if webhookConfig != nil {
-		if webhookConfig.WebhookInsecureSkipVerify {
-			insecureSkipVerify = true
-		}
-		if webhookConfig.WebhookSecret != "" {
-			webhookSecret = webhookConfig.WebhookSecret
-		}
+		insecureSkipVerify = webhookConfig.WebhookInsecureSkipVerify
+		webhookSecret = webhookConfig.WebhookSecret
 	}
 
 	// Configure HTTP client with optional TLS skip verification

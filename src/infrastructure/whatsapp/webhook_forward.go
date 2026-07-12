@@ -339,9 +339,18 @@ func getWebhookURLsFromConfig(config *domainChatStorage.DeviceWebhookConfig) []s
 }
 
 // isEventWhitelistedForDevice checks if an event is whitelisted for a specific device.
-// Uses device-specific events if set, otherwise falls back to global config.
+// A device webhook config owns its own filter: an explicit list allows exactly those
+// events, and an EMPTY list means all events — the semantics openapi.yaml documents, and
+// the same "empty = no filter" rule the global whitelist follows. Inheriting the global
+// WHATSAPP_WEBHOOK_EVENTS list here instead would silently drop event types (receipts,
+// calls, groups) from a device webhook that asked for no filter at all, on any deployment
+// that globally restricts events. Only a device with NO webhook config of its own
+// (deviceConfig == nil) falls back to the global whitelist.
 func isEventWhitelistedForDevice(eventName string, deviceConfig *domainChatStorage.DeviceWebhookConfig) bool {
-	if deviceConfig != nil && deviceConfig.WebhookEvents != "" {
+	if deviceConfig != nil {
+		if strings.TrimSpace(deviceConfig.WebhookEvents) == "" {
+			return true
+		}
 		for _, allowed := range strings.Split(deviceConfig.WebhookEvents, ",") {
 			if strings.EqualFold(strings.TrimSpace(allowed), eventName) {
 				return true

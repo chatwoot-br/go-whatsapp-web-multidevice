@@ -222,3 +222,41 @@ func TestHasAnyWebhookConsumer(t *testing.T) {
 		t.Fatal("expected true with a cached device webhook")
 	}
 }
+
+// A device webhook config owns its own event filter. An EMPTY device event list means
+// "all events" (what openapi.yaml documents, and the same empty = no filter rule the
+// global list follows) — it must NOT inherit the global whitelist, which would silently
+// drop event types from a device webhook that asked for no filter at all.
+func TestIsEventWhitelistedForDevice_EmptyDeviceEventListMeansAllEvents(t *testing.T) {
+	origEvents := config.WhatsappWebhookEvents
+	defer func() { config.WhatsappWebhookEvents = origEvents }()
+
+	// Global deployment restricts events to "message" only.
+	config.WhatsappWebhookEvents = []string{"message"}
+
+	url := "https://tenant-a.example/hook"
+	deviceNoFilter := &domainChatStorage.DeviceWebhookConfig{WebhookURL: &url} // events unset
+
+	for _, event := range []string{"message", "call.offer", "group.participants", "receipt"} {
+		if !isEventWhitelistedForDevice(event, deviceNoFilter) {
+			t.Fatalf("device webhook with an empty event list must receive %q (empty = all events)", event)
+		}
+	}
+
+	// An explicit device list still filters, and is not widened by the global one.
+	deviceFiltered := &domainChatStorage.DeviceWebhookConfig{WebhookURL: &url, WebhookEvents: "call.offer"}
+	if !isEventWhitelistedForDevice("call.offer", deviceFiltered) {
+		t.Fatal("expected an explicitly listed event to pass")
+	}
+	if isEventWhitelistedForDevice("message", deviceFiltered) {
+		t.Fatal("expected an event absent from the device list to be filtered out, despite the global list allowing it")
+	}
+
+	// A device with NO config of its own still falls back to the global whitelist.
+	if isEventWhitelistedForDevice("call.offer", nil) {
+		t.Fatal("expected the global whitelist to apply when the device has no webhook config")
+	}
+	if !isEventWhitelistedForDevice("message", nil) {
+		t.Fatal("expected the globally whitelisted event to pass for a device with no config")
+	}
+}
