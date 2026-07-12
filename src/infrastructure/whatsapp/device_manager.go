@@ -373,15 +373,26 @@ func (m *DeviceManager) keepSlotLogout(ctx context.Context, deviceID string) err
 	// otherwise get matched back on restart. Idempotent when the row is already gone.
 	jid := inst.JID()
 
-	// A previous logout whose store cleanup failed already cleared the in-memory JID,
-	// so a retry would arrive here with none and silently delete nothing — leaving the
-	// orphan row that LoadExistingDevices resurrects on restart. Recover the identity
-	// from the last_jid the reset persisted precisely for this purpose.
+	// A previous failed logout already cleared the in-memory JID (ResetClient runs before
+	// anything is persisted), so a retry arrives here with none and would silently delete
+	// nothing — leaving the orphan row that LoadExistingDevices resurrects on restart, and
+	// then clearing the record's jid without ever recording it, stranding the JID-scoped
+	// chat data for good. Recover the identity from the persisted record, and mind WHICH
+	// column holds it — that depends on how far the failed attempt got:
+	//
+	//   reset failed before persisting  -> row still has jid, last_jid empty  -> use jid
+	//   reset persisted, delete failed  -> row has jid cleared, last_jid set  -> use last_jid
+	//
+	// So the live jid wins when present; last_jid is the fallback once the reset landed.
 	if strings.TrimSpace(jid) == "" && m.storage != nil {
 		if record, err := m.storage.GetDeviceRecord(deviceID); err != nil {
 			logrus.WithError(err).Warnf("[DEVICE_MANAGER] failed to read device record for %s during logout", deviceID)
 		} else if record != nil {
-			jid = record.LastJID
+			if persisted := strings.TrimSpace(record.JID); persisted != "" {
+				jid = persisted
+			} else {
+				jid = strings.TrimSpace(record.LastJID)
+			}
 		}
 	}
 

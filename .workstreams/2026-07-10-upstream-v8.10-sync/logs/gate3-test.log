@@ -1,5 +1,5 @@
 ?   	github.com/aldinokemal/go-whatsapp-web-multidevice	[no test files]
-ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/cmd	(cached)
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/cmd	1.194s
 ?   	github.com/aldinokemal/go-whatsapp-web-multidevice/config	[no test files]
 ?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/app	[no test files]
 ?   	github.com/aldinokemal/go-whatsapp-web-multidevice/domains/call	[no test files]
@@ -14,7 +14,7 @@ ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/cmd	(cached)
 ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatstorage	(cached)
 ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot	(cached)
 ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot/pgimport	(cached)
-ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp	(cached)
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp	1.520s
 ?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/error	[no test files]
 ?   	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/sqlite	[no test files]
 ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils	(cached)
@@ -24,5 +24,5 @@ ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest	(cached)
 ?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest/helpers	[no test files]
 ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest/middleware	(cached)
 ?   	github.com/aldinokemal/go-whatsapp-web-multidevice/ui/websocket	[no test files]
-ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/usecase	(cached)
+ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/usecase	0.455s
 ok  	github.com/aldinokemal/go-whatsapp-web-multidevice/validations	(cached)

@@ -27,12 +27,25 @@ type keepSlotStubStorage struct {
 	deletedData    []string
 	deletedRecords []string
 	lastJIDs       map[string]string
+	// recordJIDs is the persisted `jid` column, distinct from lastJIDs (`last_jid`).
+	// A logout that failed before persisting the reset leaves the two out of step:
+	// jid still set, last_jid empty.
+	recordJIDs map[string]string
 }
 
 func (s *keepSlotStubStorage) SaveDeviceRecord(rec *domainChatStorage.DeviceRecord) error {
 	cloned := *rec
 	s.savedRecords = append(s.savedRecords, &cloned)
-	return s.saveErr
+	if s.saveErr != nil {
+		// A failed write must not move the persisted state — that is exactly the
+		// half-applied logout the retry has to recover from.
+		return s.saveErr
+	}
+	if s.recordJIDs == nil {
+		s.recordJIDs = map[string]string{}
+	}
+	s.recordJIDs[rec.DeviceID] = rec.JID
+	return nil
 }
 
 func (s *keepSlotStubStorage) DeleteDeviceData(deviceID string) error {
@@ -54,7 +67,11 @@ func (s *keepSlotStubStorage) SetDeviceLastJID(deviceID, lastJID string) error {
 }
 
 func (s *keepSlotStubStorage) GetDeviceRecord(deviceID string) (*domainChatStorage.DeviceRecord, error) {
-	return &domainChatStorage.DeviceRecord{DeviceID: deviceID, LastJID: s.lastJIDs[deviceID]}, nil
+	return &domainChatStorage.DeviceRecord{
+		DeviceID: deviceID,
+		JID:      s.recordJIDs[deviceID],
+		LastJID:  s.lastJIDs[deviceID],
+	}, nil
 }
 
 // assertStoreLacksJID fails if any device row in the container still matches the given
@@ -289,6 +306,61 @@ func TestKeepSlotLogout_RetryRecoversJIDFromLastJID(t *testing.T) {
 	}
 	if got := storage.lastJIDs[slotID]; got != nonAD {
 		t.Fatalf("expected last_jid %s to be retained across the retry, got %q", nonAD, got)
+	}
+}
+
+// Scenario: the first logout deletes the store rows and then FAILS while persisting the
+// reset. ResetClient has already cleared the in-memory JID, but the devices row still has
+// `jid` set and `last_jid` empty — SetDeviceLastJID is never reached. A retry that looked
+// only at last_jid would recover nothing, then clear the row's jid on its way out,
+// stranding that account's chat data with no pointer left to name it. The retry must fall
+// back to the record's live jid and record it as last_jid.
+//
+// Driven through a real failed logout rather than a hand-built state, so the two steps
+// have to actually agree about what a half-applied logout leaves behind.
+func TestKeepSlotLogout_RetryRecoversJIDFromRecordWhenResetNeverPersisted(t *testing.T) {
+	ctx := context.Background()
+	primaryStore := newTestSQLStore(t)
+
+	adJID := types.NewADJID("6281999999999", types.WhatsAppDomain, 17)
+	nonAD := adJID.ToNonAD().String()
+	if err := newTestStoreDevice(primaryStore, adJID, "primary").Save(ctx); err != nil {
+		t.Fatalf("save primary device: %v", err)
+	}
+
+	const slotID = "slot-reset-failed"
+	storage := &keepSlotStubStorage{
+		saveErr:    errors.New("disk full"),
+		recordJIDs: map[string]string{slotID: nonAD}, // the paired row as persisted
+	}
+	manager := NewDeviceManager(primaryStore, nil, storage)
+	inst := &DeviceInstance{id: slotID, jid: nonAD, displayName: "tIAtendo", createdAt: time.Now()}
+	manager.devices[slotID] = inst
+
+	// First attempt: dies persisting the reset, after ResetClient cleared the JID.
+	if err := manager.LogoutDeviceKeepSlot(ctx, slotID); err == nil {
+		t.Fatal("expected the first logout to fail on the persistence error")
+	}
+	if got := inst.JID(); got != "" {
+		t.Fatalf("expected the in-memory JID to be cleared by the failed attempt, got %q", got)
+	}
+	if storage.lastJIDs[slotID] != "" {
+		t.Fatalf("precondition: last_jid must NOT have been recorded by the failed attempt, got %q", storage.lastJIDs[slotID])
+	}
+
+	// Retry, now with storage healthy. The only surviving pointer to the account is the
+	// record's `jid` column.
+	storage.saveErr = nil
+	if err := manager.LogoutDeviceKeepSlot(ctx, slotID); err != nil {
+		t.Fatalf("logout retry returned error: %v", err)
+	}
+
+	assertStoreLacksJID(t, ctx, primaryStore, nonAD)
+	if got := storage.lastJIDs[slotID]; got != nonAD {
+		t.Fatalf("expected the retry to retain %s as last_jid so a later purge can find its chat data, got %q", nonAD, got)
+	}
+	if _, ok := manager.GetDevice(slotID); !ok {
+		t.Fatal("expected the slot to survive the logout retry")
 	}
 }
 
