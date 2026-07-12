@@ -113,5 +113,3 @@ func TestGetDeviceWebhook_InvalidManager(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
-
-
