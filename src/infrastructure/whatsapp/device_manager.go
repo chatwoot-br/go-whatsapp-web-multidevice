@@ -165,12 +165,17 @@ func (m *DeviceManager) ResolveDevice(deviceID string) (*DeviceInstance, string,
 
 func (m *DeviceManager) RemoveDevice(id string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	delete(m.devices, id)
+	m.mu.Unlock()
 
 	if m.storage != nil && strings.TrimSpace(id) != "" {
 		_ = m.storage.DeleteDeviceRecord(id)
 	}
+	// The per-device webhook caches are keyed by JID and cache nil results too, so a
+	// removed device's config (or the "some device has a webhook" answer) would otherwise
+	// survive its row for the whole TTL — long enough for a re-pair of the same account to
+	// keep forwarding events to the deleted device's webhook URL.
+	InvalidateDeviceWebhookConfigCache()
 }
 
 // deleteStoreRowsForJID removes the whatsmeow device rows (primary + keys containers)
@@ -445,6 +450,13 @@ func (m *DeviceManager) resetDeviceKeepSlot(deviceID, lastJID string) error {
 		return fmt.Errorf("device %s not found", deviceID)
 	}
 	inst.ResetClient()
+	// Mirror the retained identity in memory, so the boot-time store scan can tell this
+	// logged-out slot apart from a never-paired placeholder without re-reading storage.
+	if strings.TrimSpace(lastJID) != "" {
+		inst.SetLastJID(lastJID)
+	}
+	// The device webhook config cache is keyed by JID; this slot no longer holds one.
+	InvalidateDeviceWebhookConfigCache()
 
 	if m.storage != nil && strings.TrimSpace(deviceID) != "" {
 		// ORDER MATTERS. The row must never be left naming NO account: `jid` is the only
@@ -623,7 +635,13 @@ func (m *DeviceManager) LoadExistingDevices(ctx context.Context) error {
 				matchedDevice = inst
 				break
 			}
-			if inst.JID() == "" && orphanDevice == nil {
+			// Only a NEVER-PAIRED placeholder may adopt an unmatched store row. A slot that
+			// was logged out also has an empty live jid, but it still belongs to the account
+			// in last_jid — adopting some other account's row here would silently rebind it,
+			// and every later reconnect/logout/delete on that slot would act on the wrong
+			// WhatsApp account. Such a row instead falls through to its own new instance
+			// below, where it stays visible and separately manageable.
+			if inst.JID() == "" && inst.LastJID() == "" && orphanDevice == nil {
 				orphanDevice = inst
 			}
 		}
@@ -737,6 +755,10 @@ func (m *DeviceManager) loadFromRegistry(records []*domainChatStorage.DeviceReco
 		instance.SetState(domainDevice.DeviceStateDisconnected)
 		instance.displayName = rec.DisplayName
 		instance.jid = rec.JID
+		// Carry last_jid into memory: it is what marks this slot as LOGGED OUT rather than
+		// never-paired, and the store-row scan below relies on that to decide whether the
+		// slot may adopt an unmatched account.
+		instance.lastJID = rec.LastJID
 
 		// If we had an existing device with client, transfer the client
 		if existingByJID != nil {

@@ -220,8 +220,11 @@ func (service *serviceApp) PasskeyResponse(ctx context.Context, deviceID string,
 		return err
 	}
 
-	// The PairPasskeyConfirmation event repopulates the confirmation code shortly after.
-	instance.ClearPasskeyState()
+	// Retire the consumed challenge only. PairPasskeyConfirmation can land BEFORE this
+	// call returns (the event handler runs concurrently), and clearing all passkey state
+	// here would wipe the confirmation code it just stored — leaving the device with no
+	// pending passkey status and the user with no code to pass to /app/passkey/confirm.
+	instance.ClearPasskeyChallenge()
 	return nil
 }
 

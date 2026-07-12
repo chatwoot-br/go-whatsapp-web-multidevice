@@ -684,3 +684,109 @@ func TestRemoteLogoutCallback_KeepsSlot(t *testing.T) {
 	assertStoreLacksJID(t, ctx, primaryStore, nonAD)
 	assertStoreLacksJID(t, ctx, keysStore, nonAD)
 }
+
+// Scenario: a slot logged out of account A is kept with an empty live JID. On the next
+// boot the store still holds a row for an UNRELATED account B (a legacy/store-only
+// session). The orphan-adoption path treats any empty-JID slot as a placeholder, so it
+// would bind A's logged-out slot to B — after which every reconnect/logout/delete on that
+// slot acts on the wrong WhatsApp account. A slot with a retained last_jid is NOT a
+// placeholder and must never adopt another account's row.
+func TestLoadExistingDevices_LoggedOutSlotIsNotAdoptedByAnUnrelatedAccount(t *testing.T) {
+	ctx := context.Background()
+	primaryStore := newTestSQLStore(t)
+
+	// Account B: a store row with no slot of its own.
+	adB := types.NewADJID("6281999999840", types.WhatsAppDomain, 20)
+	nonADB := adB.ToNonAD().String()
+	if err := newTestStoreDevice(primaryStore, adB, "primary").Save(ctx); err != nil {
+		t.Fatalf("save store device for B: %v", err)
+	}
+
+	const slotID = "slot-logged-out-of-A"
+	const jidA = "6281999999830@s.whatsapp.net"
+
+	// Account A's slot, already logged out: live jid cleared, identity kept in last_jid.
+	storage := &keepSlotStubStorage{
+		lastJIDs:   map[string]string{slotID: jidA},
+		recordJIDs: map[string]string{slotID: ""},
+	}
+	manager := NewDeviceManager(primaryStore, nil, storage)
+
+	if err := manager.LoadExistingDevices(ctx); err != nil {
+		t.Fatalf("LoadExistingDevices: %v", err)
+	}
+
+	inst, ok := manager.GetDevice(slotID)
+	if !ok || inst == nil {
+		t.Fatal("expected the logged-out slot to survive the load")
+	}
+	if got := inst.JID(); got != "" {
+		t.Fatalf("logged-out slot of account A was rebound to %q — it must not adopt an unrelated account's store row", got)
+	}
+	if got := inst.LastJID(); got != jidA {
+		t.Fatalf("expected the slot to still retain last_jid %s, got %q", jidA, got)
+	}
+
+	// B's row must instead surface as its own instance, so it stays visible/manageable.
+	if _, ok := manager.GetDevice(nonADB); !ok {
+		t.Fatalf("expected the unmatched store row for %s to become its own slot", nonADB)
+	}
+}
+
+// A never-paired placeholder (no live jid, no last_jid) must still adopt an unmatched
+// store row — that is the behavior the last_jid guard has to preserve.
+func TestLoadExistingDevices_NeverPairedPlaceholderStillAdoptsStoreRow(t *testing.T) {
+	ctx := context.Background()
+	primaryStore := newTestSQLStore(t)
+
+	adJID := types.NewADJID("6281999999850", types.WhatsAppDomain, 21)
+	nonAD := adJID.ToNonAD().String()
+	if err := newTestStoreDevice(primaryStore, adJID, "primary").Save(ctx); err != nil {
+		t.Fatalf("save store device: %v", err)
+	}
+
+	const slotID = "slot-never-paired"
+	storage := &keepSlotStubStorage{recordJIDs: map[string]string{slotID: ""}} // no last_jid
+	manager := NewDeviceManager(primaryStore, nil, storage)
+
+	if err := manager.LoadExistingDevices(ctx); err != nil {
+		t.Fatalf("LoadExistingDevices: %v", err)
+	}
+
+	inst, ok := manager.GetDevice(slotID)
+	if !ok || inst == nil {
+		t.Fatal("expected the placeholder slot to survive the load")
+	}
+	if got := inst.JID(); got != nonAD {
+		t.Fatalf("expected the never-paired placeholder to adopt the store row %s, got %q", nonAD, got)
+	}
+}
+
+// Purging a device must drop its per-device webhook config from the caches: they are
+// keyed by JID and cache nil results too, so the deleted device's webhook URL would
+// otherwise keep receiving events for the whole TTL after a re-pair of the same account.
+func TestRemoveDevice_InvalidatesWebhookConfigCache(t *testing.T) {
+	resetWebhookCaches()
+	defer resetWebhookCaches()
+
+	const jid = "6281999999860@s.whatsapp.net"
+	url := "https://deleted-device.example/hook"
+	deviceWebhookConfigCache.Store(jid, deviceWebhookConfigCacheEntry{
+		config:    &domainChatStorage.DeviceWebhookConfig{WebhookURL: &url},
+		expiresAt: time.Now().Add(time.Hour),
+	})
+	anyDeviceWebhookCache.Store(&anyDeviceWebhookEntry{exists: true, expiresAt: time.Now().Add(time.Hour)})
+
+	manager := NewDeviceManager(nil, nil, &keepSlotStubStorage{})
+	const slotID = "slot-to-delete"
+	manager.devices[slotID] = &DeviceInstance{id: slotID, jid: jid, createdAt: time.Now()}
+
+	manager.RemoveDevice(slotID)
+
+	if _, ok := deviceWebhookConfigCache.Load(jid); ok {
+		t.Fatal("expected the deleted device's cached webhook config to be invalidated")
+	}
+	if entry, _ := anyDeviceWebhookCache.Load().(*anyDeviceWebhookEntry); entry != nil && time.Now().Before(entry.expiresAt) {
+		t.Fatal("expected the fleet-wide webhook-exists cache to be invalidated too")
+	}
+}
