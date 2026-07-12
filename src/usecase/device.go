@@ -63,11 +63,22 @@ func (s *serviceDevice) AddDevice(ctx context.Context, deviceID string, webhook 
 	// never persisted. Keyed by inst.ID(), not the requested deviceID: an empty
 	// deviceID means CreateDevice generated the slot id.
 	if webhook != nil {
+		// Roll the slot back on failure: CreateDevice has already registered it, so
+		// returning the error while leaving it behind makes the create unretryable —
+		// the same device_id would then fail with "device already exists", and an
+		// auto-generated id would leak a ghost slot the caller cannot even name. The
+		// slot is brand new (no client, no JID, no chat data), so dropping the registry
+		// entry and its record is the whole rollback.
+		rollback := func() {
+			s.manager.RemoveDevice(inst.ID())
+		}
 		storage := s.manager.GetStorage()
 		if storage == nil {
+			rollback()
 			return nil, fmt.Errorf("device %s created but storage is unavailable to save webhook config", inst.ID())
 		}
 		if err := storage.SetDeviceWebhookConfig(inst.ID(), webhook); err != nil {
+			rollback()
 			return nil, fmt.Errorf("device %s created but webhook config could not be saved: %w", inst.ID(), err)
 		}
 		whatsapp.InvalidateDeviceWebhookConfigCache()
@@ -146,7 +157,12 @@ func (s *serviceDevice) ReconnectDevice(_ context.Context, deviceID string) erro
 	if inst, ok := s.manager.GetDevice(deviceID); ok {
 		client := inst.GetClient()
 		if client == nil {
-			return fmt.Errorf("device %s client not initialized", deviceID)
+			// ResetClient (keep-slot logout) detaches the client entirely, so the
+			// logged-out state this endpoint must report reaches us as a nil client,
+			// not a nil Store.ID — the same is true of a slot that was never paired.
+			// Both are recoverable only by a new pairing, so answer with the typed
+			// re-pair error instead of a generic "not initialized" 500.
+			return pkgError.ErrSessionDeleted
 		}
 
 		if client.Store == nil || client.Store.ID == nil {

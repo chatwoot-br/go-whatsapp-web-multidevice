@@ -1197,10 +1197,19 @@ func (r *SQLiteRepository) GetDeviceRecordByJID(jid string) (*domainChatStorage.
 		return nil, fmt.Errorf("jid is required")
 	}
 
+	// A JID is not unique across rows: a legacy auto-created row (device_id = the JID)
+	// can coexist with a named slot row for the same WhatsApp account. Without an
+	// ORDER BY, SQLite may hand back either, so a device with a per-device webhook
+	// would intermittently resolve to the config-less row and get diverted to the
+	// global webhook. Prefer the configured row, then the most recently updated one,
+	// so the answer is deterministic.
 	rec, err := scanDeviceRecord(r.db.QueryRow(`
 		SELECT `+deviceRecordColumns+`
 		FROM devices
 		WHERE jid = ?
+		ORDER BY
+			CASE WHEN webhook_url IS NOT NULL AND webhook_url != '' THEN 0 ELSE 1 END,
+			updated_at DESC
 		LIMIT 1
 	`, jid))
 	if err == sql.ErrNoRows {

@@ -709,3 +709,43 @@ func countMessageReactions(t *testing.T, repo *SQLiteRepository) int {
 	}
 	return count
 }
+
+// Scenario: two device rows share one JID — a legacy auto-created row (device_id = the
+// JID, no webhook) alongside the named slot row that actually carries the per-device
+// webhook. With an unordered LIMIT 1, SQLite may return either, so the configured
+// device would intermittently resolve to the config-less row and have its events
+// diverted to the global webhook. The configured row must win, deterministically.
+func TestGetDeviceRecordByJID_PrefersConfiguredRowOverLegacyDuplicate(t *testing.T) {
+	repo, db := newTestRepo(t)
+
+	const jid = "6289605618749@s.whatsapp.net"
+	const namedSlot = "tenant-a"
+	url := "https://tenant-a.example/hook"
+
+	// Legacy row first and most recently updated: it would win on both insertion
+	// order and a naive recency tiebreak.
+	if _, err := db.Exec(`INSERT INTO devices (device_id, display_name, jid, updated_at)
+		VALUES (?, ?, ?, ?)`, jid, "legacy", jid, time.Now()); err != nil {
+		t.Fatalf("insert legacy device row: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO devices (device_id, display_name, jid, webhook_url, updated_at)
+		VALUES (?, ?, ?, ?, ?)`, namedSlot, "tenant-a", jid, url, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatalf("insert named slot row: %v", err)
+	}
+
+	for i := 0; i < 5; i++ {
+		rec, err := repo.GetDeviceRecordByJID(jid)
+		if err != nil {
+			t.Fatalf("GetDeviceRecordByJID: %v", err)
+		}
+		if rec == nil {
+			t.Fatal("expected a device record for the jid")
+		}
+		if rec.DeviceID != namedSlot {
+			t.Fatalf("expected the configured row %q to win, got %q", namedSlot, rec.DeviceID)
+		}
+		if rec.WebhookURL == nil || *rec.WebhookURL != url {
+			t.Fatalf("expected the per-device webhook %q to be resolved, got %+v", url, rec.WebhookURL)
+		}
+	}
+}

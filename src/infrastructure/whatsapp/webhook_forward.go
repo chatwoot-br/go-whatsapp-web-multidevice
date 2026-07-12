@@ -15,6 +15,7 @@ import (
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot"
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/sirupsen/logrus"
+	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 )
 
@@ -221,6 +222,42 @@ func hasAnyWebhookConsumer() bool {
 		return true
 	}
 	return anyDeviceWebhookConfigured()
+}
+
+// hasWebhookConsumerForDevice narrows hasAnyWebhookConsumer to a single device.
+// The fleet-wide answer is too coarse for the pre-payload gate: one device owning a
+// per-device webhook would otherwise admit *every* device's media messages into
+// payload construction (which downloads media to disk) only for them to be dropped
+// later, when the device turns out to have no destination of its own.
+// deviceJID is the NonAD JID the webhook payload is keyed by (payload["device_id"]).
+func hasWebhookConsumerForDevice(deviceJID string) bool {
+	if len(config.WhatsappWebhook) > 0 || config.ChatwootEnabled {
+		return true
+	}
+	if strings.TrimSpace(deviceJID) == "" {
+		// Unidentifiable device: fall back to the fleet-wide answer rather than
+		// dropping events we cannot attribute.
+		return hasAnyWebhookConsumer()
+	}
+	deviceConfig, err := getWebhookConfigForDevice(deviceJID)
+	if err != nil {
+		// A lookup failure must not silently drop events (same fail-open contract as
+		// forwardPayloadToConfiguredWebhooks, which falls back to the global config).
+		return true
+	}
+	return deviceConfig != nil && deviceConfig.WebhookURL != nil && strings.TrimSpace(*deviceConfig.WebhookURL) != ""
+}
+
+// deviceJIDForWebhook returns the key a webhook payload is attributed to for this
+// client: the NonAD JID of its own store identity. It mirrors createWebhookEvent's
+// device_id without its LID normalization, which is a no-op here — a client's own
+// Store.ID is a phone JID (@s.whatsapp.net), never an @lid — keeping the gate free
+// of any lookup on the hot event path.
+func deviceJIDForWebhook(client *whatsmeow.Client) string {
+	if client == nil || client.Store == nil || client.Store.ID == nil {
+		return ""
+	}
+	return client.Store.ID.ToNonAD().String()
 }
 
 // getDeviceRecordForTest resolves the device record, using test override if set.

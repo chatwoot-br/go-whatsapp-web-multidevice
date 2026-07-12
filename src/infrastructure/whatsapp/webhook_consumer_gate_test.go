@@ -102,6 +102,94 @@ func TestHandleWebhookForward_NoConsumers_SkipsForward(t *testing.T) {
 	}
 }
 
+// Scenario: device A owns a per-device webhook, device B owns nothing, and there is no
+// global webhook or Chatwoot. The fleet-wide gate answers "a consumer exists" for BOTH
+// (some device has one), so B's media messages would be downloaded to disk during
+// payload construction and then dropped for want of a destination. The device-scoped
+// gate must admit A and hold B.
+func TestHasWebhookConsumerForDevice_ScopesToTheDeviceNotTheFleet(t *testing.T) {
+	resetWebhookCaches()
+	defer resetWebhookCaches()
+
+	origWebhook, origChatwoot := config.WhatsappWebhook, config.ChatwootEnabled
+	config.WhatsappWebhook = nil
+	config.ChatwootEnabled = false
+	defer func() { config.WhatsappWebhook, config.ChatwootEnabled = origWebhook, origChatwoot }()
+
+	const withHook = "628123450010@s.whatsapp.net"
+	const withoutHook = "628123450011@s.whatsapp.net"
+	url := "https://tenant-a.example/hook"
+
+	origStorage := webhookStorageForTest
+	webhookStorageForTest = func(jid string) (*domainChatStorage.DeviceRecord, error) {
+		if jid == withHook {
+			return &domainChatStorage.DeviceRecord{DeviceID: jid, JID: jid, WebhookURL: &url}, nil
+		}
+		return &domainChatStorage.DeviceRecord{DeviceID: jid, JID: jid}, nil
+	}
+	defer func() { webhookStorageForTest = origStorage }()
+
+	if !hasWebhookConsumerForDevice(withHook) {
+		t.Fatal("expected the device owning the per-device webhook to be a consumer")
+	}
+	if hasWebhookConsumerForDevice(withoutHook) {
+		t.Fatal("expected a device with no destination of its own to be gated out, " +
+			"even though another device owns a webhook")
+	}
+}
+
+// The device-scoped gate keeps the global legs: a global webhook or Chatwoot is a
+// destination for every device, whatever its own config says.
+func TestHasWebhookConsumerForDevice_GlobalLegsAdmitEveryDevice(t *testing.T) {
+	resetWebhookCaches()
+	defer resetWebhookCaches()
+
+	origWebhook, origChatwoot := config.WhatsappWebhook, config.ChatwootEnabled
+	defer func() { config.WhatsappWebhook, config.ChatwootEnabled = origWebhook, origChatwoot }()
+
+	const bare = "628123450012@s.whatsapp.net"
+	origStorage := webhookStorageForTest
+	webhookStorageForTest = func(jid string) (*domainChatStorage.DeviceRecord, error) {
+		return &domainChatStorage.DeviceRecord{DeviceID: jid, JID: jid}, nil
+	}
+	defer func() { webhookStorageForTest = origStorage }()
+
+	config.WhatsappWebhook = []string{"https://example.test/hook"}
+	config.ChatwootEnabled = false
+	if !hasWebhookConsumerForDevice(bare) {
+		t.Fatal("expected the global webhook to be a consumer for a device with no own config")
+	}
+
+	config.WhatsappWebhook = nil
+	config.ChatwootEnabled = true
+	if !hasWebhookConsumerForDevice(bare) {
+		t.Fatal("expected Chatwoot to be a consumer for a device with no own config")
+	}
+}
+
+// A per-device config lookup failure must fail OPEN: dropping the event here would
+// silently lose messages for a device that may well have a webhook, which is worse than
+// building a payload that the delivery path then discards.
+func TestHasWebhookConsumerForDevice_LookupErrorFailsOpen(t *testing.T) {
+	resetWebhookCaches()
+	defer resetWebhookCaches()
+
+	origWebhook, origChatwoot := config.WhatsappWebhook, config.ChatwootEnabled
+	config.WhatsappWebhook = nil
+	config.ChatwootEnabled = false
+	defer func() { config.WhatsappWebhook, config.ChatwootEnabled = origWebhook, origChatwoot }()
+
+	origStorage := webhookStorageForTest
+	webhookStorageForTest = func(string) (*domainChatStorage.DeviceRecord, error) {
+		return nil, errors.New("database is locked")
+	}
+	defer func() { webhookStorageForTest = origStorage }()
+
+	if !hasWebhookConsumerForDevice("628123450013@s.whatsapp.net") {
+		t.Fatal("expected a lookup error to fail open rather than drop the event")
+	}
+}
+
 // hasAnyWebhookConsumer leg-by-leg: global webhook, Chatwoot, cached device webhook.
 func TestHasAnyWebhookConsumer(t *testing.T) {
 	resetWebhookCaches()

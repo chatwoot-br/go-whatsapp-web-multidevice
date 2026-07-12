@@ -373,6 +373,18 @@ func (m *DeviceManager) keepSlotLogout(ctx context.Context, deviceID string) err
 	// otherwise get matched back on restart. Idempotent when the row is already gone.
 	jid := inst.JID()
 
+	// A previous logout whose store cleanup failed already cleared the in-memory JID,
+	// so a retry would arrive here with none and silently delete nothing — leaving the
+	// orphan row that LoadExistingDevices resurrects on restart. Recover the identity
+	// from the last_jid the reset persisted precisely for this purpose.
+	if strings.TrimSpace(jid) == "" && m.storage != nil {
+		if record, err := m.storage.GetDeviceRecord(deviceID); err != nil {
+			logrus.WithError(err).Warnf("[DEVICE_MANAGER] failed to read device record for %s during logout", deviceID)
+		} else if record != nil {
+			jid = record.LastJID
+		}
+	}
+
 	var firstErr error
 	firstErr = errors.Join(firstErr, m.deleteStoreRowsForJID(ctx, jid))
 	firstErr = errors.Join(firstErr, m.resetDeviceKeepSlot(deviceID, jid))
@@ -403,11 +415,42 @@ func (m *DeviceManager) resetDeviceKeepSlot(deviceID, lastJID string) error {
 			return fmt.Errorf("persist logged-out device %s: %w", deviceID, err)
 		}
 		if strings.TrimSpace(lastJID) != "" {
+			// last_jid holds ONE retained identity, and PurgeDevice deletes chat data
+			// under it. Overwriting a different retained JID (slot logged out of account
+			// A, re-paired to B, logged out again) would strand A's conversation history
+			// in shared storage: no later purge could still name it. The slot has moved
+			// on to B, so A's retained data is unreachable by any flow and is dropped
+			// here, before the pointer to it is lost.
+			if err := m.purgeSupersededRetainedJID(deviceID, lastJID); err != nil {
+				return err
+			}
 			if err := m.storage.SetDeviceLastJID(deviceID, lastJID); err != nil {
 				return fmt.Errorf("persist last jid for logged-out device %s: %w", deviceID, err)
 			}
 		}
 	}
+	return nil
+}
+
+// purgeSupersededRetainedJID deletes the chat data retained under a previously
+// recorded last_jid when the slot is about to record a different one. A no-op when
+// the retained JID is unchanged (the common logout-retry path) or absent.
+func (m *DeviceManager) purgeSupersededRetainedJID(deviceID, newLastJID string) error {
+	record, err := m.storage.GetDeviceRecord(deviceID)
+	if err != nil {
+		return fmt.Errorf("read device record %s before retaining jid: %w", deviceID, err)
+	}
+	if record == nil {
+		return nil
+	}
+	previous := strings.TrimSpace(record.LastJID)
+	if previous == "" || previous == strings.TrimSpace(newLastJID) {
+		return nil
+	}
+	if err := m.storage.DeleteDeviceData(previous); err != nil {
+		return fmt.Errorf("purge superseded retained jid %s for device %s: %w", previous, deviceID, err)
+	}
+	logrus.Infof("[DEVICE_MANAGER] purged chat data for superseded retained jid %s on device %s", previous, deviceID)
 	return nil
 }
 

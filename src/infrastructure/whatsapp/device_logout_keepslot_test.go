@@ -250,6 +250,100 @@ func TestPurgeDevice_AfterKeepSlotLogout_DeletesRetainedJIDData(t *testing.T) {
 	}
 }
 
+// Scenario: a first logout whose store cleanup failed already cleared the in-memory JID
+// but recorded it as last_jid. The RETRY arrives with an empty inst.JID(), so without a
+// fallback it would delete nothing, report success, and leave the orphan whatsmeow row
+// that LoadExistingDevices resurrects on restart. The retry must recover the identity
+// from last_jid and actually delete the rows.
+func TestKeepSlotLogout_RetryRecoversJIDFromLastJID(t *testing.T) {
+	ctx := context.Background()
+	primaryStore := newTestSQLStore(t)
+	keysStore := newTestSQLStore(t)
+
+	adJID := types.NewADJID("6281999999998", types.WhatsAppDomain, 16)
+	nonAD := adJID.ToNonAD().String()
+	if err := newTestStoreDevice(primaryStore, adJID, "primary").Save(ctx); err != nil {
+		t.Fatalf("save primary device: %v", err)
+	}
+	if err := newTestStoreDevice(keysStore, adJID, "keys").Save(ctx); err != nil {
+		t.Fatalf("save keys device: %v", err)
+	}
+
+	// State left behind by the failed first attempt: slot kept, live JID cleared,
+	// identity retained only in last_jid, store rows still present.
+	storage := &keepSlotStubStorage{lastJIDs: map[string]string{"slot-retry": nonAD}}
+	manager := NewDeviceManager(primaryStore, keysStore, storage)
+
+	const slotID = "slot-retry"
+	manager.devices[slotID] = &DeviceInstance{id: slotID, jid: "", displayName: "tIAtendo", createdAt: time.Now()}
+
+	if err := manager.LogoutDeviceKeepSlot(ctx, slotID); err != nil {
+		t.Fatalf("logout retry returned error: %v", err)
+	}
+
+	assertStoreLacksJID(t, ctx, primaryStore, nonAD)
+	assertStoreLacksJID(t, ctx, keysStore, nonAD)
+
+	if _, ok := manager.GetDevice(slotID); !ok {
+		t.Fatal("expected slot to survive the logout retry")
+	}
+	if got := storage.lastJIDs[slotID]; got != nonAD {
+		t.Fatalf("expected last_jid %s to be retained across the retry, got %q", nonAD, got)
+	}
+}
+
+// Scenario: the slot is logged out of account A (last_jid=A), re-paired to account B,
+// then logged out again. last_jid holds ONE identity, so recording B would overwrite A
+// and strand A's retained chat data — no later purge could still name it. A's data must
+// be dropped as the pointer to it is replaced.
+func TestResetDeviceKeepSlot_PurgesSupersededRetainedJID(t *testing.T) {
+	const slotID = "slot-repaired"
+	const jidA = "6281999999801@s.whatsapp.net"
+	const jidB = "6281999999802@s.whatsapp.net"
+
+	storage := &keepSlotStubStorage{lastJIDs: map[string]string{slotID: jidA}}
+	manager := NewDeviceManager(nil, nil, storage)
+	manager.devices[slotID] = &DeviceInstance{id: slotID, jid: jidB, displayName: "tIAtendo", createdAt: time.Now()}
+
+	if err := manager.resetDeviceKeepSlot(slotID, jidB); err != nil {
+		t.Fatalf("resetDeviceKeepSlot returned error: %v", err)
+	}
+
+	deleted := map[string]bool{}
+	for _, key := range storage.deletedData {
+		deleted[key] = true
+	}
+	if !deleted[jidA] {
+		t.Fatalf("expected chat data of the superseded account %s to be purged, got %v", jidA, storage.deletedData)
+	}
+	if deleted[jidB] {
+		t.Fatalf("the newly retained account %s must keep its data (logout retains history), got %v", jidB, storage.deletedData)
+	}
+	if got := storage.lastJIDs[slotID]; got != jidB {
+		t.Fatalf("expected last_jid to advance to %s, got %q", jidB, got)
+	}
+}
+
+// The superseded-JID purge must not fire on the ordinary path: re-recording the SAME
+// retained JID (a logout retry) keeps that account's history, which keep-slot logout
+// exists to preserve.
+func TestResetDeviceKeepSlot_SameRetainedJIDKeepsData(t *testing.T) {
+	const slotID = "slot-same-jid"
+	const jid = "6281999999803@s.whatsapp.net"
+
+	storage := &keepSlotStubStorage{lastJIDs: map[string]string{slotID: jid}}
+	manager := NewDeviceManager(nil, nil, storage)
+	manager.devices[slotID] = &DeviceInstance{id: slotID, jid: jid, createdAt: time.Now()}
+
+	if err := manager.resetDeviceKeepSlot(slotID, jid); err != nil {
+		t.Fatalf("resetDeviceKeepSlot returned error: %v", err)
+	}
+
+	if len(storage.deletedData) != 0 {
+		t.Fatalf("expected no chat data deletion when the retained JID is unchanged, got %v", storage.deletedData)
+	}
+}
+
 // deleteStoreRowsForJID is a no-op for an empty JID: a slot that was never paired has no
 // store rows, and an empty JID must never scan/delete anything.
 func TestDeleteStoreRowsForJID_EmptyJIDIsNoOp(t *testing.T) {
