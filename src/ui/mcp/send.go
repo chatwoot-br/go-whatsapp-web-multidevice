@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	domainSend "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/send"
+	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	mcpHelpers "github.com/aldinokemal/go-whatsapp-web-multidevice/ui/mcp/helpers"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -73,6 +74,10 @@ func (s *SendHandler) handleSendText(ctx context.Context, request mcp.CallToolRe
 	if err != nil {
 		return nil, err
 	}
+	// Same normalization the REST handlers and the other MCP tool families (query, group)
+	// apply: a bare id has no server, so ParseJID would read a group id as a user JID and
+	// address a non-existent @s.whatsapp.net contact instead of the @g.us group.
+	utils.SanitizePhone(&phone)
 
 	message, err := request.RequireString("message")
 	if err != nil {
@@ -136,6 +141,10 @@ func (s *SendHandler) handleSendContact(ctx context.Context, request mcp.CallToo
 	if err != nil {
 		return nil, err
 	}
+	// Same normalization the REST handlers and the other MCP tool families (query, group)
+	// apply: a bare id has no server, so ParseJID would read a group id as a user JID and
+	// address a non-existent @s.whatsapp.net contact instead of the @g.us group.
+	utils.SanitizePhone(&phone)
 
 	contactName, err := request.RequireString("contact_name")
 	if err != nil {
@@ -200,6 +209,10 @@ func (s *SendHandler) handleSendLink(ctx context.Context, request mcp.CallToolRe
 	if err != nil {
 		return nil, err
 	}
+	// Same normalization the REST handlers and the other MCP tool families (query, group)
+	// apply: a bare id has no server, so ParseJID would read a group id as a user JID and
+	// address a non-existent @s.whatsapp.net contact instead of the @g.us group.
+	utils.SanitizePhone(&phone)
 
 	link, err := request.RequireString("link")
 	if err != nil {
@@ -259,6 +272,10 @@ func (s *SendHandler) handleSendLocation(ctx context.Context, request mcp.CallTo
 	if err != nil {
 		return nil, err
 	}
+	// Same normalization the REST handlers and the other MCP tool families (query, group)
+	// apply: a bare id has no server, so ParseJID would read a group id as a user JID and
+	// address a non-existent @s.whatsapp.net contact instead of the @g.us group.
+	utils.SanitizePhone(&phone)
 
 	latitude, err := request.RequireString("latitude")
 	if err != nil {
@@ -327,6 +344,10 @@ func (s *SendHandler) handleSendImage(ctx context.Context, request mcp.CallToolR
 	if err != nil {
 		return nil, err
 	}
+	// Same normalization the REST handlers and the other MCP tool families (query, group)
+	// apply: a bare id has no server, so ParseJID would read a group id as a user JID and
+	// address a non-existent @s.whatsapp.net contact instead of the @g.us group.
+	utils.SanitizePhone(&phone)
 
 	imageURL, err := request.RequireString("image_url")
 	if err != nil {
@@ -386,6 +407,10 @@ func (s *SendHandler) handleSendSticker(ctx context.Context, request mcp.CallToo
 	if err != nil {
 		return nil, err
 	}
+	// Same normalization the REST handlers and the other MCP tool families (query, group)
+	// apply: a bare id has no server, so ParseJID would read a group id as a user JID and
+	// address a non-existent @s.whatsapp.net contact instead of the @g.us group.
+	utils.SanitizePhone(&phone)
 
 	stickerURL := request.GetString("sticker_url", "")
 	if stickerURL == "" {
@@ -453,6 +478,10 @@ func (s *SendHandler) handleSendVideo(ctx context.Context, request mcp.CallToolR
 	if err != nil {
 		return nil, err
 	}
+	// Same normalization the REST handlers and the other MCP tool families (query, group)
+	// apply: a bare id has no server, so ParseJID would read a group id as a user JID and
+	// address a non-existent @s.whatsapp.net contact instead of the @g.us group.
+	utils.SanitizePhone(&phone)
 
 	videoURL, err := request.RequireString("video_url")
 	if err != nil {
@@ -516,6 +545,10 @@ func (s *SendHandler) handleSendDocument(ctx context.Context, request mcp.CallTo
 	if err != nil {
 		return nil, err
 	}
+	// Same normalization the REST handlers and the other MCP tool families (query, group)
+	// apply: a bare id has no server, so ParseJID would read a group id as a user JID and
+	// address a non-existent @s.whatsapp.net contact instead of the @g.us group.
+	utils.SanitizePhone(&phone)
 
 	fileURL, err := request.RequireString("file_url")
 	if err != nil {
@@ -574,6 +607,10 @@ func (s *SendHandler) handleSendAudio(ctx context.Context, request mcp.CallToolR
 	if err != nil {
 		return nil, err
 	}
+	// Same normalization the REST handlers and the other MCP tool families (query, group)
+	// apply: a bare id has no server, so ParseJID would read a group id as a user JID and
+	// address a non-existent @s.whatsapp.net contact instead of the @g.us group.
+	utils.SanitizePhone(&phone)
 
 	audioURL, err := request.RequireString("audio_url")
 	if err != nil {
@@ -633,6 +670,10 @@ func (s *SendHandler) handleSendPoll(ctx context.Context, request mcp.CallToolRe
 	if err != nil {
 		return nil, err
 	}
+	// Same normalization the REST handlers and the other MCP tool families (query, group)
+	// apply: a bare id has no server, so ParseJID would read a group id as a user JID and
+	// address a non-existent @s.whatsapp.net contact instead of the @g.us group.
+	utils.SanitizePhone(&phone)
 
 	question, err := request.RequireString("question")
 	if err != nil {

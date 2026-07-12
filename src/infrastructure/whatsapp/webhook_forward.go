@@ -224,14 +224,41 @@ func hasAnyWebhookConsumer() bool {
 	return anyDeviceWebhookConfigured()
 }
 
-// hasWebhookConsumerForDevice narrows hasAnyWebhookConsumer to a single device.
-// The fleet-wide answer is too coarse for the pre-payload gate: one device owning a
-// per-device webhook would otherwise admit *every* device's media messages into
-// payload construction (which downloads media to disk) only for them to be dropped
-// later, when the device turns out to have no destination of its own.
+// messageWebhookEvents are the event names handleWebhookForward can emit. The pre-payload
+// gate answers "could ANY of these reach a destination for this device" — it runs before
+// buildEventPayload has decided which one this message is.
+var messageWebhookEvents = []string{
+	EventTypeMessage,
+	EventTypeMessageReaction,
+	EventTypeMessageRevoked,
+	EventTypeMessageEdited,
+}
+
+// acceptsAnyMessageEvent reports whether the whitelist that applies to a destination
+// (a device config, or nil for the global one) admits at least one message-family event.
+func acceptsAnyMessageEvent(deviceConfig *domainChatStorage.DeviceWebhookConfig) bool {
+	for _, eventName := range messageWebhookEvents {
+		if isEventWhitelistedForDevice(eventName, deviceConfig) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasWebhookConsumerForDevice narrows hasAnyWebhookConsumer to a single device, and to the
+// message events this gate actually guards. The fleet-wide answer is too coarse for the
+// pre-payload gate — one device owning a per-device webhook would otherwise admit *every*
+// device's media messages into payload construction (which downloads media to disk) only
+// for them to be dropped later — and so is the mere existence of a URL: a device whose
+// webhook_events filters message events out (say `call.offer` only) still has a URL, but
+// nothing this path produces can ever reach it.
+//
+// It mirrors the destination selection in forwardPayloadToConfiguredWebhooks: a device
+// webhook REPLACES the global URLs for that device, so its own filter is the one that
+// decides; a device without a config falls back to the global URLs and whitelist.
 // deviceJID is the NonAD JID the webhook payload is keyed by (payload["device_id"]).
 func hasWebhookConsumerForDevice(deviceJID string) bool {
-	if len(config.WhatsappWebhook) > 0 || config.ChatwootEnabled {
+	if config.ChatwootEnabled {
 		return true
 	}
 	if strings.TrimSpace(deviceJID) == "" {
@@ -245,7 +272,10 @@ func hasWebhookConsumerForDevice(deviceJID string) bool {
 		// forwardPayloadToConfiguredWebhooks, which falls back to the global config).
 		return true
 	}
-	return deviceConfig != nil && deviceConfig.WebhookURL != nil && strings.TrimSpace(*deviceConfig.WebhookURL) != ""
+	if deviceConfig != nil && deviceConfig.WebhookURL != nil && strings.TrimSpace(*deviceConfig.WebhookURL) != "" {
+		return acceptsAnyMessageEvent(deviceConfig)
+	}
+	return len(config.WhatsappWebhook) > 0 && acceptsAnyMessageEvent(nil)
 }
 
 // deviceJIDForWebhook returns the key a webhook payload is attributed to for this

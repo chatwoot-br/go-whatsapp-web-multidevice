@@ -82,9 +82,17 @@ func (m *DeviceManager) getDeviceByJID(jid string) (*DeviceInstance, bool) {
 }
 
 // getDeviceByLastJID resolves the slot that was last paired to jid but is currently
-// logged out, by consulting the persisted last_jid. A logged-out slot has no live JID,
+// LOGGED OUT, by consulting the persisted last_jid. A logged-out slot has no live JID,
 // so getDeviceByJID cannot see it — yet callers still legitimately address it by the
 // WhatsApp JID it used to hold (DELETE /devices/{jid} after a logout).
+//
+// The "logged out" part is load-bearing, not descriptive. last_jid SURVIVES a re-pairing
+// (it must: it is the only pointer to the chat data the logout retained, which a later
+// purge still has to delete), so a slot logged out of A and since re-paired to B holds
+// jid=B *and* last_jid=A. Matching that slot for a request naming A would hand the caller
+// a live B — and `DELETE /devices/A` would then log out and destroy account B. So a match
+// counts only while the slot is genuinely logged out: empty live jid, both persisted and
+// in memory.
 func (m *DeviceManager) getDeviceByLastJID(jid string) (*DeviceInstance, bool) {
 	if m.storage == nil || strings.TrimSpace(jid) == "" {
 		return nil, false
@@ -98,9 +106,16 @@ func (m *DeviceManager) getDeviceByLastJID(jid string) (*DeviceInstance, bool) {
 		if record == nil || record.LastJID != jid {
 			continue
 		}
-		if inst, ok := m.GetDevice(record.DeviceID); ok && inst != nil {
-			return inst, true
+		// A row that still names a live account has been re-paired since the logout that
+		// wrote last_jid; it is not addressable by that stale identity.
+		if strings.TrimSpace(record.JID) != "" {
+			continue
 		}
+		inst, ok := m.GetDevice(record.DeviceID)
+		if !ok || inst == nil || strings.TrimSpace(inst.JID()) != "" {
+			continue
+		}
+		return inst, true
 	}
 	return nil, false
 }

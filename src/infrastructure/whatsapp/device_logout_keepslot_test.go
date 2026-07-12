@@ -790,3 +790,88 @@ func TestRemoveDevice_InvalidatesWebhookConfigCache(t *testing.T) {
 		t.Fatal("expected the fleet-wide webhook-exists cache to be invalidated too")
 	}
 }
+
+// P1 scenario: a slot logged out of account A (last_jid=A) is RE-PAIRED to account B, so
+// it now holds jid=B with last_jid=A still recorded (deliberately — it is the only pointer
+// to A's retained chat data). An operator who then calls DELETE /devices/A@s.whatsapp.net
+// must NOT be handed the live B slot: purging it would log out and destroy account B while
+// the caller only ever named A. A last_jid match counts only while the slot is genuinely
+// logged out.
+func TestPurgeDevice_ByStaleLastJID_DoesNotDestroyTheRepairedLiveAccount(t *testing.T) {
+	ctx := context.Background()
+	primaryStore := newTestSQLStore(t)
+
+	adB := types.NewADJID("6281999999871", types.WhatsAppDomain, 22)
+	nonADB := adB.ToNonAD().String()
+	if err := newTestStoreDevice(primaryStore, adB, "primary").Save(ctx); err != nil {
+		t.Fatalf("save store device for B: %v", err)
+	}
+
+	const slotID = "slot-repaired-live"
+	const jidA = "6281999999870@s.whatsapp.net"
+
+	// Logged out of A, since re-paired to B: live jid = B, last_jid still A.
+	storage := &keepSlotStubStorage{
+		lastJIDs:   map[string]string{slotID: jidA},
+		recordJIDs: map[string]string{slotID: nonADB},
+	}
+	manager := NewDeviceManager(primaryStore, nil, storage)
+	manager.devices[slotID] = &DeviceInstance{id: slotID, jid: nonADB, displayName: "tIAtendo", createdAt: time.Now()}
+
+	// DELETE addressed by A — the identity the slot no longer holds.
+	err := manager.PurgeDevice(ctx, jidA)
+	if err == nil {
+		// Not finding anything is the acceptable outcome; destroying B is not.
+		t.Log("purge by stale last_jid was a no-op")
+	}
+
+	if _, ok := manager.GetDevice(slotID); !ok {
+		t.Fatal("the live slot paired to account B was destroyed by a DELETE naming account A")
+	}
+	if got := manager.devices[slotID].JID(); got != nonADB {
+		t.Fatalf("expected the live slot to remain paired to B (%s), got %q", nonADB, got)
+	}
+	assertStoreHasJID(t, ctx, primaryStore, nonADB)
+	for _, id := range storage.deletedRecords {
+		if id == slotID {
+			t.Fatal("the live B slot's device record was deleted by a DELETE naming account A")
+		}
+	}
+}
+
+// assertStoreHasJID fails if no device row in the container matches the given NonAD JID.
+func assertStoreHasJID(t *testing.T, ctx context.Context, c *sqlstore.Container, nonADJID string) {
+	t.Helper()
+	devices, err := c.GetAllDevices(ctx)
+	if err != nil {
+		t.Fatalf("get all devices: %v", err)
+	}
+	for _, d := range devices {
+		if d != nil && d.ID != nil && d.ID.ToNonAD().String() == nonADJID {
+			return
+		}
+	}
+	t.Fatalf("expected the store to still contain jid %s", nonADJID)
+}
+
+// The logged-out case must keep working: with the slot actually logged out (empty live
+// jid), DELETE by its old JID still resolves and purges it.
+func TestPurgeDevice_ByLastJID_StillResolvesAGenuinelyLoggedOutSlot(t *testing.T) {
+	ctx := context.Background()
+	const slotID = "slot-still-logged-out"
+	const jidA = "6281999999872@s.whatsapp.net"
+
+	storage := &keepSlotStubStorage{
+		lastJIDs:   map[string]string{slotID: jidA},
+		recordJIDs: map[string]string{slotID: ""},
+	}
+	manager := NewDeviceManager(nil, nil, storage)
+	manager.devices[slotID] = &DeviceInstance{id: slotID, jid: "", createdAt: time.Now()}
+
+	if err := manager.PurgeDevice(ctx, jidA); err != nil {
+		t.Fatalf("PurgeDevice by last_jid returned error: %v", err)
+	}
+	if _, ok := manager.GetDevice(slotID); ok {
+		t.Fatal("expected the logged-out slot to be purged when addressed by its retained JID")
+	}
+}

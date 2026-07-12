@@ -260,3 +260,42 @@ func TestIsEventWhitelistedForDevice_EmptyDeviceEventListMeansAllEvents(t *testi
 		t.Fatal("expected the globally whitelisted event to pass for a device with no config")
 	}
 }
+
+// A device webhook whose event filter excludes the message family has a URL, but nothing
+// handleWebhookForward produces can ever reach it — so the pre-payload gate must hold,
+// instead of downloading media for a payload the whitelist then drops.
+func TestHasWebhookConsumerForDevice_HonorsTheDeviceEventFilter(t *testing.T) {
+	resetWebhookCaches()
+	defer resetWebhookCaches()
+
+	origWebhook, origChatwoot, origEvents := config.WhatsappWebhook, config.ChatwootEnabled, config.WhatsappWebhookEvents
+	config.WhatsappWebhook = nil
+	config.ChatwootEnabled = false
+	config.WhatsappWebhookEvents = nil
+	defer func() {
+		config.WhatsappWebhook, config.ChatwootEnabled, config.WhatsappWebhookEvents = origWebhook, origChatwoot, origEvents
+	}()
+
+	const callsOnly = "628123450020@s.whatsapp.net"  // webhook, but only wants call events
+	const wantsEdits = "628123450021@s.whatsapp.net" // webhook, wants a message-family event
+	url := "https://tenant.example/hook"
+
+	origStorage := webhookStorageForTest
+	webhookStorageForTest = func(jid string) (*domainChatStorage.DeviceRecord, error) {
+		switch jid {
+		case callsOnly:
+			return &domainChatStorage.DeviceRecord{DeviceID: jid, JID: jid, WebhookURL: &url, WebhookEvents: "call.offer"}, nil
+		case wantsEdits:
+			return &domainChatStorage.DeviceRecord{DeviceID: jid, JID: jid, WebhookURL: &url, WebhookEvents: "message.edited"}, nil
+		}
+		return &domainChatStorage.DeviceRecord{DeviceID: jid, JID: jid}, nil
+	}
+	defer func() { webhookStorageForTest = origStorage }()
+
+	if hasWebhookConsumerForDevice(callsOnly) {
+		t.Fatal("a device that filtered message events out must not admit message payload construction (media download)")
+	}
+	if !hasWebhookConsumerForDevice(wantsEdits) {
+		t.Fatal("a device whose filter allows a message-family event must still be a consumer")
+	}
+}
