@@ -26,6 +26,11 @@ const (
 	EventTypeMessageReaction = "message.reaction"
 	EventTypeMessageRevoked  = "message.revoked"
 	EventTypeMessageEdited   = "message.edited"
+	// EventTypeHistorySyncComplete is the fork-specific event chatwoot-app consumes to
+	// know a fresh pairing's backfill has settled. Named here so the scheduler that
+	// decides whether to arm the debounce timer and the dispatcher that publishes it
+	// agree on one string.
+	EventTypeHistorySyncComplete = "history_sync_complete"
 )
 
 // WebhookEvent is the top-level structure for webhook payloads
@@ -87,6 +92,36 @@ func createWebhookEvent(ctx context.Context, client *whatsmeow.Client, evt *even
 	webhookEvent.Payload = payload
 
 	return webhookEvent, nil
+}
+
+// ClassifyMessageEvent returns the webhook event name a message will be published under,
+// WITHOUT building its payload — the classification is pure struct inspection, while
+// payload construction downloads media to disk. That lets the pre-payload gate ask about
+// the exact event this message will become instead of guessing at the family.
+//
+// It is the single source of truth for the branching: buildEventPayload calls it, so the
+// two cannot drift apart. Keep them that way — a classifier that disagreed with the
+// builder would gate on one event name and publish another.
+func ClassifyMessageEvent(evt *events.Message) string {
+	if evt == nil {
+		return EventTypeMessage
+	}
+	msg := utils.UnwrapMessage(evt.Message)
+	if msg == nil {
+		return EventTypeMessage
+	}
+	if protocolMessage := msg.GetProtocolMessage(); protocolMessage != nil {
+		switch protocolMessage.GetType().String() {
+		case "REVOKE":
+			return EventTypeMessageRevoked
+		case "MESSAGE_EDIT":
+			return EventTypeMessageEdited
+		}
+	}
+	if msg.GetReactionMessage() != nil {
+		return EventTypeMessageReaction
+	}
+	return EventTypeMessage
 }
 
 func buildEventPayload(ctx context.Context, client *whatsmeow.Client, evt *events.Message, chatStorageRepo domainChatStorage.IChatStorageRepository) (string, map[string]any, error) {

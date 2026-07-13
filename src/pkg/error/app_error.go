@@ -67,11 +67,33 @@ func (err sessionSavedError) StatusCode() int {
 	return http.StatusInternalServerError
 }
 
+type notFoundError string
+
+func (err notFoundError) Error() string {
+	return string(err)
+}
+
+// ErrCode will return the error code based on the error data type
+func (err notFoundError) ErrCode() string {
+	return "NOT_FOUND"
+}
+
+// StatusCode will return the HTTP status code based on the error data type
+func (err notFoundError) StatusCode() int {
+	return http.StatusNotFound
+}
+
 var (
 	ErrAlreadyLoggedIn = LoginError("you are already logged in.")
 	ErrNotConnected    = AuthError("you are not connect to services server, please reconnect")
 	ErrNotLoggedIn     = AuthError("you are not logged in")
 	ErrReconnect       = AuthError("reconnect error")
-	ErrQrChannel       = qrChannelError("QR channel error")
-	ErrSessionSaved    = sessionSavedError("your session have been saved, please wait to connect 2 second and refresh again")
+	// ErrSessionDeleted marks a device slot whose WhatsApp session is gone (remote or
+	// explicit logout). Reconnect cannot recover it — only a new pairing can — so
+	// callers should surface the re-login path (QR via /app/login or pair code)
+	// instead of retrying the connection.
+	ErrSessionDeleted = AuthError("device is logged out (session deleted); re-pair it via GET /app/login (QR) or GET /app/login-with-code")
+	ErrQrChannel      = qrChannelError("QR channel error")
+	ErrSessionSaved   = sessionSavedError("your session have been saved, please wait to connect 2 second and refresh again")
+	ErrDeviceNotFound = notFoundError("device not found")
 )

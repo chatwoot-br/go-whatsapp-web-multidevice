@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
@@ -14,6 +15,7 @@ import (
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/chatwoot"
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/sirupsen/logrus"
+	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 )
 
@@ -85,12 +87,35 @@ func getContactMutex(phone string) *sync.Mutex {
 // It only returns an error when all webhook deliveries fail. Partial failures are logged and suppressed so
 // successful targets still receive the event.
 func forwardPayloadToConfiguredWebhooks(ctx context.Context, payload map[string]any, eventName string) error {
-	webhookAllowed := len(config.WhatsappWebhookEvents) == 0 || isEventWhitelisted(eventName)
+	// Nothing can deliver this event — skip enrichment, whitelist checks, and the
+	// per-event "Forwarding to 0 webhooks" log line entirely.
+	if !hasAnyWebhookConsumer() {
+		return nil
+	}
+
+	deviceJID, _ := payload["device_id"].(string)
+	webhookConfig, err := getWebhookConfigForDevice(deviceJID)
+	if err != nil {
+		// A config lookup failure is not a delivery failure: fall back to the global
+		// webhook config so the event still reaches the global targets and Chatwoot.
+		// (getWebhookConfigForDevice already served the last-known device config when
+		// it had one cached, so this branch means we have no knowledge of a device
+		// override at all.)
+		logrus.Warnf("Failed to get webhook config for device %s, falling back to global config: %v", deviceJID, err)
+		webhookConfig = nil
+	}
+
+	webhookAllowed := isEventWhitelistedForDevice(eventName, webhookConfig)
 	chatwootAllowed := config.ChatwootEnabled && shouldForwardEventToChatwoot(eventName) && isEventWhitelistedForChatwoot(eventName)
 
 	if !webhookAllowed && !chatwootAllowed {
 		logrus.Debugf("Skipping event %s - not allowed for webhooks or Chatwoot", eventName)
 		return nil
+	}
+
+	webhookURLs := getWebhookURLsFromConfig(webhookConfig)
+	if len(webhookURLs) == 0 {
+		webhookURLs = config.WhatsappWebhook
 	}
 
 	// Enrich the payload with the operator-facing session id so multi-tenant
@@ -102,9 +127,9 @@ func forwardPayloadToConfiguredWebhooks(ctx context.Context, payload map[string]
 		addWebhookSessionID(payload)
 	}
 
-	var err error
+	var webhookErr error
 	if webhookAllowed {
-		err = forwardToWebhooks(ctx, payload, eventName)
+		webhookErr = forwardToWebhooks(ctx, payload, eventName, webhookURLs, webhookConfig)
 	} else {
 		logrus.Debugf("Skipping event %s for configured webhooks, but allowing Chatwoot", eventName)
 	}
@@ -113,7 +138,257 @@ func forwardPayloadToConfiguredWebhooks(ctx context.Context, payload map[string]
 		go forwardToChatwoot(ctx, payload, eventName)
 	}
 
-	return err
+	return webhookErr
+}
+
+// webhookStorageForTest is injectable for unit testing without a real DeviceManager.
+var webhookStorageForTest func(deviceJID string) (*domainChatStorage.DeviceRecord, error)
+
+// deviceWebhookConfigCacheEntry caches a device's resolved webhook config — including
+// the common "no device webhook" nil result — so the per-event lookup does not hit the
+// devices table. That query runs for every forwarded event (messages, receipts, typing)
+// on the chatstorage pool, which is capped at MaxOpenConns=1, so an uncached lookup
+// head-of-line queues against message writes under bursts.
+type deviceWebhookConfigCacheEntry struct {
+	config    *domainChatStorage.DeviceWebhookConfig
+	expiresAt time.Time
+}
+
+var (
+	deviceWebhookConfigCache    sync.Map
+	deviceWebhookConfigCacheTTL = 30 * time.Second
+)
+
+// InvalidateDeviceWebhookConfigCache drops all cached device webhook configs. Called
+// after a device webhook config write so the change applies on the next event rather
+// than after the TTL. Writes are rare, so clearing the whole cache is fine.
+func InvalidateDeviceWebhookConfigCache() {
+	deviceWebhookConfigCache.Clear()
+	// atomic.Value cannot store nil: an entry with a zero expiry reads as expired.
+	anyDeviceWebhookCache.Store(&anyDeviceWebhookEntry{})
+}
+
+// anyDeviceWebhookCache holds a *anyDeviceWebhookEntry; an expired (or absent)
+// entry means "not computed".
+var anyDeviceWebhookCache atomic.Value
+
+type anyDeviceWebhookEntry struct {
+	exists    bool
+	expiresAt time.Time
+}
+
+// anyDeviceWebhookConfigured reports whether ANY device row has a webhook URL set,
+// TTL-cached so the check is a single atomic load on the hot path. It is the
+// per-device leg of hasAnyWebhookConsumer; a false negative here would drop
+// device-webhook deliveries, so on a scan error it conservatively returns true.
+func anyDeviceWebhookConfigured() bool {
+	if entry, _ := anyDeviceWebhookCache.Load().(*anyDeviceWebhookEntry); entry != nil && time.Now().Before(entry.expiresAt) {
+		return entry.exists
+	}
+
+	dm := GetDeviceManager()
+	if dm == nil || dm.storage == nil {
+		return false
+	}
+	records, err := dm.storage.ListDeviceRecords()
+	if err != nil {
+		logrus.WithError(err).Warn("Failed to scan devices for webhook configs; assuming one exists")
+		// Cache the conservative answer too: a persistently failing scan must not
+		// re-run per event on the single-connection pool.
+		anyDeviceWebhookCache.Store(&anyDeviceWebhookEntry{exists: true, expiresAt: time.Now().Add(deviceWebhookConfigCacheTTL)})
+		return true
+	}
+	exists := false
+	for _, rec := range records {
+		if rec != nil && rec.WebhookURL != nil && *rec.WebhookURL != "" {
+			exists = true
+			break
+		}
+	}
+	anyDeviceWebhookCache.Store(&anyDeviceWebhookEntry{exists: exists, expiresAt: time.Now().Add(deviceWebhookConfigCacheTTL)})
+	return exists
+}
+
+// hasAnyWebhookConsumer reports whether any consumer (global webhook, Chatwoot, or a
+// per-device webhook) could receive a forwarded event. Event handlers check it before
+// building payloads: payload construction downloads media to disk, so on deployments
+// with no consumers at all the old pre-#671 zero-cost fast path is restored here.
+func hasAnyWebhookConsumer() bool {
+	if len(config.WhatsappWebhook) > 0 || config.ChatwootEnabled {
+		return true
+	}
+	if webhookStorageForTest != nil {
+		// Test seam active: a stubbed device lookup implies device webhooks exist.
+		return true
+	}
+	return anyDeviceWebhookConfigured()
+}
+
+// hasWebhookConsumerForEvent reports whether a specific event, from a specific device, has
+// any destination at all. It is the pre-payload gate: payload construction downloads media
+// to disk, so a message that no destination will accept must not reach it.
+//
+// The answer must mirror forwardPayloadToConfiguredWebhooks' own decision exactly — that
+// function drops the event unless `webhookAllowed || chatwootAllowed`, so anything this
+// gate admits that it then drops is media downloaded for nothing:
+//
+//   - Chatwoot is a consumer only for the events it actually mirrors (shouldForwardEventToChatwoot)
+//     and only within the global whitelist (isEventWhitelistedForChatwoot) — "Chatwoot is on"
+//     alone is not enough.
+//   - A device webhook REPLACES the global URLs for that device, so its own whitelist decides;
+//     a device with no config of its own falls back to the global URLs and whitelist.
+//
+// deviceJID is the NonAD JID the payload is keyed by (payload["device_id"]); eventName is
+// the event the message will publish as, from ClassifyMessageEvent — the exact name, not a
+// family, so a filter admitting only `message.reaction` no longer pulls ordinary messages
+// (and their media) into payload construction.
+func hasWebhookConsumerForEvent(deviceJID, eventName string) bool {
+	if config.ChatwootEnabled && shouldForwardEventToChatwoot(eventName) && isEventWhitelistedForChatwoot(eventName) {
+		return true
+	}
+	if strings.TrimSpace(deviceJID) == "" {
+		// Unidentifiable device: fall back to the fleet-wide answer rather than
+		// dropping events we cannot attribute.
+		return hasAnyWebhookConsumer()
+	}
+	deviceConfig, err := getWebhookConfigForDevice(deviceJID)
+	if err != nil {
+		// A lookup failure must not silently drop events (same fail-open contract as
+		// forwardPayloadToConfiguredWebhooks, which falls back to the global config).
+		return true
+	}
+	if deviceConfig != nil && deviceConfig.WebhookURL != nil && strings.TrimSpace(*deviceConfig.WebhookURL) != "" {
+		return isEventWhitelistedForDevice(eventName, deviceConfig)
+	}
+	return len(config.WhatsappWebhook) > 0 && isEventWhitelistedForDevice(eventName, nil)
+}
+
+// deviceJIDForWebhook returns the key a webhook payload is attributed to for this
+// client: the NonAD JID of its own store identity. It mirrors createWebhookEvent's
+// device_id without its LID normalization, which is a no-op here — a client's own
+// Store.ID is a phone JID (@s.whatsapp.net), never an @lid — keeping the gate free
+// of any lookup on the hot event path.
+func deviceJIDForWebhook(client *whatsmeow.Client) string {
+	if client == nil || client.Store == nil || client.Store.ID == nil {
+		return ""
+	}
+	return client.Store.ID.ToNonAD().String()
+}
+
+// getDeviceRecordForTest resolves the device record, using test override if set.
+//
+// Two shapes of row can hold a device's webhook, so a lookup by the `jid` column alone is
+// not enough. An auto-created slot is keyed BY the JID (device_id = "<jid>"), and
+// handleConnectionEvents deliberately skips persisting the `jid` column for ids containing
+// "@" (it would recreate deleted duplicates) — so such a row can sit at
+// device_id=<jid>, jid=”. If a webhook was configured on it before first pairing, a
+// by-jid lookup finds nothing and the device silently falls through to the global/no-op
+// path. Fall back to the slot-id lookup, which is what actually keys that row.
+func getDeviceRecordForTest(deviceJID string) (*domainChatStorage.DeviceRecord, error) {
+	if webhookStorageForTest != nil {
+		return webhookStorageForTest(deviceJID)
+	}
+	dm := GetDeviceManager()
+	if dm == nil || dm.storage == nil {
+		return nil, nil
+	}
+	record, err := dm.storage.GetDeviceRecordByJID(deviceJID)
+	if err != nil {
+		return nil, err
+	}
+	if record != nil {
+		return record, nil
+	}
+	return dm.storage.GetDeviceRecord(deviceJID)
+}
+
+// getWebhookConfigForDevice returns the webhook configuration to use for a given device.
+// If the device has a custom webhook config, it returns that config.
+// Otherwise, it returns nil (caller should use global config).
+func getWebhookConfigForDevice(deviceJID string) (*domainChatStorage.DeviceWebhookConfig, error) {
+	if deviceJID == "" {
+		return nil, nil
+	}
+
+	// Cache both hits and nil results; bypass when the test seam is active so
+	// stubbed lookups stay deterministic across tests. Errors are never cached —
+	// the caller's fall-back-to-global keeps its retry-on-next-event semantics.
+	// Expired entries are kept (overwritten on the next successful refresh) so a
+	// lookup error can fall back to the last-known config below.
+	useCache := webhookStorageForTest == nil
+	if useCache {
+		if entry, ok := deviceWebhookConfigCache.Load(deviceJID); ok {
+			cached := entry.(deviceWebhookConfigCacheEntry)
+			if time.Now().Before(cached.expiresAt) {
+				return cached.config, nil
+			}
+		}
+	}
+
+	record, err := getDeviceRecordForTest(deviceJID)
+	if err != nil {
+		// Serve the last-known config (even expired) rather than erroring: the
+		// caller's error path falls back to the GLOBAL webhook, and for a device
+		// that had a webhook override that would divert its events to a different
+		// consumer on a transient storage hiccup. Checked regardless of the test
+		// seam so the grace path is testable.
+		if entry, ok := deviceWebhookConfigCache.Load(deviceJID); ok {
+			cached := entry.(deviceWebhookConfigCacheEntry)
+			logrus.Warnf("Device webhook config lookup failed for %s; serving last-known config: %v", deviceJID, err)
+			return cached.config, nil
+		}
+		return nil, fmt.Errorf("failed to get device record: %w", err)
+	}
+
+	var webhookConfig *domainChatStorage.DeviceWebhookConfig
+	if record != nil && record.WebhookURL != nil && *record.WebhookURL != "" {
+		logrus.Debugf("Using device-specific webhook config for %s", deviceJID)
+		webhookConfig = &domainChatStorage.DeviceWebhookConfig{
+			WebhookURL:                record.WebhookURL,
+			WebhookSecret:             record.WebhookSecret,
+			WebhookEvents:             record.WebhookEvents,
+			WebhookInsecureSkipVerify: record.WebhookInsecureSkipVerify,
+		}
+	}
+
+	if useCache {
+		deviceWebhookConfigCache.Store(deviceJID, deviceWebhookConfigCacheEntry{
+			config:    webhookConfig,
+			expiresAt: time.Now().Add(deviceWebhookConfigCacheTTL),
+		})
+	}
+	return webhookConfig, nil
+}
+
+// getWebhookURLsFromConfig extracts webhook URLs from the config.
+func getWebhookURLsFromConfig(config *domainChatStorage.DeviceWebhookConfig) []string {
+	if config == nil || config.WebhookURL == nil || *config.WebhookURL == "" {
+		return nil
+	}
+	return []string{*config.WebhookURL}
+}
+
+// isEventWhitelistedForDevice checks if an event is whitelisted for a specific device.
+// A device webhook config owns its own filter: an explicit list allows exactly those
+// events, and an EMPTY list means all events — the semantics openapi.yaml documents, and
+// the same "empty = no filter" rule the global whitelist follows. Inheriting the global
+// WHATSAPP_WEBHOOK_EVENTS list here instead would silently drop event types (receipts,
+// calls, groups) from a device webhook that asked for no filter at all, on any deployment
+// that globally restricts events. Only a device with NO webhook config of its own
+// (deviceConfig == nil) falls back to the global whitelist.
+func isEventWhitelistedForDevice(eventName string, deviceConfig *domainChatStorage.DeviceWebhookConfig) bool {
+	if deviceConfig != nil {
+		if strings.TrimSpace(deviceConfig.WebhookEvents) == "" {
+			return true
+		}
+		for _, allowed := range strings.Split(deviceConfig.WebhookEvents, ",") {
+			if strings.EqualFold(strings.TrimSpace(allowed), eventName) {
+				return true
+			}
+		}
+		return false
+	}
+	return len(config.WhatsappWebhookEvents) == 0 || isEventWhitelisted(eventName)
 }
 
 // addWebhookSessionID injects the operator-facing session id into a webhook
@@ -151,8 +426,11 @@ func sessionIDForJID(jid string) string {
 	return ""
 }
 
-func forwardToWebhooks(ctx context.Context, payload map[string]any, eventName string) error {
-	total := len(config.WhatsappWebhook)
+// forwardToWebhooks delivers the payload to each URL in the webhookURLs slice.
+// It logs successes and failures, returning an error only if all deliveries fail.
+// Partial failures (some succeed, some fail) are logged but do not cause a return error.
+func forwardToWebhooks(ctx context.Context, payload map[string]any, eventName string, webhookURLs []string, webhookConfig *domainChatStorage.DeviceWebhookConfig) error {
+	total := len(webhookURLs)
 	logrus.Infof("Forwarding %s to %d configured webhook(s)", eventName, total)
 
 	if total == 0 {
@@ -163,8 +441,8 @@ func forwardToWebhooks(ctx context.Context, payload map[string]any, eventName st
 		failed    []string
 		successes int
 	)
-	for _, url := range config.WhatsappWebhook {
-		if err := submitWebhookFn(ctx, payload, url); err != nil {
+	for _, url := range webhookURLs {
+		if err := submitWebhookFn(ctx, payload, url, webhookConfig); err != nil {
 			failed = append(failed, fmt.Sprintf("%s: %v", url, err))
 			logrus.Warnf("Failed forwarding %s to %s: %v", eventName, url, err)
 			continue
@@ -226,6 +504,13 @@ func extractChatwootContactInfo(ctx context.Context, data map[string]any) (*chat
 	// here for both incoming and outgoing flows.
 	if utils.IsSystemBroadcastJID(chatID) || utils.IsSystemBroadcastJID(from) {
 		return nil, fmt.Errorf("skipping system/broadcast JID chat=%s from=%s", chatID, from)
+	}
+
+	// Channel (newsletter) feeds are broadcast-only: no conversation for an
+	// agent, and the channel id is not a phone number — relaying one would
+	// fail Chatwoot contact creation with a 422 e164 error.
+	if utils.IsNewsletterJID(chatID) || utils.IsNewsletterJID(from) {
+		return nil, fmt.Errorf("skipping newsletter JID chat=%s from=%s", chatID, from)
 	}
 
 	// Operator-configured ignore list (CHATWOOT_IGNORE_JIDS) on top of the

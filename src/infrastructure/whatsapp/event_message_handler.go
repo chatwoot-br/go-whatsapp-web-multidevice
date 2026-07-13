@@ -163,14 +163,31 @@ func handleWebhookForward(ctx context.Context, evt *events.Message, chatStorageR
 		}
 	}
 
-	if (len(config.WhatsappWebhook) > 0 || config.ChatwootEnabled) &&
-		!strings.Contains(evt.Info.SourceString(), "broadcast") {
-		go func(e *events.Message, repo domainChatStorage.IChatStorageRepository, c *whatsmeow.Client) {
-			webhookCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if err := forwardMessageToWebhook(webhookCtx, c, e, repo); err != nil {
-				logrus.Error("Failed forward to webhook: ", err)
-			}
-		}(evt, chatStorageRepo, client)
+	// Broadcast/status messages are never forwarded, regardless of Chatwoot:
+	// the Chatwoot pipeline rejects status@broadcast (a relayed status post
+	// would only spawn a noise "Status" contact), and plain webhook consumers
+	// must not receive broadcast noise just because Chatwoot is enabled.
+	if strings.Contains(evt.Info.SourceString(), "broadcast") {
+		return
 	}
+
+	// Gate BEFORE payload construction, not just before delivery: building the
+	// message payload downloads media to disk (the webhook path is the only
+	// downloader of non-image media), so a message no destination will accept must
+	// not start the goroutine. Classifying the event is pure struct inspection, so
+	// the gate can ask about THIS device and THIS exact event — not a family, and
+	// not the fleet.
+	if !hasWebhookConsumerForEvent(deviceJIDForWebhook(client), ClassifyMessageEvent(evt)) {
+		return
+	}
+
+	// Forward to webhook if any webhook is configured (global or per-device)
+	// The forwardPayloadToConfiguredWebhooks function itself handles the no-op case
+	go func(e *events.Message, repo domainChatStorage.IChatStorageRepository, c *whatsmeow.Client) {
+		webhookCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := forwardMessageToWebhook(webhookCtx, c, e, repo); err != nil {
+			logrus.Error("Failed forward to webhook: ", err)
+		}
+	}(evt, chatStorageRepo, client)
 }

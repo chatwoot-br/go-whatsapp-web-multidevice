@@ -14,6 +14,7 @@ import (
 	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
 	domainDevice "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/device"
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/types"
 	"golang.org/x/net/proxy"
 )
 
@@ -27,9 +28,18 @@ type DeviceInstance struct {
 	displayName     string
 	phoneNumber     string
 	jid             string
-	proxyIP         string
-	createdAt       time.Time
-	onLoggedOut     func(deviceID string) // Callback for remote logout cleanup
+	// lastJID mirrors devices.last_jid: the account a LOGGED-OUT slot still belongs to.
+	// It is what distinguishes such a slot from a never-paired placeholder — both have an
+	// empty live jid, but only the placeholder may adopt an unmatched store row on boot.
+	lastJID     string
+	proxyIP     string
+	createdAt   time.Time
+	onLoggedOut func(deviceID string) // Callback for remote logout cleanup
+
+	// Pending passkey pairing state, populated by PairPasskey* events during login.
+	passkeyChallenge     *types.WebAuthnPublicKey
+	passkeyCode          string
+	passkeySkipHandoffUX bool
 }
 
 func NewDeviceInstance(deviceID string, client *whatsmeow.Client, chatStorageRepo domainChatStorage.IChatStorageRepository) *DeviceInstance {
@@ -110,6 +120,36 @@ func (d *DeviceInstance) SetClient(client *whatsmeow.Client) {
 	d.state = domainDevice.DeviceStateDisconnected
 }
 
+// ResetClient detaches the WhatsApp client and clears the session-derived identity
+// (jid, phone number) so the slot can be re-paired with a fresh client on the next
+// login. The device id, display name and creation time are preserved, keeping the
+// slot in place after a logout.
+func (d *DeviceInstance) ResetClient() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.client = nil
+	d.jid = ""
+	d.phoneNumber = ""
+	d.state = domainDevice.DeviceStateDisconnected
+}
+
+// LastJID returns the JID this slot was last paired to, retained through a keep-slot
+// logout (which clears the live jid). A non-empty value means "logged out, but this slot
+// belongs to that account" — as opposed to a never-paired placeholder, which has neither.
+func (d *DeviceInstance) LastJID() string {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.lastJID
+}
+
+// SetLastJID records the retained identity of a logged-out slot, mirroring the persisted
+// devices.last_jid column in memory.
+func (d *DeviceInstance) SetLastJID(jid string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lastJID = jid
+}
+
 // SetChatStorage swaps the chat storage repository for this device.
 func (d *DeviceInstance) SetChatStorage(repo domainChatStorage.IChatStorageRepository) {
 	d.mu.Lock()
@@ -164,21 +204,71 @@ func (d *DeviceInstance) refreshIdentityLocked() {
 	}
 }
 
+// SetPasskeyChallenge stores a pending WebAuthn challenge and clears any previous confirmation code.
+func (d *DeviceInstance) SetPasskeyChallenge(pk *types.WebAuthnPublicKey) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.passkeyChallenge = pk
+	d.passkeyCode = ""
+	d.passkeySkipHandoffUX = false
+}
+
+// SetPasskeyConfirmation stores the pairing confirmation code and clears the pending challenge.
+func (d *DeviceInstance) SetPasskeyConfirmation(code string, skipHandoffUX bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.passkeyChallenge = nil
+	d.passkeyCode = code
+	d.passkeySkipHandoffUX = skipHandoffUX
+}
+
+// PasskeyState returns the pending challenge, confirmation code and skip-handoff flag.
+func (d *DeviceInstance) PasskeyState() (*types.WebAuthnPublicKey, string, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.passkeyChallenge, d.passkeyCode, d.passkeySkipHandoffUX
+}
+
+// ClearPasskeyState resets all pending passkey pairing state.
+func (d *DeviceInstance) ClearPasskeyState() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.passkeyChallenge = nil
+	d.passkeyCode = ""
+	d.passkeySkipHandoffUX = false
+}
+
+// ClearPasskeyChallenge retires a consumed WebAuthn challenge WITHOUT touching the
+// confirmation code. Callers that have just submitted the assertion must use this rather
+// than ClearPasskeyState: PairPasskeyConfirmation can arrive before the submit call
+// returns, and wiping all state would then discard the confirmation code that has already
+// landed — leaving the pairing with no visible pending status and no code to confirm with.
+func (d *DeviceInstance) ClearPasskeyChallenge() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.passkeyChallenge = nil
+}
+
 func (d *DeviceInstance) SetOnLoggedOut(callback func(deviceID string)) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.onLoggedOut = callback
 }
 
-func (d *DeviceInstance) TriggerLoggedOut() {
+// TriggerLoggedOut invokes the registered logout callback and reports whether one
+// was wired — callers use a false return to run the cleanup themselves, so registry
+// reconciliation never silently depends on in-memory wiring.
+func (d *DeviceInstance) TriggerLoggedOut() bool {
 	d.mu.RLock()
 	callback := d.onLoggedOut
 	deviceID := d.id
 	d.mu.RUnlock()
 
-	if callback != nil {
-		callback(deviceID)
+	if callback == nil {
+		return false
 	}
+	callback(deviceID)
+	return true
 }
 
 // ProxyIP returns the cached external IP address when using a proxy.

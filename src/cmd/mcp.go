@@ -42,6 +42,11 @@ func mcpServer(_ *cobra.Command, _ []string) {
 		config.AppVersion,
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, true),
+		// The usecase layer signals auth failures by panicking (MustLogin →
+		// pkgError.ErrNotConnected/ErrNotLoggedIn), a convention REST recovers in
+		// its Recovery middleware. Without recovery here, one such panic in a tool
+		// handler kills the whole process and every device session with it.
+		server.WithRecovery(),
 	)
 
 	// Add all WhatsApp tools

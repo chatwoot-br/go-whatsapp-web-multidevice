@@ -333,17 +333,21 @@ func ValidateAndNormalizeJID(client *whatsmeow.Client, jid string) (types.JID, e
 		jid = resolved.String()
 	}
 
-	// For non-user JIDs (groups, newsletters), skip normalization.
-	if !strings.Contains(jid, "@s.whatsapp.net") {
-		return ParseJID(jid)
-	}
-
 	// If no client provided, fall back to simple parsing.
 	if client == nil {
 		return ParseJID(jid)
 	}
 
+	// Login is gated before the non-user-JID early return: every caller uses the
+	// client right after this call, and gating here keeps a disconnected client
+	// surfacing as a clean 401 (matching upstream's ValidateJidWithLogin) instead
+	// of a raw 500 from deep inside whatsmeow on group/newsletter endpoints.
 	MustLogin(client)
+
+	// For non-user JIDs (groups, newsletters), skip normalization.
+	if !strings.Contains(jid, "@s.whatsapp.net") {
+		return ParseJID(jid)
+	}
 
 	// The phone-extraction → BR/E.164 normalization → probe → classify tail lives
 	// in resolveUserJID (testable via the onWhatsAppProber seam). context.Background

@@ -28,7 +28,7 @@ func forwardHistorySyncCompleteToWebhook(ctx context.Context, client *whatsmeow.
 	}
 
 	payload := map[string]any{
-		"event":     "history_sync_complete",
+		"event":     EventTypeHistorySyncComplete,
 		"device_id": deviceID,
 		"payload": map[string]any{
 			"sync_type": syncType,
@@ -36,7 +36,7 @@ func forwardHistorySyncCompleteToWebhook(ctx context.Context, client *whatsmeow.
 		},
 	}
 
-	if err := forwardPayloadToConfiguredWebhooks(ctx, payload, "history_sync_complete"); err != nil {
+	if err := forwardPayloadToConfiguredWebhooks(ctx, payload, EventTypeHistorySyncComplete); err != nil {
 		log.Errorf("Failed to forward history_sync_complete webhook: %v", err)
 	}
 }

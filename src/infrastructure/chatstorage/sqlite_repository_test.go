@@ -361,6 +361,63 @@ func TestSQLiteRepositoryInitializesMessageReactionsSchema(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepositoryGetsDeviceWebhookConfigByJID(t *testing.T) {
+	repo := newTestSQLiteRepository(t)
+
+	webhookURL := "https://device-webhook.example.com"
+	if err := repo.SaveDeviceRecord(&domainChatStorage.DeviceRecord{
+		DeviceID:    "session-a",
+		DisplayName: "Session A",
+		JID:         "628123456789@s.whatsapp.net",
+	}); err != nil {
+		t.Fatalf("save device record: %v", err)
+	}
+
+	if err := repo.SetDeviceWebhookConfig("session-a", &domainChatStorage.DeviceWebhookConfig{
+		WebhookURL:                &webhookURL,
+		WebhookSecret:             "device-secret",
+		WebhookEvents:             "message,message.ack",
+		WebhookInsecureSkipVerify: true,
+	}); err != nil {
+		t.Fatalf("set device webhook config: %v", err)
+	}
+
+	record, err := repo.GetDeviceRecordByJID("628123456789@s.whatsapp.net")
+	if err != nil {
+		t.Fatalf("get device record by jid: %v", err)
+	}
+	if record == nil {
+		t.Fatal("expected device record")
+	}
+	if record.DeviceID != "session-a" {
+		t.Fatalf("expected session-a, got %q", record.DeviceID)
+	}
+	if record.WebhookURL == nil || *record.WebhookURL != webhookURL {
+		t.Fatalf("expected webhook URL %q, got %v", webhookURL, record.WebhookURL)
+	}
+	if record.WebhookSecret != "device-secret" {
+		t.Fatalf("expected device secret, got %q", record.WebhookSecret)
+	}
+	if record.WebhookEvents != "message,message.ack" {
+		t.Fatalf("expected webhook events, got %q", record.WebhookEvents)
+	}
+	if !record.WebhookInsecureSkipVerify {
+		t.Fatal("expected insecure skip verify to be true")
+	}
+}
+
+func TestSQLiteRepositorySetDeviceWebhookConfigReturnsErrNoRowsForMissingDevice(t *testing.T) {
+	repo := newTestSQLiteRepository(t)
+
+	webhookURL := "https://device-webhook.example.com"
+	err := repo.SetDeviceWebhookConfig("missing-device", &domainChatStorage.DeviceWebhookConfig{
+		WebhookURL: &webhookURL,
+	})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected sql.ErrNoRows for missing device, got %v", err)
+	}
+}
+
 func TestSQLiteRepositoryStoresUpdatesRemovesAndHydratesReactions(t *testing.T) {
 	repo := newTestSQLiteRepository(t)
 	deviceID := "device-a@s.whatsapp.net"
@@ -651,4 +708,44 @@ func countMessageReactions(t *testing.T, repo *SQLiteRepository) int {
 		t.Fatalf("count message reactions: %v", err)
 	}
 	return count
+}
+
+// Scenario: two device rows share one JID — a legacy auto-created row (device_id = the
+// JID, no webhook) alongside the named slot row that actually carries the per-device
+// webhook. With an unordered LIMIT 1, SQLite may return either, so the configured
+// device would intermittently resolve to the config-less row and have its events
+// diverted to the global webhook. The configured row must win, deterministically.
+func TestGetDeviceRecordByJID_PrefersConfiguredRowOverLegacyDuplicate(t *testing.T) {
+	repo, db := newTestRepo(t)
+
+	const jid = "6289605618749@s.whatsapp.net"
+	const namedSlot = "tenant-a"
+	url := "https://tenant-a.example/hook"
+
+	// Legacy row first and most recently updated: it would win on both insertion
+	// order and a naive recency tiebreak.
+	if _, err := db.Exec(`INSERT INTO devices (device_id, display_name, jid, updated_at)
+		VALUES (?, ?, ?, ?)`, jid, "legacy", jid, time.Now()); err != nil {
+		t.Fatalf("insert legacy device row: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO devices (device_id, display_name, jid, webhook_url, updated_at)
+		VALUES (?, ?, ?, ?, ?)`, namedSlot, "tenant-a", jid, url, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatalf("insert named slot row: %v", err)
+	}
+
+	for i := 0; i < 5; i++ {
+		rec, err := repo.GetDeviceRecordByJID(jid)
+		if err != nil {
+			t.Fatalf("GetDeviceRecordByJID: %v", err)
+		}
+		if rec == nil {
+			t.Fatal("expected a device record for the jid")
+		}
+		if rec.DeviceID != namedSlot {
+			t.Fatalf("expected the configured row %q to win, got %q", namedSlot, rec.DeviceID)
+		}
+		if rec.WebhookURL == nil || *rec.WebhookURL != url {
+			t.Fatalf("expected the per-device webhook %q to be resolved, got %+v", url, rec.WebhookURL)
+		}
+	}
 }
