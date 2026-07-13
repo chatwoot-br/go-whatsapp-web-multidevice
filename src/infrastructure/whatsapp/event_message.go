@@ -26,6 +26,11 @@ const (
 	EventTypeMessageReaction = "message.reaction"
 	EventTypeMessageRevoked  = "message.revoked"
 	EventTypeMessageEdited   = "message.edited"
+	// EventTypeHistorySyncComplete is the fork-specific event chatwoot-app consumes to
+	// know a fresh pairing's backfill has settled. Named here so the scheduler that
+	// decides whether to arm the debounce timer and the dispatcher that publishes it
+	// agree on one string.
+	EventTypeHistorySyncComplete = "history_sync_complete"
 )
 
 // WebhookEvent is the top-level structure for webhook payloads

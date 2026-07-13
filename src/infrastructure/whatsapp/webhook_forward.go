@@ -276,15 +276,30 @@ func deviceJIDForWebhook(client *whatsmeow.Client) string {
 }
 
 // getDeviceRecordForTest resolves the device record, using test override if set.
+//
+// Two shapes of row can hold a device's webhook, so a lookup by the `jid` column alone is
+// not enough. An auto-created slot is keyed BY the JID (device_id = "<jid>"), and
+// handleConnectionEvents deliberately skips persisting the `jid` column for ids containing
+// "@" (it would recreate deleted duplicates) — so such a row can sit at
+// device_id=<jid>, jid=”. If a webhook was configured on it before first pairing, a
+// by-jid lookup finds nothing and the device silently falls through to the global/no-op
+// path. Fall back to the slot-id lookup, which is what actually keys that row.
 func getDeviceRecordForTest(deviceJID string) (*domainChatStorage.DeviceRecord, error) {
 	if webhookStorageForTest != nil {
 		return webhookStorageForTest(deviceJID)
 	}
 	dm := GetDeviceManager()
-	if dm != nil && dm.storage != nil {
-		return dm.storage.GetDeviceRecordByJID(deviceJID)
+	if dm == nil || dm.storage == nil {
+		return nil, nil
 	}
-	return nil, nil
+	record, err := dm.storage.GetDeviceRecordByJID(deviceJID)
+	if err != nil {
+		return nil, err
+	}
+	if record != nil {
+		return record, nil
+	}
+	return dm.storage.GetDeviceRecord(deviceJID)
 }
 
 // getWebhookConfigForDevice returns the webhook configuration to use for a given device.

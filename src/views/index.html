@@ -415,24 +415,34 @@
                         case 'PASSKEY_REQUEST':
                             showSuccessInfo('Passkey linking requested. Complete the WebAuthn assertion via the REST API (GET /app/passkey).')
                             break;
-                        case 'PASSKEY_CONFIRMATION':
+                        case 'PASSKEY_CONFIRMATION': {
+                            // Confirm the device the EVENT names, not whichever device the UI
+                            // happens to have selected: with several devices open (or a pairing
+                            // started from another tab/the API), the ambient X-Device-Id points
+                            // elsewhere and the backend finds no pending confirmation on that
+                            // slot, leaving the real pairing stuck. encodeURIComponent because
+                            // DeviceMiddleware url.QueryUnescape()s the header (matching how the
+                            // selected-device path encodes it).
+                            const passkeyDeviceId = message.result?.device_id;
+                            const passkeyConfig = passkeyDeviceId
+                                ? { headers: { 'X-Device-Id': encodeURIComponent(passkeyDeviceId) } }
+                                : undefined;
+                            const confirmPasskey = () => window.http.post('app/passkey/confirm', null, passkeyConfig)
+                                .then(() => showSuccessInfo('Passkey pairing confirmed'))
+                                .catch(err => showErrorInfo(err?.response?.data?.message || 'Passkey confirmation failed'))
+
+                            // skip_handoff_ux only means the CODE does not need to be shown and
+                            // verified by the user — whatsmeow still requires the confirmation
+                            // call to finish the pairing. Skipping the dialog must not skip the
+                            // request, or these pairings stay pending forever.
                             if (message.result?.skip_handoff_ux) {
                                 showSuccessInfo(message.message)
+                                confirmPasskey()
                             } else if (window.confirm('Does this passkey pairing code match the one on your phone? ' + (message.result?.code || ''))) {
-                                // Confirm the device the EVENT names, not whichever device the
-                                // UI happens to have selected: with several devices open (or a
-                                // pairing started from another tab/the API), the global
-                                // X-Device-Id header can point elsewhere, and the backend would
-                                // then find no pending confirmation on that slot — leaving the
-                                // real pairing stuck with no way to complete it.
-                                const passkeyDeviceId = message.result?.device_id;
-                                window.http.post('app/passkey/confirm', null, passkeyDeviceId
-                                    ? { headers: { 'X-Device-Id': passkeyDeviceId } }
-                                    : undefined)
-                                    .then(() => showSuccessInfo('Passkey pairing confirmed'))
-                                    .catch(err => showErrorInfo(err?.response?.data?.message || 'Passkey confirmation failed'))
+                                confirmPasskey()
                             }
                             break;
+                        }
                         case 'PASSKEY_ERROR':
                             showErrorInfo(message.message)
                             break;

@@ -76,8 +76,11 @@ func handleHistorySync(ctx context.Context, evt *events.HistorySync, chatStorage
 	}
 
 	// Debounce webhook notification — wait for all sync events to complete.
-	// Only schedule when webhooks are configured to avoid wasted timers.
-	if len(config.WhatsappWebhook) > 0 {
+	// Only schedule when a consumer exists, to avoid wasted timers. The test must be
+	// device-aware: a device-only deployment (per-device webhook, no global --webhook)
+	// has a consumer even though config.WhatsappWebhook is empty, and gating on the
+	// global list alone silently swallowed history_sync_complete for it.
+	if hasWebhookConsumerForEvent(deviceJIDForWebhook(client), EventTypeHistorySyncComplete) {
 		scheduleHistorySyncWebhook(chatStorageRepo, client, evt.Data.GetSyncType().String())
 	}
 }
@@ -380,7 +383,9 @@ func processOnDemandHistorySync(ctx context.Context, data *waHistorySync.History
 		log.Errorf("[ON_DEMAND] Failed to store messages: %v", err)
 	}
 
-	if len(config.WhatsappWebhook) > 0 {
+	// Same device-aware consumer test as the debounced path: these forward as ordinary
+	// `message` events, and a device-only deployment must receive them too.
+	if hasWebhookConsumerForEvent(deviceJIDForWebhook(client), EventTypeMessage) {
 		deviceID := ""
 		if client != nil && client.Store != nil && client.Store.ID != nil {
 			deviceJID := normalizeLIDBounded(ctx, client.Store.ID.ToNonAD(), client)

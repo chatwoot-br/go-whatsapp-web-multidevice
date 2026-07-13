@@ -366,3 +366,41 @@ func TestHasWebhookConsumerForEvent_ChatwootHonorsTheGlobalWhitelist(t *testing.
 		t.Fatal("Chatwoot must be a consumer for a whitelisted message event")
 	}
 }
+
+// history_sync_complete is the fork-specific event chatwoot-app waits on to know a fresh
+// pairing's backfill has settled. It was scheduled only when a GLOBAL webhook existed, so a
+// device-only deployment (per-device webhook, no --webhook) never armed the debounce timer
+// and the documented event never arrived. The consumer test must be device-aware.
+func TestHasWebhookConsumerForEvent_HistorySyncReachesADeviceOnlyDeployment(t *testing.T) {
+	resetWebhookCaches()
+	defer resetWebhookCaches()
+
+	origWebhook, origChatwoot, origEvents := config.WhatsappWebhook, config.ChatwootEnabled, config.WhatsappWebhookEvents
+	config.WhatsappWebhook = nil // device-only: NO global webhook
+	config.ChatwootEnabled = false
+	config.WhatsappWebhookEvents = nil
+	defer func() {
+		config.WhatsappWebhook, config.ChatwootEnabled, config.WhatsappWebhookEvents = origWebhook, origChatwoot, origEvents
+	}()
+
+	const device = "628123450040@s.whatsapp.net"
+	url := "https://tenant.example/hook"
+	origStorage := webhookStorageForTest
+	webhookStorageForTest = func(jid string) (*domainChatStorage.DeviceRecord, error) {
+		return &domainChatStorage.DeviceRecord{DeviceID: jid, JID: jid, WebhookURL: &url}, nil
+	}
+	defer func() { webhookStorageForTest = origStorage }()
+
+	if !hasWebhookConsumerForEvent(device, EventTypeHistorySyncComplete) {
+		t.Fatal("a device-only deployment must still schedule/receive history_sync_complete")
+	}
+
+	// A device that filters the event out is still correctly gated.
+	webhookStorageForTest = func(jid string) (*domainChatStorage.DeviceRecord, error) {
+		return &domainChatStorage.DeviceRecord{DeviceID: jid, JID: jid, WebhookURL: &url, WebhookEvents: "message"}, nil
+	}
+	resetWebhookCaches()
+	if hasWebhookConsumerForEvent(device, EventTypeHistorySyncComplete) {
+		t.Fatal("a device whose whitelist excludes history_sync_complete must not arm the timer")
+	}
+}
