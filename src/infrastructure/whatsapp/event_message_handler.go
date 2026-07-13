@@ -173,10 +173,11 @@ func handleWebhookForward(ctx context.Context, evt *events.Message, chatStorageR
 
 	// Gate BEFORE payload construction, not just before delivery: building the
 	// message payload downloads media to disk (the webhook path is the only
-	// downloader of non-image media), so with no consumer the goroutine must not
-	// start. The gate is scoped to THIS device — a per-device webhook on some other
-	// device is not a destination for this one's media.
-	if !hasWebhookConsumerForDevice(deviceJIDForWebhook(client)) {
+	// downloader of non-image media), so a message no destination will accept must
+	// not start the goroutine. Classifying the event is pure struct inspection, so
+	// the gate can ask about THIS device and THIS exact event — not a family, and
+	// not the fleet.
+	if !hasWebhookConsumerForEvent(deviceJIDForWebhook(client), ClassifyMessageEvent(evt)) {
 		return
 	}
 

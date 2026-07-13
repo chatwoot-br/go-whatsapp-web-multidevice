@@ -107,7 +107,7 @@ func TestHandleWebhookForward_NoConsumers_SkipsForward(t *testing.T) {
 // (some device has one), so B's media messages would be downloaded to disk during
 // payload construction and then dropped for want of a destination. The device-scoped
 // gate must admit A and hold B.
-func TestHasWebhookConsumerForDevice_ScopesToTheDeviceNotTheFleet(t *testing.T) {
+func TestHasWebhookConsumerForEvent_ScopesToTheDeviceNotTheFleet(t *testing.T) {
 	resetWebhookCaches()
 	defer resetWebhookCaches()
 
@@ -129,10 +129,10 @@ func TestHasWebhookConsumerForDevice_ScopesToTheDeviceNotTheFleet(t *testing.T) 
 	}
 	defer func() { webhookStorageForTest = origStorage }()
 
-	if !hasWebhookConsumerForDevice(withHook) {
+	if !hasWebhookConsumerForEvent(withHook, EventTypeMessage) {
 		t.Fatal("expected the device owning the per-device webhook to be a consumer")
 	}
-	if hasWebhookConsumerForDevice(withoutHook) {
+	if hasWebhookConsumerForEvent(withoutHook, EventTypeMessage) {
 		t.Fatal("expected a device with no destination of its own to be gated out, " +
 			"even though another device owns a webhook")
 	}
@@ -140,7 +140,7 @@ func TestHasWebhookConsumerForDevice_ScopesToTheDeviceNotTheFleet(t *testing.T) 
 
 // The device-scoped gate keeps the global legs: a global webhook or Chatwoot is a
 // destination for every device, whatever its own config says.
-func TestHasWebhookConsumerForDevice_GlobalLegsAdmitEveryDevice(t *testing.T) {
+func TestHasWebhookConsumerForEvent_GlobalLegsAdmitEveryDevice(t *testing.T) {
 	resetWebhookCaches()
 	defer resetWebhookCaches()
 
@@ -156,13 +156,13 @@ func TestHasWebhookConsumerForDevice_GlobalLegsAdmitEveryDevice(t *testing.T) {
 
 	config.WhatsappWebhook = []string{"https://example.test/hook"}
 	config.ChatwootEnabled = false
-	if !hasWebhookConsumerForDevice(bare) {
+	if !hasWebhookConsumerForEvent(bare, EventTypeMessage) {
 		t.Fatal("expected the global webhook to be a consumer for a device with no own config")
 	}
 
 	config.WhatsappWebhook = nil
 	config.ChatwootEnabled = true
-	if !hasWebhookConsumerForDevice(bare) {
+	if !hasWebhookConsumerForEvent(bare, EventTypeMessage) {
 		t.Fatal("expected Chatwoot to be a consumer for a device with no own config")
 	}
 }
@@ -170,7 +170,7 @@ func TestHasWebhookConsumerForDevice_GlobalLegsAdmitEveryDevice(t *testing.T) {
 // A per-device config lookup failure must fail OPEN: dropping the event here would
 // silently lose messages for a device that may well have a webhook, which is worse than
 // building a payload that the delivery path then discards.
-func TestHasWebhookConsumerForDevice_LookupErrorFailsOpen(t *testing.T) {
+func TestHasWebhookConsumerForEvent_LookupErrorFailsOpen(t *testing.T) {
 	resetWebhookCaches()
 	defer resetWebhookCaches()
 
@@ -185,7 +185,7 @@ func TestHasWebhookConsumerForDevice_LookupErrorFailsOpen(t *testing.T) {
 	}
 	defer func() { webhookStorageForTest = origStorage }()
 
-	if !hasWebhookConsumerForDevice("628123450013@s.whatsapp.net") {
+	if !hasWebhookConsumerForEvent("628123450013@s.whatsapp.net", EventTypeMessage) {
 		t.Fatal("expected a lookup error to fail open rather than drop the event")
 	}
 }
@@ -264,7 +264,7 @@ func TestIsEventWhitelistedForDevice_EmptyDeviceEventListMeansAllEvents(t *testi
 // A device webhook whose event filter excludes the message family has a URL, but nothing
 // handleWebhookForward produces can ever reach it — so the pre-payload gate must hold,
 // instead of downloading media for a payload the whitelist then drops.
-func TestHasWebhookConsumerForDevice_HonorsTheDeviceEventFilter(t *testing.T) {
+func TestHasWebhookConsumerForEvent_HonorsTheDeviceEventFilter(t *testing.T) {
 	resetWebhookCaches()
 	defer resetWebhookCaches()
 
@@ -292,10 +292,77 @@ func TestHasWebhookConsumerForDevice_HonorsTheDeviceEventFilter(t *testing.T) {
 	}
 	defer func() { webhookStorageForTest = origStorage }()
 
-	if hasWebhookConsumerForDevice(callsOnly) {
+	if hasWebhookConsumerForEvent(callsOnly, EventTypeMessage) {
 		t.Fatal("a device that filtered message events out must not admit message payload construction (media download)")
 	}
-	if !hasWebhookConsumerForDevice(wantsEdits) {
+	if !hasWebhookConsumerForEvent(wantsEdits, EventTypeMessageEdited) {
 		t.Fatal("a device whose filter allows a message-family event must still be a consumer")
+	}
+}
+
+// The gate must ask about the EXACT event, not the message family. A device whitelist that
+// admits only `message.reaction` accepts no ordinary message — so an incoming media message
+// must not be pulled into payload construction (and its media onto disk) just because some
+// sibling event would have been accepted.
+func TestHasWebhookConsumerForEvent_GatesOnTheExactEventNotTheFamily(t *testing.T) {
+	resetWebhookCaches()
+	defer resetWebhookCaches()
+
+	origWebhook, origChatwoot, origEvents := config.WhatsappWebhook, config.ChatwootEnabled, config.WhatsappWebhookEvents
+	config.WhatsappWebhook = nil
+	config.ChatwootEnabled = false
+	config.WhatsappWebhookEvents = nil
+	defer func() {
+		config.WhatsappWebhook, config.ChatwootEnabled, config.WhatsappWebhookEvents = origWebhook, origChatwoot, origEvents
+	}()
+
+	const reactionsOnly = "628123450030@s.whatsapp.net"
+	url := "https://tenant.example/hook"
+
+	origStorage := webhookStorageForTest
+	webhookStorageForTest = func(jid string) (*domainChatStorage.DeviceRecord, error) {
+		return &domainChatStorage.DeviceRecord{DeviceID: jid, JID: jid, WebhookURL: &url, WebhookEvents: "message.reaction"}, nil
+	}
+	defer func() { webhookStorageForTest = origStorage }()
+
+	if hasWebhookConsumerForEvent(reactionsOnly, EventTypeMessage) {
+		t.Fatal("an ordinary message must be gated out when the device only accepts message.reaction")
+	}
+	if !hasWebhookConsumerForEvent(reactionsOnly, EventTypeMessageReaction) {
+		t.Fatal("the reaction event the device DOES accept must pass the gate")
+	}
+}
+
+// Chatwoot being enabled is not by itself a consumer: it mirrors only the events
+// shouldForwardEventToChatwoot covers, and only within the global whitelist. With the global
+// whitelist restricted away from messages and no webhook URL accepting them, an incoming
+// media message has no destination at all and must not be downloaded.
+func TestHasWebhookConsumerForEvent_ChatwootHonorsTheGlobalWhitelist(t *testing.T) {
+	resetWebhookCaches()
+	defer resetWebhookCaches()
+
+	origWebhook, origChatwoot, origEvents := config.WhatsappWebhook, config.ChatwootEnabled, config.WhatsappWebhookEvents
+	defer func() {
+		config.WhatsappWebhook, config.ChatwootEnabled, config.WhatsappWebhookEvents = origWebhook, origChatwoot, origEvents
+	}()
+	config.WhatsappWebhook = nil
+	config.ChatwootEnabled = true
+	config.WhatsappWebhookEvents = []string{"call.offer"} // messages excluded globally
+
+	const device = "628123450031@s.whatsapp.net"
+	origStorage := webhookStorageForTest
+	webhookStorageForTest = func(jid string) (*domainChatStorage.DeviceRecord, error) {
+		return &domainChatStorage.DeviceRecord{DeviceID: jid, JID: jid}, nil // no device webhook
+	}
+	defer func() { webhookStorageForTest = origStorage }()
+
+	if hasWebhookConsumerForEvent(device, EventTypeMessage) {
+		t.Fatal("Chatwoot enabled must not admit a message the global whitelist excludes — nothing can receive it")
+	}
+
+	// Widen the whitelist back to messages: Chatwoot becomes a real consumer again.
+	config.WhatsappWebhookEvents = []string{"message"}
+	if !hasWebhookConsumerForEvent(device, EventTypeMessage) {
+		t.Fatal("Chatwoot must be a consumer for a whitelisted message event")
 	}
 }

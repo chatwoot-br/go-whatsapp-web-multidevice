@@ -419,7 +419,16 @@
                             if (message.result?.skip_handoff_ux) {
                                 showSuccessInfo(message.message)
                             } else if (window.confirm('Does this passkey pairing code match the one on your phone? ' + (message.result?.code || ''))) {
-                                window.http.post('app/passkey/confirm')
+                                // Confirm the device the EVENT names, not whichever device the
+                                // UI happens to have selected: with several devices open (or a
+                                // pairing started from another tab/the API), the global
+                                // X-Device-Id header can point elsewhere, and the backend would
+                                // then find no pending confirmation on that slot — leaving the
+                                // real pairing stuck with no way to complete it.
+                                const passkeyDeviceId = message.result?.device_id;
+                                window.http.post('app/passkey/confirm', null, passkeyDeviceId
+                                    ? { headers: { 'X-Device-Id': passkeyDeviceId } }
+                                    : undefined)
                                     .then(() => showSuccessInfo('Passkey pairing confirmed'))
                                     .catch(err => showErrorInfo(err?.response?.data?.message || 'Passkey confirmation failed'))
                             }

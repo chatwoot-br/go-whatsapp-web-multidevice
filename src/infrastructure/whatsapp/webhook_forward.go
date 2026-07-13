@@ -224,41 +224,26 @@ func hasAnyWebhookConsumer() bool {
 	return anyDeviceWebhookConfigured()
 }
 
-// messageWebhookEvents are the event names handleWebhookForward can emit. The pre-payload
-// gate answers "could ANY of these reach a destination for this device" — it runs before
-// buildEventPayload has decided which one this message is.
-var messageWebhookEvents = []string{
-	EventTypeMessage,
-	EventTypeMessageReaction,
-	EventTypeMessageRevoked,
-	EventTypeMessageEdited,
-}
-
-// acceptsAnyMessageEvent reports whether the whitelist that applies to a destination
-// (a device config, or nil for the global one) admits at least one message-family event.
-func acceptsAnyMessageEvent(deviceConfig *domainChatStorage.DeviceWebhookConfig) bool {
-	for _, eventName := range messageWebhookEvents {
-		if isEventWhitelistedForDevice(eventName, deviceConfig) {
-			return true
-		}
-	}
-	return false
-}
-
-// hasWebhookConsumerForDevice narrows hasAnyWebhookConsumer to a single device, and to the
-// message events this gate actually guards. The fleet-wide answer is too coarse for the
-// pre-payload gate — one device owning a per-device webhook would otherwise admit *every*
-// device's media messages into payload construction (which downloads media to disk) only
-// for them to be dropped later — and so is the mere existence of a URL: a device whose
-// webhook_events filters message events out (say `call.offer` only) still has a URL, but
-// nothing this path produces can ever reach it.
+// hasWebhookConsumerForEvent reports whether a specific event, from a specific device, has
+// any destination at all. It is the pre-payload gate: payload construction downloads media
+// to disk, so a message that no destination will accept must not reach it.
 //
-// It mirrors the destination selection in forwardPayloadToConfiguredWebhooks: a device
-// webhook REPLACES the global URLs for that device, so its own filter is the one that
-// decides; a device without a config falls back to the global URLs and whitelist.
-// deviceJID is the NonAD JID the webhook payload is keyed by (payload["device_id"]).
-func hasWebhookConsumerForDevice(deviceJID string) bool {
-	if config.ChatwootEnabled {
+// The answer must mirror forwardPayloadToConfiguredWebhooks' own decision exactly — that
+// function drops the event unless `webhookAllowed || chatwootAllowed`, so anything this
+// gate admits that it then drops is media downloaded for nothing:
+//
+//   - Chatwoot is a consumer only for the events it actually mirrors (shouldForwardEventToChatwoot)
+//     and only within the global whitelist (isEventWhitelistedForChatwoot) — "Chatwoot is on"
+//     alone is not enough.
+//   - A device webhook REPLACES the global URLs for that device, so its own whitelist decides;
+//     a device with no config of its own falls back to the global URLs and whitelist.
+//
+// deviceJID is the NonAD JID the payload is keyed by (payload["device_id"]); eventName is
+// the event the message will publish as, from ClassifyMessageEvent — the exact name, not a
+// family, so a filter admitting only `message.reaction` no longer pulls ordinary messages
+// (and their media) into payload construction.
+func hasWebhookConsumerForEvent(deviceJID, eventName string) bool {
+	if config.ChatwootEnabled && shouldForwardEventToChatwoot(eventName) && isEventWhitelistedForChatwoot(eventName) {
 		return true
 	}
 	if strings.TrimSpace(deviceJID) == "" {
@@ -273,9 +258,9 @@ func hasWebhookConsumerForDevice(deviceJID string) bool {
 		return true
 	}
 	if deviceConfig != nil && deviceConfig.WebhookURL != nil && strings.TrimSpace(*deviceConfig.WebhookURL) != "" {
-		return acceptsAnyMessageEvent(deviceConfig)
+		return isEventWhitelistedForDevice(eventName, deviceConfig)
 	}
-	return len(config.WhatsappWebhook) > 0 && acceptsAnyMessageEvent(nil)
+	return len(config.WhatsappWebhook) > 0 && isEventWhitelistedForDevice(eventName, nil)
 }
 
 // deviceJIDForWebhook returns the key a webhook payload is attributed to for this
