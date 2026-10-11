@@ -281,7 +281,7 @@ Triggered when a message is read by the recipient (they opened the chat and saw 
 | `device_id`                        | string   | JID of the device that received this event                |
 | `timestamp`                        | string   | RFC3339 formatted timestamp when the receipt was received |
 | `payload.ids`                      | array    | Array of message IDs that received the acknowledgment     |
-| `payload.chat_id`                  | string   | Chat identifier (group or individual chat)                |
+| `payload.chat_id`                  | string   | Chat JID without a device suffix, as received from WhatsApp. Individual-chat receipts can use `@lid`; this field is not normalized to a phone JID. |
 | `payload.from`                     | string   | JID of the user who triggered the receipt                 |
 | `payload.from_lid`                 | string   | LID of the user (if available)                            |
 | `payload.receipt_type`             | string   | Type of receipt: `"delivered"`, `"read"`, etc.            |
@@ -485,6 +485,10 @@ Triggered when users are demoted from admin.
 
 Newsletter events are triggered when you interact with WhatsApp Channels (newsletters). These include subscribing,
 unsubscribing, receiving new messages, and mute setting changes.
+
+Channel posts cross-posted to Status arrive as ordinary `message` webhooks, using the message payload described above.
+Include `message` in `WHATSAPP_WEBHOOK_EVENTS` to receive these posts; filtering only for `newsletter.message` does not
+include them.
 
 ### Newsletter Joined
 

@@ -108,7 +108,7 @@ deviceID := client.Store.ID.ToNonAD().String()  // ✅ "6289605618749@s.whatsapp
 
 ## Notes
 
-- **Go 1.25.0+** required (`src/go.mod`)
+- See [README requirements](readme.md#system-requirements) for building from source.
 - REST and MCP modes cannot run simultaneously (whatsmeow limitation)
 - FFmpeg required for media processing (`ConvertToJPEG`, `ConvertToMP4`)
 - HTML/JS assets embedded in binary via `go:embed`

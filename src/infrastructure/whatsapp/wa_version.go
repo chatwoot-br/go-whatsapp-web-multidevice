@@ -18,12 +18,8 @@ import (
 // unreachable; the embedded version is used after that.
 const waVersionFetchTimeout = 10 * time.Second
 
-// RefreshWAVersion logs the WhatsApp Web client version embedded in whatsmeow
-// and asks web.whatsapp.com for the
-// current one and adopts it if it is newer. Any failure keeps the embedded
-// version. WhatsApp rejects connections from clients whose version is too old
-// ("405 client outdated"), so this lets a long-pinned build keep pairing and
-// reconnecting across a version cutoff without a new release.
+// RefreshWAVersion selects the startup WhatsApp Web client version and logs the
+// outcome. See readme.md's Configuration section for the startup lookup contract.
 //
 // It must run before any client connects: store.SetWAVersion mutates the
 // client payload shared by every whatsmeow client in the process.

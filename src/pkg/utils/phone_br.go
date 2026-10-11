@@ -106,15 +106,15 @@ func probeRecipientJID(entry types.IsOnWhatsAppResponse) types.JID {
 	return entry.JID
 }
 
-// probeOnWhatsApp runs IsOnWhatsApp for a single phone with bounded retries and
+// probeOnWhatsApp runs IsOnWhatsApp for candidate phones with bounded retries and
 // classifies the result. A single USync probe is unreliable, so an inconclusive
-// answer (transport error or empty response) is retried before being treated as
+// answer (empty response or incomplete negatives) is retried before being treated as
 // ambiguous — never as a confirmed negative. The whole attempt loop is bounded
 // by one deadline derived from ctx (onWhatsAppTotalTimeout), so even a slow,
 // non-errored empty response can't keep a send blocked. backoff is the sleep
-// between attempts (tests pass 0). On probePositive the returned JID is the
-// recipient's phone JID (see probeRecipientJID; may be empty if WhatsApp
-// omitted it).
+// between attempts (tests pass 0). On probePositive the returned JID prefers the
+// recipient's phone JID when supplied; otherwise it preserves the server JID
+// (see probeRecipientJID; may be empty if WhatsApp omitted it).
 func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []string, backoff time.Duration) (types.JID, probeOutcome) {
 	deadlineCtx, cancel := context.WithTimeout(ctx, onWhatsAppTotalTimeout)
 	defer cancel()
@@ -144,6 +144,8 @@ func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []stri
 		attemptCancel()
 
 		if err != nil {
+			// whatsmeow can return parsed results alongside a LID-cache persistence
+			// error. Keep those results so a confirmed recipient is not discarded.
 			logrus.Warnf("IsOnWhatsApp probe returned an error for %v (attempt %d/%d): %v", phones, attempt+1, onWhatsAppProbeAttempts, err)
 			if len(data) == 0 {
 				errCount++
