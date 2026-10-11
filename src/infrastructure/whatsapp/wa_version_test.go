@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mau.fi/whatsmeow/store"
@@ -120,4 +121,30 @@ func TestWAVersionHTTPClient(t *testing.T) {
 
 	_, err = waVersionHTTPClient("://bad")
 	assert.Error(t, err)
+}
+
+func TestRefreshWAVersionInvalidProxyKeepsEmbeddedWithoutFetching(t *testing.T) {
+	embedded := store.GetWAVersion()
+	originalProxy := config.WhatsappProxyURL
+	originalClient := http.DefaultClient
+	t.Cleanup(func() {
+		config.WhatsappProxyURL = originalProxy
+		http.DefaultClient = originalClient
+		store.SetWAVersion(embedded)
+	})
+
+	config.WhatsappProxyURL = "://bad"
+	calls := 0
+	client := waVersionTestClient(200, `{"client_revision":1050000000,"x":1}`, nil)
+	transport := client.Transport
+	client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		return transport.RoundTrip(r)
+	})
+	http.DefaultClient = client
+
+	RefreshWAVersion(context.Background())
+
+	assert.Zero(t, calls, "a configured invalid proxy must not cause direct egress")
+	assert.Equal(t, embedded, store.GetWAVersion())
 }

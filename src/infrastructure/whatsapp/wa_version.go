@@ -19,7 +19,7 @@ import (
 const waVersionFetchTimeout = 10 * time.Second
 
 // RefreshWAVersion logs the WhatsApp Web client version embedded in whatsmeow
-// and, when config.WhatsappVersionRefresh is on, asks web.whatsapp.com for the
+// and asks web.whatsapp.com for the
 // current one and adopts it if it is newer. Any failure keeps the embedded
 // version. WhatsApp rejects connections from clients whose version is too old
 // ("405 client outdated"), so this lets a long-pinned build keep pairing and
@@ -29,15 +29,10 @@ const waVersionFetchTimeout = 10 * time.Second
 // client payload shared by every whatsmeow client in the process.
 func RefreshWAVersion(ctx context.Context) {
 	embedded := store.GetWAVersion()
-	if !config.WhatsappVersionRefresh {
-		logrus.Infof("WhatsApp Web client version: using embedded %s (refresh disabled)", embedded)
-		return
-	}
-
 	httpClient, err := waVersionHTTPClient(config.WhatsappProxyURL)
 	if err != nil {
-		logrus.Warnf("WhatsApp Web client version: invalid proxy URL for version lookup, fetching directly: %v", err)
-		httpClient = http.DefaultClient
+		logrus.Warnf("WhatsApp Web client version: using embedded %s (invalid proxy URL: %v)", embedded, err)
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, waVersionFetchTimeout)

@@ -56,12 +56,6 @@ var (
 	WhatsappProxyOnlyLogin   = false // Use proxy only for pre-login websocket
 	WhatsappProxyNoMedia     = false // Don't use proxy for media uploads/downloads
 
-	// WhatsappVersionRefresh asks web.whatsapp.com for the current WhatsApp Web
-	// client version at startup and adopts it when newer than the one embedded in
-	// whatsmeow, so a WhatsApp version cutoff ("405 client outdated") does not
-	// require a new release. Best-effort: any failure keeps the embedded version.
-	WhatsappVersionRefresh = true
-
 	ChatStorageURI               = "file:storages/chatstorage.db"
 	ChatStorageEnableForeignKeys = true
 	ChatStorageEnableWAL         = true

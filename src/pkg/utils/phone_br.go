@@ -144,12 +144,14 @@ func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []stri
 		attemptCancel()
 
 		if err != nil {
-			errCount++
-			logrus.Warnf("IsOnWhatsApp probe failed for %v (attempt %d/%d): %v", phones, attempt+1, onWhatsAppProbeAttempts, err)
-			if errCount >= onWhatsAppProbeErrLimit {
-				break // bound the slow/error path
+			logrus.Warnf("IsOnWhatsApp probe returned an error for %v (attempt %d/%d): %v", phones, attempt+1, onWhatsAppProbeAttempts, err)
+			if len(data) == 0 {
+				errCount++
+				if errCount >= onWhatsAppProbeErrLimit {
+					break
+				}
+				continue
 			}
-			continue
 		}
 
 		// Empty response is inconclusive, not a confirmed negative — retry.

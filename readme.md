@@ -110,8 +110,6 @@ Download:
   - `--presence-pulse-enabled=true` or `WHATSAPP_PRESENCE_PULSE_ENABLED=true` (default: `true`)
   - `--presence-pulse-interval=24h` controls how often each connected device is pulsed
   - `--presence-pulse-duration=5m` controls how long the account stays `available` before returning to `unavailable`
-- WhatsApp Web client version refresh at startup
-  - `--whatsapp-version-refresh=true` or `WHATSAPP_VERSION_REFRESH=true` (default: `true`) fetches the current WhatsApp Web client version from web.whatsapp.com and uses it when newer than the one embedded in whatsmeow, so a WhatsApp version cutoff (`405 client outdated`) no longer requires a new release; any failure keeps the embedded version (10s timeout, honours `WHATSAPP_PROXY_URL`)
 - Webhook for received message
   - `--webhook="http://yourwebhook.site/handler"`, or you can simplify
   - `-w="http://yourwebhook.site/handler"`
@@ -221,7 +219,6 @@ To use environment variables:
 | `WHATSAPP_PRESENCE_PULSE_ENABLED`       | Enable daily available/unavailable presence pulse             | `true`                                       | `WHATSAPP_PRESENCE_PULSE_ENABLED=false`       |
 | `WHATSAPP_PRESENCE_PULSE_INTERVAL`      | Interval between presence pulses                              | `24h`                                        | `WHATSAPP_PRESENCE_PULSE_INTERVAL=24h`        |
 | `WHATSAPP_PRESENCE_PULSE_DURATION`      | Duration to stay available during each pulse                  | `5m`                                         | `WHATSAPP_PRESENCE_PULSE_DURATION=5m`         |
-| `WHATSAPP_VERSION_REFRESH`              | Fetch the current WhatsApp Web client version from web.whatsapp.com at startup and use it when newer than the embedded one (falls back to the embedded version) | `true`                                       | `WHATSAPP_VERSION_REFRESH=false`              |
 | `CHATWOOT_ENABLED`                      | Enable Chatwoot integration                                   | `false`                                      | `CHATWOOT_ENABLED=true`                       |
 | `CHATWOOT_URL`                          | Chatwoot instance URL                                         | -                                            | `CHATWOOT_URL=https://app.chatwoot.com`       |
 | `CHATWOOT_API_TOKEN`                    | Chatwoot API access token                                     | -                                            | `CHATWOOT_API_TOKEN=your-api-token`           |

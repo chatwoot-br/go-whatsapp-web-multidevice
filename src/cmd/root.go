@@ -181,11 +181,6 @@ func initEnvConfig() {
 		config.WhatsappProxyNoMedia = viper.GetBool("whatsapp_proxy_no_media")
 	}
 
-	// WhatsApp Web client version refresh
-	if viper.IsSet("whatsapp_version_refresh") {
-		config.WhatsappVersionRefresh = viper.GetBool("whatsapp_version_refresh")
-	}
-
 	// Chatwoot settings
 	if viper.IsSet("chatwoot_enabled") {
 		config.ChatwootEnabled = viper.GetBool("chatwoot_enabled")
@@ -438,14 +433,6 @@ func initFlags() {
 		"whatsapp-proxy-no-media", "",
 		config.WhatsappProxyNoMedia,
 		`don't use proxy for media uploads/downloads --whatsapp-proxy-no-media <true/false> | example: --whatsapp-proxy-no-media=true`,
-	)
-
-	// WhatsApp Web client version refresh
-	rootCmd.PersistentFlags().BoolVarP(
-		&config.WhatsappVersionRefresh,
-		"whatsapp-version-refresh", "",
-		config.WhatsappVersionRefresh,
-		`fetch the current WhatsApp Web client version from web.whatsapp.com at startup and use it when newer than the embedded one --whatsapp-version-refresh <true/false> | example: --whatsapp-version-refresh=false`,
 	)
 
 	// Chatwoot flags

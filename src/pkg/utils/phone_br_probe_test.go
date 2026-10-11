@@ -93,6 +93,13 @@ func TestProbeOnWhatsApp(t *testing.T) {
 			wantCalls:   1,
 		},
 		{
+			name:        "non-empty negative with a persistence error remains authoritative",
+			results:     [][]types.IsOnWhatsAppResponse{oneResp("", false)},
+			errs:        []error{errors.New("PutManyLIDMappings failed")},
+			wantOutcome: probeNegative,
+			wantCalls:   1,
+		},
+		{
 			name:        "empty response is retried then resolves positive",
 			results:     [][]types.IsOnWhatsAppResponse{nil, oneResp("556696679626", true)},
 			wantOutcome: probePositive,
@@ -142,6 +149,60 @@ func TestProbeOnWhatsApp(t *testing.T) {
 			}
 			if tc.wantOutcome == probePositive && tc.wantJIDUser != "" && jid.User != tc.wantJIDUser {
 				t.Errorf("positive JID user = %q, want %q", jid.User, tc.wantJIDUser)
+			}
+		})
+	}
+}
+
+func TestProbeOnWhatsApp_PositiveWithPersistenceError(t *testing.T) {
+	withNine := types.NewJID("5511966665555", types.DefaultUserServer)
+	withoutNine := types.NewJID("551166665555", types.DefaultUserServer)
+	lid := types.NewJID("123456789012345", types.HiddenUserServer)
+
+	tests := []struct {
+		name    string
+		phones  []string
+		results []types.IsOnWhatsAppResponse
+		want    types.JID
+	}{
+		{
+			name:   "as-dialed inserted-nine account beats distinct sibling",
+			phones: []string{"+5511966665555", "+551166665555"},
+			results: []types.IsOnWhatsAppResponse{
+				{Query: "+551166665555", JID: withoutNine, IsIn: true},
+				{Query: "+5511966665555", JID: lid, PhoneNumber: withNine, IsIn: true},
+			},
+			want: withNine,
+		},
+		{
+			name:   "as-dialed stripped account beats distinct sibling",
+			phones: []string{"+551166665555", "+5511966665555"},
+			results: []types.IsOnWhatsAppResponse{
+				{Query: "+5511966665555", JID: withNine, IsIn: true},
+				{Query: "+551166665555", JID: withoutNine, IsIn: true},
+			},
+			want: withoutNine,
+		},
+		{
+			name:    "first-positive without echoed query keeps phone JID",
+			phones:  []string{"+551166665555", "+5511966665555"},
+			results: []types.IsOnWhatsAppResponse{{JID: lid, PhoneNumber: withNine, IsIn: true}},
+			want:    withNine,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeProber{
+				results: [][]types.IsOnWhatsAppResponse{tt.results},
+				errs:    []error{errors.New("PutManyLIDMappings failed")},
+			}
+			jid, outcome := probeOnWhatsApp(context.Background(), f, tt.phones, 0)
+			if outcome != probePositive || jid != tt.want {
+				t.Fatalf("got (%s, %d), want (%s, probePositive)", jid, outcome, tt.want)
+			}
+			if f.calls != 1 {
+				t.Errorf("confirmed results should not retry: calls=%d, want 1", f.calls)
 			}
 		})
 	}
