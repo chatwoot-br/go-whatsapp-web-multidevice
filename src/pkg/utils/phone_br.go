@@ -93,6 +93,19 @@ const (
 	onWhatsAppRetryBackoff = 750 * time.Millisecond
 )
 
+// probeRecipientJID picks the phone-number JID out of a positive USync entry.
+// whatsmeow (since 2026-07, usync addressing_mode="lid") reports the canonical
+// JID as <lid>@lid and carries the phone JID in PhoneNumber; the fork keys
+// chats, messages and webhook payloads by the phone JID, so a @lid recipient
+// would miss stored chats and leak LIDs into API responses. Entries that
+// still report a phone JID (older responses, test fixtures) pass through.
+func probeRecipientJID(entry types.IsOnWhatsAppResponse) types.JID {
+	if entry.JID.Server == types.HiddenUserServer && entry.PhoneNumber.Server == types.DefaultUserServer && entry.PhoneNumber.User != "" {
+		return entry.PhoneNumber
+	}
+	return entry.JID
+}
+
 // probeOnWhatsApp runs IsOnWhatsApp for a single phone with bounded retries and
 // classifies the result. A single USync probe is unreliable, so an inconclusive
 // answer (transport error or empty response) is retried before being treated as
@@ -156,14 +169,14 @@ func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []stri
 				continue
 			}
 			if asDialed != "" && CleanPhoneForWhatsApp(data[i].Query) == CleanPhoneForWhatsApp(asDialed) {
-				return data[i].JID, probePositive
+				return probeRecipientJID(data[i]), probePositive
 			}
 			if firstPositive == nil {
 				firstPositive = &data[i]
 			}
 		}
 		if firstPositive != nil {
-			return firstPositive.JID, probePositive
+			return probeRecipientJID(*firstPositive), probePositive
 		}
 		// No positive entry. Treat as an authoritative negative ONLY when WhatsApp
 		// answered for EVERY queried candidate. With >1 candidate (the BR ninth-digit

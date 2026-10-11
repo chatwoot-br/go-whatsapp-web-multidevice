@@ -475,3 +475,53 @@ func TestProbeOnWhatsApp_CompleteNegativeStillRejects(t *testing.T) {
 		t.Errorf("authoritative negative should not retry: calls=%d, want 1", f.calls)
 	}
 }
+
+// TestProbeOnWhatsApp_LIDResponseYieldsPhoneJID: since whatsmeow queries USync
+// with addressing_mode="lid", a registered number comes back with JID=<lid>@lid
+// and PhoneNumber=<phone>@s.whatsapp.net. The resolved recipient must be the
+// phone JID (chats, messages and webhooks are keyed by it), on both the
+// as-dialed and the first-positive return paths; a LID-only entry (no
+// PhoneNumber) still passes the LID through rather than returning nothing.
+func TestProbeOnWhatsApp_LIDResponseYieldsPhoneJID(t *testing.T) {
+	lid := types.NewJID("123456789012345", types.HiddenUserServer)
+	pn := types.NewJID("5511945590462", types.DefaultUserServer)
+
+	t.Run("as-dialed match", func(t *testing.T) {
+		f := &fakeProber{results: [][]types.IsOnWhatsAppResponse{{
+			{Query: "+5511945590462", JID: lid, PhoneNumber: pn, IsIn: true},
+		}}}
+		jid, outcome := probeOnWhatsApp(context.Background(), f, []string{"+5511945590462"}, 0)
+		if outcome != probePositive {
+			t.Fatalf("outcome = %d, want probePositive", outcome)
+		}
+		if jid != pn {
+			t.Errorf("recipient = %s, want phone JID %s", jid, pn)
+		}
+	})
+
+	t.Run("first-positive fallback", func(t *testing.T) {
+		f := &fakeProber{results: [][]types.IsOnWhatsAppResponse{{
+			{JID: lid, PhoneNumber: pn, IsIn: true}, // no Query echoed
+		}}}
+		jid, outcome := probeOnWhatsApp(context.Background(), f, []string{"+551145590462", "+5511945590462"}, 0)
+		if outcome != probePositive {
+			t.Fatalf("outcome = %d, want probePositive", outcome)
+		}
+		if jid != pn {
+			t.Errorf("recipient = %s, want phone JID %s", jid, pn)
+		}
+	})
+
+	t.Run("lid without phone passes through", func(t *testing.T) {
+		f := &fakeProber{results: [][]types.IsOnWhatsAppResponse{{
+			{Query: "+5511945590462", JID: lid, IsIn: true},
+		}}}
+		jid, outcome := probeOnWhatsApp(context.Background(), f, []string{"+5511945590462"}, 0)
+		if outcome != probePositive {
+			t.Fatalf("outcome = %d, want probePositive", outcome)
+		}
+		if jid != lid {
+			t.Errorf("recipient = %s, want %s", jid, lid)
+		}
+	})
+}
