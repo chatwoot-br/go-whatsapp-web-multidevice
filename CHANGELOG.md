@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.9.0+2] - 2026-10-11
+
+### Changed
+- **whatsmeow bumped to `v0.0.0-20261007111105-c386243a72ba`** (from `v0.0.0-20260622185415`), the pin upstream `main` uses. The embedded WhatsApp Web client version moves from `2.3000.1041871181` to `2.3000.1049558099`. WhatsApp rejects old client versions with `405 client outdated` (seen on 2026-10-06 against the `v8.7.0+2` build, with the `v8.9.0+1` build expected to be rejected around 2026-10-20..25); this release keeps pairing and reconnecting past that cutoff. No fork code changes were needed to compile; transitive bumps: `go.mau.fi/util`, `golang.org/x/*`, `go-sqlite3` v1.14.52, `testify` v1.12.0, `protobuf` v1.36.12. **Go 1.26.0** is now required (`go.mod`, `docker/golang.Dockerfile` builder `golang:1.26-alpine3.23`). whatsmeow's own session store gains schema upgrades 15 (`companion-meta-nonce`) and 16 (`wasa-root-secret`), applied on first start.
+- Not an upstream sync: the fork base stays `v8.9.0`. PR #11 (`v8.10.0+1`) still pins whatsmeow `20260630`; if it is merged later, `go.mod` must keep this release's newer pin or the fleet silently drops below the cutoff again.
+
+### Added
+- **Startup WhatsApp Web client version refresh** (`infrastructure/whatsapp/wa_version.go`, `RefreshWAVersion`, called from `initApp` before any client is created). Asks web.whatsapp.com for the current client version (`whatsmeow.GetLatestVersion`) and adopts it via `store.SetWAVersion` when newer than the embedded one, so a future version cutoff stops requiring a release. Best-effort: 10s timeout, honours `WHATSAPP_PROXY_URL`, never moves backwards, any failure keeps the embedded version; one `WhatsApp Web client version: …` log line reports the embedded and effective versions. Opt out with `WHATSAPP_VERSION_REFRESH=false` / `--whatsapp-version-refresh=false`. Startup-only: a pod that stays up across a cutoff still needs a restart (refreshing on `events.ClientOutdated` is a follow-up).
+
 ## [v8.9.0+1] - 2026-07-02
 
 ### Upstream Sync
