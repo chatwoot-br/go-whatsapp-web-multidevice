@@ -621,6 +621,10 @@ func initApp() {
 		}
 	}
 
+	// Must run before any client is created or connects: it may rewrite the
+	// client payload shared by every whatsmeow client in the process.
+	whatsapp.RefreshWAVersion(ctx)
+
 	whatsappCli = whatsapp.InitWaCLI(ctx, whatsappDB, keysDB, chatStorageRepo)
 
 	// Initialize device manager and usecase for multi-device support

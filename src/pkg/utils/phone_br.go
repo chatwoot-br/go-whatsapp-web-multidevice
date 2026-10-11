@@ -93,14 +93,28 @@ const (
 	onWhatsAppRetryBackoff = 750 * time.Millisecond
 )
 
-// probeOnWhatsApp runs IsOnWhatsApp for a single phone with bounded retries and
+// probeRecipientJID picks the phone-number JID out of a positive USync entry.
+// whatsmeow (since 2026-07, usync addressing_mode="lid") reports the canonical
+// JID as <lid>@lid and carries the phone JID in PhoneNumber; the fork keys
+// chats, messages and webhook payloads by the phone JID, so a @lid recipient
+// would miss stored chats and leak LIDs into API responses. Entries that
+// still report a phone JID (older responses, test fixtures) pass through.
+func probeRecipientJID(entry types.IsOnWhatsAppResponse) types.JID {
+	if entry.JID.Server == types.HiddenUserServer && entry.PhoneNumber.Server == types.DefaultUserServer && entry.PhoneNumber.User != "" {
+		return entry.PhoneNumber
+	}
+	return entry.JID
+}
+
+// probeOnWhatsApp runs IsOnWhatsApp for candidate phones with bounded retries and
 // classifies the result. A single USync probe is unreliable, so an inconclusive
-// answer (transport error or empty response) is retried before being treated as
+// answer (empty response or incomplete negatives) is retried before being treated as
 // ambiguous — never as a confirmed negative. The whole attempt loop is bounded
 // by one deadline derived from ctx (onWhatsAppTotalTimeout), so even a slow,
 // non-errored empty response can't keep a send blocked. backoff is the sleep
-// between attempts (tests pass 0). On probePositive the returned JID is
-// WhatsApp's canonical JID (may be empty if WhatsApp omitted it).
+// between attempts (tests pass 0). On probePositive the returned JID prefers the
+// recipient's phone JID when supplied; otherwise it preserves the server JID
+// (see probeRecipientJID; may be empty if WhatsApp omitted it).
 func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []string, backoff time.Duration) (types.JID, probeOutcome) {
 	deadlineCtx, cancel := context.WithTimeout(ctx, onWhatsAppTotalTimeout)
 	defer cancel()
@@ -130,12 +144,16 @@ func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []stri
 		attemptCancel()
 
 		if err != nil {
-			errCount++
-			logrus.Warnf("IsOnWhatsApp probe failed for %v (attempt %d/%d): %v", phones, attempt+1, onWhatsAppProbeAttempts, err)
-			if errCount >= onWhatsAppProbeErrLimit {
-				break // bound the slow/error path
+			// whatsmeow can return parsed results alongside a LID-cache persistence
+			// error. Keep those results so a confirmed recipient is not discarded.
+			logrus.Warnf("IsOnWhatsApp probe returned an error for %v (attempt %d/%d): %v", phones, attempt+1, onWhatsAppProbeAttempts, err)
+			if len(data) == 0 {
+				errCount++
+				if errCount >= onWhatsAppProbeErrLimit {
+					break
+				}
+				continue
 			}
-			continue
 		}
 
 		// Empty response is inconclusive, not a confirmed negative — retry.
@@ -156,14 +174,14 @@ func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []stri
 				continue
 			}
 			if asDialed != "" && CleanPhoneForWhatsApp(data[i].Query) == CleanPhoneForWhatsApp(asDialed) {
-				return data[i].JID, probePositive
+				return probeRecipientJID(data[i]), probePositive
 			}
 			if firstPositive == nil {
 				firstPositive = &data[i]
 			}
 		}
 		if firstPositive != nil {
-			return firstPositive.JID, probePositive
+			return probeRecipientJID(*firstPositive), probePositive
 		}
 		// No positive entry. Treat as an authoritative negative ONLY when WhatsApp
 		// answered for EVERY queried candidate. With >1 candidate (the BR ninth-digit

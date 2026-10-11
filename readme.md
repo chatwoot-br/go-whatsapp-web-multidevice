@@ -177,6 +177,12 @@ can be set in three ways (in order of priority):
 2. Environment variables
 3. `.env` file (lowest priority)
 
+On startup in REST and MCP modes, GoWA checks `web.whatsapp.com` for a newer WhatsApp Web client version before creating
+clients. The lookup has a 10-second timeout and uses `WHATSAPP_PROXY_URL` when configured. A newer version is adopted;
+an older or equal version, an unusable response, or any lookup or proxy error leaves the embedded version in use.
+One `WhatsApp Web client version: …` log line reports the outcome. This check runs only at startup: restart a running
+instance to refresh its version after a WhatsApp version cutoff.
+
 ### Environment Variables
 
 You can configure the application using environment variables. Configuration can be set in three ways (in order of
@@ -243,7 +249,7 @@ Note: Command-line flags will override any values set in environment variables o
 
 ### System Requirements
 
-- **Go 1.24.0 or higher** (for building from source)
+- **Go** meeting the minimum version in [src/go.mod](./src/go.mod) (for building from source)
 - **FFmpeg** (for media processing)
 
 ### Platform Support

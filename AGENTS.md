@@ -6,7 +6,7 @@ Branch: fix/chatwoot-postgres
 
 ## OVERVIEW
 
-Go WhatsApp Web Multi-Device is a Go 1.25.5 WhatsApp Web API server with REST and MCP SSE modes.
+Go WhatsApp Web Multi-Device is a Go WhatsApp Web API server with REST and MCP SSE modes.
 It uses whatsmeow sessions, Fiber, plain Vue 3 modules, and SQLite-backed chat/session storage by default.
 
 ## STRUCTURE
@@ -109,7 +109,7 @@ go-whatsapp-web-multidevice/
 - Chat storage migrations are Go string literals in the repository, not external migration files.
 - The embedded UI uses Vue 3 from CDN, Fomantic UI modals/toasts, and custom delimiters `[[`, `]]`.
 - Release workflows generate GoReleaser YAML into `/tmp`; there is no committed `.goreleaser.yml`.
-- `AppVersion` is hard-coded as `v8.6.0` in `src/config/settings.go`; release workflows do not inject it with ldflags.
+- `AppVersion` is defined in `src/config/settings.go`; release workflows do not inject it with ldflags.
 - `src/pkg/error` declares package name `error`; import it with aliases such as `pkgError`.
 - Default SQLite builds use CGO `github.com/mattn/go-sqlite3`; `-tags purego` switches to `modernc.org/sqlite`.
 
@@ -127,7 +127,7 @@ docker compose up --build
 
 ## NOTES
 
-- Docker builds use `docker/golang.Dockerfile`, Go `1.25-alpine3.23`, CGO, and a final non-root `gowauser` process after the entrypoint fixes volume ownership.
+- Docker builds use the builder image defined in `docker/golang.Dockerfile`, CGO, and a final non-root `gowauser` process after the entrypoint fixes volume ownership.
 - Docker Compose mounts root-level `./storages` and `./statics` into `/app`; direct local runs from `src/` use `src/storages` and `src/statics`.
 - Docker publish is tag/manual driven. Arch-specific `-amd`, `-arm`, and `-armv7` images are merged into a versioned manifest; `latest` is also promoted by workflows.
 - `release.yml` declares `workflow_dispatch`, but release jobs are still guarded to tag refs.

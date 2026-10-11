@@ -3618,7 +3618,10 @@ components:
           properties:
             verified_name:
               type: string
-              example: Aldino Kemal
+              description: >-
+                Go string representation of whatsmeow's VerifiedName structure,
+                or an empty string when absent. Its fields and formatting can
+                change with library updates; treat it as an opaque string.
             status:
               type: string
               example: Hello World

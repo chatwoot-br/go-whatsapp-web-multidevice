@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v8.9.0+2] - 2026-10-11
+
+### Changed
+- **whatsmeow bumped to `v0.0.0-20261007111105-c386243a72ba`** (from `v0.0.0-20260622185415`), the pin upstream `main` uses. The embedded WhatsApp Web client version moves from `2.3000.1041871181` to `2.3000.1049558099`. WhatsApp rejects old client versions with `405 client outdated` (seen on 2026-10-06 against the `v8.7.0+2` build, with the `v8.9.0+1` build expected to be rejected around 2026-10-20..25); this release updates the embedded client ahead of that estimated cutoff. No fork code changes were needed to compile; transitive bumps: `go.mau.fi/util`, `golang.org/x/*`, `go-sqlite3` v1.14.52, `testify` v1.12.0, `protobuf` v1.36.12. Build requirements follow [src/go.mod](./src/go.mod) and the builder image in [docker/golang.Dockerfile](./docker/golang.Dockerfile). whatsmeow's own session store gains schema upgrades 15 (`companion-meta-nonce`) and 16 (`wasa-root-secret`), applied on first start.
+- Not an upstream sync: the fork base stays `v8.9.0`. PR #11 (`v8.10.0+1`) still pins whatsmeow `20260630`; if it is merged later, `go.mod` must keep this release's newer pin or the fleet silently drops below the cutoff again.
+
+### Added
+- **Startup WhatsApp Web client version refresh** added before client creation. See [README configuration](./readme.md#configuration) for lookup, fallback, proxy, and restart behavior.
+
+### Fixed (whatsmeow-delta review of the bump)
+- **BR phone probes prefer phone JIDs when USync returns LIDs** and retain confirmed registration results when LID-cache writes fail. See `probeRecipientJID` and `probeOnWhatsApp` in `src/pkg/utils/phone_br.go` for the routing invariant and `phone_br_probe_test.go` for regression coverage.
+
+### Behavior changes inherited from the whatsmeow delta (reviewed, no fork change)
+- Newsletter `<status>` stanzas (channel posts cross-posted to Status) now surface as `events.Message`. See [newsletter webhook behavior](./docs/webhook-payload.md#newsletter-events).
+- Direct-message sends are now always PN→LID rewritten by whatsmeow (the `LIDMigrationTimestamp` gate was removed). A number whose LID cannot be resolved fails the send with a whatsmeow error. See [receipt fields](./docs/webhook-payload.md#receipt-event-fields) for the resulting webhook addressing.
+- `/user/info` `verified_name` gains fields in its underlying whatsmeow representation; its contract is documented in `UserInfoResponse` in [OpenAPI](./docs/openapi.yaml).
+- whatsmeow now handles server-initiated ADV-secret rotation (`companion_reg_refresh`) and passkey pairing requests on the QR channel. The fork's one-shot `/app/login` returns the first QR only and logs other QR-channel items as errors, so a rotated QR or a passkey request mid-pairing means the displayed code stops working until the 3-minute QR timeout; rescan via a fresh `/app/login`. Follow-up: drain every `code` item and surface passkey events explicitly.
+
 ## [v8.9.0+1] - 2026-07-02
 
 ### Upstream Sync
