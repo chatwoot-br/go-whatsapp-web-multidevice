@@ -112,8 +112,9 @@ func probeRecipientJID(entry types.IsOnWhatsAppResponse) types.JID {
 // ambiguous — never as a confirmed negative. The whole attempt loop is bounded
 // by one deadline derived from ctx (onWhatsAppTotalTimeout), so even a slow,
 // non-errored empty response can't keep a send blocked. backoff is the sleep
-// between attempts (tests pass 0). On probePositive the returned JID is
-// WhatsApp's canonical JID (may be empty if WhatsApp omitted it).
+// between attempts (tests pass 0). On probePositive the returned JID is the
+// recipient's phone JID (see probeRecipientJID; may be empty if WhatsApp
+// omitted it).
 func probeOnWhatsApp(ctx context.Context, prober onWhatsAppProber, phones []string, backoff time.Duration) (types.JID, probeOutcome) {
 	deadlineCtx, cancel := context.WithTimeout(ctx, onWhatsAppTotalTimeout)
 	defer cancel()

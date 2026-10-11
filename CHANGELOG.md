@@ -19,10 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Behavior changes inherited from the whatsmeow delta (reviewed, no fork change)
 - Newsletter `<status>` stanzas (channel posts cross-posted to Status) now surface as `events.Message` with `Info.IsNewsletterStatus=true`; the fork has never filtered newsletter messages, so they are stored and forwarded as `message` webhooks like any other channel post. Only devices that follow channels are affected.
-- Direct-message sends are now always PN→LID rewritten by whatsmeow (the `LIDMigrationTimestamp` gate was removed). The LID is normally already cached by the BR probe's `IsOnWhatsApp` call; a number whose LID cannot be resolved now fails the send with a whatsmeow error instead of going out PN-addressed. Receipts for such sends may arrive LID-addressed, so `message.ack` `chat_id` can be `@lid` for accounts that were previously PN-addressed (`from` is normalized; `chat_id` is not).
+- Direct-message sends are now always PN→LID rewritten by whatsmeow (the `LIDMigrationTimestamp` gate was removed). The LID is normally already cached by the BR probe's `IsOnWhatsApp` call; a number whose LID cannot be resolved now fails the send with a whatsmeow error instead of going out PN-addressed. Receipts for such sends may arrive LID-addressed, so `message.ack` `chat_id` can be `@lid` for accounts that were previously PN-addressed (`from` is normalized; `chat_id` is not). Contract-drift check: chatwoot-app's `transform_status_event` reads only `ids` and `receipt_type`, so this is 0 breaking for the fleet.
 - `/user/info` `verified_name` (a `%v` dump of `types.VerifiedName`) gains five trailing fields; it was never a stable string.
 - whatsmeow now handles server-initiated ADV-secret rotation (`companion_reg_refresh`) and passkey pairing requests on the QR channel. The fork's one-shot `/app/login` returns the first QR only and logs other QR-channel items as errors, so a rotated QR or a passkey request mid-pairing means the displayed code stops working until the 3-minute QR timeout; rescan via a fresh `/app/login`. Follow-up: drain every `code` item and surface passkey events explicitly.
-- `Client.Disconnect` now waits up to 5s for the handler queue to drain (affects `/app/logout`, `/app/login` latency only).
 
 ## [v8.9.0+1] - 2026-07-02
 
