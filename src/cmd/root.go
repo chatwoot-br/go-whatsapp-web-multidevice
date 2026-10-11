@@ -181,6 +181,11 @@ func initEnvConfig() {
 		config.WhatsappProxyNoMedia = viper.GetBool("whatsapp_proxy_no_media")
 	}
 
+	// WhatsApp Web client version refresh
+	if viper.IsSet("whatsapp_version_refresh") {
+		config.WhatsappVersionRefresh = viper.GetBool("whatsapp_version_refresh")
+	}
+
 	// Chatwoot settings
 	if viper.IsSet("chatwoot_enabled") {
 		config.ChatwootEnabled = viper.GetBool("chatwoot_enabled")
@@ -435,6 +440,14 @@ func initFlags() {
 		`don't use proxy for media uploads/downloads --whatsapp-proxy-no-media <true/false> | example: --whatsapp-proxy-no-media=true`,
 	)
 
+	// WhatsApp Web client version refresh
+	rootCmd.PersistentFlags().BoolVarP(
+		&config.WhatsappVersionRefresh,
+		"whatsapp-version-refresh", "",
+		config.WhatsappVersionRefresh,
+		`fetch the current WhatsApp Web client version from web.whatsapp.com at startup and use it when newer than the embedded one --whatsapp-version-refresh <true/false> | example: --whatsapp-version-refresh=false`,
+	)
+
 	// Chatwoot flags
 	rootCmd.PersistentFlags().BoolVarP(
 		&config.ChatwootEnabled,
@@ -620,6 +633,10 @@ func initApp() {
 			logrus.Fatalf("failed to initialize WhatsApp keys database: %v", err)
 		}
 	}
+
+	// Must run before any client is created or connects: it may rewrite the
+	// client payload shared by every whatsmeow client in the process.
+	whatsapp.RefreshWAVersion(ctx)
 
 	whatsappCli = whatsapp.InitWaCLI(ctx, whatsappDB, keysDB, chatStorageRepo)
 
