@@ -113,6 +113,9 @@ whatsapp:
   autoRejectCall: "false"
   # autoDownloadMedia enables auto-downloading media (WHATSAPP_AUTO_DOWNLOAD_MEDIA)
   autoDownloadMedia: "true"
+  # mediaRetentionDays deletes downloaded and sent media older than N days (WHATSAPP_MEDIA_RETENTION_DAYS)
+  # "0" keeps media forever
+  mediaRetentionDays: "0"
   # accountValidation enables account validation (WHATSAPP_ACCOUNT_VALIDATION)
   accountValidation: "true"
   # presenceOnConnect controls the presence broadcast on connect (WHATSAPP_PRESENCE_ON_CONNECT)

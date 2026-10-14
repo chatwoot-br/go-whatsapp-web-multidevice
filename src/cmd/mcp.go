@@ -36,6 +36,9 @@ func mcpServer(_ *cobra.Command, _ []string) {
 	// Set daily presence pulse scheduler when enabled
 	startPresencePulseSchedulerIfEnabled()
 
+	// Set media retention sweeper when enabled
+	startMediaRetentionIfEnabled()
+
 	// Create MCP server with capabilities
 	mcpServer := server.NewMCPServer(
 		"WhatsApp Web Multidevice MCP Server",

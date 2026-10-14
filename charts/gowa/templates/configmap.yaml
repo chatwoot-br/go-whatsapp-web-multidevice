@@ -15,6 +15,7 @@ data:
   WHATSAPP_AUTO_MARK_READ: {{ .Values.whatsapp.autoMarkRead | quote }}
   WHATSAPP_AUTO_REJECT_CALL: {{ .Values.whatsapp.autoRejectCall | quote }}
   WHATSAPP_AUTO_DOWNLOAD_MEDIA: {{ .Values.whatsapp.autoDownloadMedia | quote }}
+  WHATSAPP_MEDIA_RETENTION_DAYS: {{ .Values.whatsapp.mediaRetentionDays | quote }}
   WHATSAPP_ACCOUNT_VALIDATION: {{ .Values.whatsapp.accountValidation | quote }}
   WHATSAPP_PRESENCE_ON_CONNECT: {{ .Values.whatsapp.presenceOnConnect | quote }}
   WHATSAPP_CHAT_STORAGE: {{ .Values.whatsapp.chatStorage | quote }}

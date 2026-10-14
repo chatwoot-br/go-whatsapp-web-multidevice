@@ -5,13 +5,17 @@ import (
 	"sync"
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
+	"github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/mediaretention"
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp"
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/ui/rest/helpers"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow"
 )
 
-var presencePulseSchedulerOnce sync.Once
+var (
+	presencePulseSchedulerOnce sync.Once
+	mediaRetentionOnce         sync.Once
+)
 
 // getValidWhatsAppClient returns an initialized WhatsApp client if available.
 func getValidWhatsAppClient() *whatsmeow.Client {
@@ -53,5 +57,19 @@ func startPresencePulseSchedulerIfEnabled() {
 			config.WhatsappPresencePulseDuration,
 		)
 		logrus.Infof("presence pulse scheduler started; interval=%s duration=%s", config.WhatsappPresencePulseInterval, config.WhatsappPresencePulseDuration)
+	})
+}
+
+// startMediaRetentionIfEnabled starts the process-wide media retention sweeper once.
+func startMediaRetentionIfEnabled() {
+	days := config.WhatsappMediaRetentionDays
+	if days <= 0 {
+		logrus.Info("media retention disabled")
+		return
+	}
+
+	mediaRetentionOnce.Do(func() {
+		mediaretention.Start(context.Background(), days, mediaretention.DefaultTargets())
+		logrus.Infof("media retention sweeper started; deleting media older than %d days every %s", days, mediaretention.SweepInterval)
 	})
 }

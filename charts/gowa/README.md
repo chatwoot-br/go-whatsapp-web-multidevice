@@ -88,6 +88,7 @@ The following table lists the configurable parameters of the Gowa chart and thei
 | `whatsapp.autoReply` | Auto-reply message | `""` |
 | `whatsapp.autoMarkRead` | Auto-mark messages as read | `"false"` |
 | `whatsapp.autoDownloadMedia` | Auto-download media | `"true"` |
+| `whatsapp.mediaRetentionDays` | Delete downloaded and sent media older than N days (`"0"` = disabled) | `"0"` |
 | `whatsapp.accountValidation` | Account validation | `"true"` |
 | `whatsapp.chatStorage` | Chat history storage | `"true"` |
 | `whatsapp.proxy.url` | Proxy URL (http://, https://, socks5://) | `""` |
