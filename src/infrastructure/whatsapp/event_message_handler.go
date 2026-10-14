@@ -47,9 +47,6 @@ func handleMessage(ctx context.Context, evt *events.Message, chatStorageRepo dom
 		log.Errorf("Failed to store incoming message %s: %v", evt.Info.ID, err)
 	}
 
-	// Handle image message if present
-	handleImageMessage(ctx, evt, client)
-
 	// Auto-mark message as read if configured
 	handleAutoMarkRead(ctx, evt, client)
 
@@ -75,22 +72,6 @@ func buildMessageMetaParts(evt *events.Message) []string {
 		metaParts = append(metaParts, "view once")
 	}
 	return metaParts
-}
-
-func handleImageMessage(ctx context.Context, evt *events.Message, client *whatsmeow.Client) {
-	if !config.WhatsappAutoDownloadMedia {
-		return
-	}
-	if client == nil {
-		return
-	}
-	if img := evt.Message.GetImageMessage(); img != nil {
-		if extracted, err := utils.ExtractMedia(ctx, client, config.PathStorages, img); err != nil {
-			log.Errorf("Failed to download image: %v", err)
-		} else {
-			log.Infof("Image downloaded to %s", extracted.MediaPath)
-		}
-	}
 }
 
 func handleAutoMarkRead(ctx context.Context, evt *events.Message, client *whatsmeow.Client) {
