@@ -798,9 +798,6 @@ post-sync reconciliation (e.g., Chatwoot contact upserts) exactly once.
 When `WHATSAPP_AUTO_DOWNLOAD_MEDIA` is enabled, media is downloaded and `image` contains the file path.
 When disabled, `image` contains an object with the URL.
 
-Downloaded files are kept until `WHATSAPP_MEDIA_RETENTION_DAYS` (default `0`, disabled) deletes them, so fetch them
-from `/statics/media/...` within that window.
-
 If a caption is present, it is included in the top-level `body` field (consistent with text messages).
 When auto-download is enabled and a caption exists, `image` becomes an object with `path` and `caption`.
 When no caption exists, `image` remains a plain file path string for backward compatibility.

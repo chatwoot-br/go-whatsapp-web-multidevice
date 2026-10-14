@@ -589,12 +589,6 @@ func ExtractMedia(ctx context.Context, client *whatsmeow.Client, storageLocation
 	extension := determineMediaExtension(originalFilename, extractedMedia.MimeType)
 
 	extractedMedia.MediaPath = fmt.Sprintf("%s/%d-%s%s", storageLocation, time.Now().Unix(), uuid.NewString(), extension)
-	// Re-create the directory right before writing: the media retention
-	// sweep may have pruned an emptied per-chat/date directory while the
-	// download was in flight.
-	if err = os.MkdirAll(storageLocation, 0755); err != nil {
-		return extractedMedia, err
-	}
 	err = os.WriteFile(extractedMedia.MediaPath, data, 0600)
 	if err != nil {
 		return extractedMedia, err

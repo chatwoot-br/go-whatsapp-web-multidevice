@@ -31,7 +31,6 @@ var (
 	WhatsappAutoReplyMessage          string
 	WhatsappAutoMarkRead              = false // Auto-mark incoming messages as read
 	WhatsappAutoDownloadMedia         = true  // Auto-download media from incoming messages
-	WhatsappMediaRetentionDays        = 0     // Delete media files older than N days from statics/media, statics/senditems and legacy storages/ copies (0 = disabled)
 	WhatsappWebhook                   []string
 	WhatsappWebhookSecret             = "secret"
 	WhatsappWebhookInsecureSkipVerify = false          // Skip TLS certificate verification for webhooks (insecure)

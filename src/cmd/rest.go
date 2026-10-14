@@ -197,9 +197,6 @@ func restServer(_ *cobra.Command, _ []string) {
 	// Set daily presence pulse scheduler when enabled
 	startPresencePulseSchedulerIfEnabled()
 
-	// Set media retention sweeper when enabled
-	startMediaRetentionIfEnabled()
-
 	// Listen in a goroutine so we can trap SIGINT/SIGTERM and drain the
 	// server cleanly. Without this, Fiber's Listen blocks until the OS
 	// kills the process, leaking the Chatwoot Postgres importer pool and

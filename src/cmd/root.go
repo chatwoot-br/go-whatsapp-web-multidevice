@@ -130,9 +130,6 @@ func initEnvConfig() {
 	if viper.IsSet("whatsapp_auto_download_media") {
 		config.WhatsappAutoDownloadMedia = viper.GetBool("whatsapp_auto_download_media")
 	}
-	if viper.IsSet("whatsapp_media_retention_days") {
-		config.WhatsappMediaRetentionDays = viper.GetInt("whatsapp_media_retention_days")
-	}
 	if envWebhook := viper.GetString("whatsapp_webhook"); envWebhook != "" {
 		webhook := strings.Split(envWebhook, ",")
 		config.WhatsappWebhook = webhook
@@ -350,12 +347,6 @@ func initFlags() {
 		"auto-download-media", "",
 		config.WhatsappAutoDownloadMedia,
 		`auto download media from incoming messages --auto-download-media <true/false> | example: --auto-download-media=false`,
-	)
-	rootCmd.PersistentFlags().IntVarP(
-		&config.WhatsappMediaRetentionDays,
-		"media-retention-days", "",
-		config.WhatsappMediaRetentionDays,
-		`delete downloaded and sent media files older than N days, checked hourly (0 = keep forever) --media-retention-days <int> | example: --media-retention-days=30`,
 	)
 	rootCmd.PersistentFlags().StringSliceVarP(
 		&config.WhatsappWebhook,

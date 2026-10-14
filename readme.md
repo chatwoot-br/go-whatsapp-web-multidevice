@@ -99,13 +99,6 @@ Download:
   - `--auto-mark-read=true` (automatically marks incoming messages as read)
 - Auto download media from incoming messages
   - `--auto-download-media=false` (disable automatic media downloads, default: `true`)
-- Media retention
-  - `--media-retention-days=30` or `WHATSAPP_MEDIA_RETENTION_DAYS=30` (default: `0`, keep media forever)
-  - When set, an hourly sweep (plus one at startup) deletes files older than N days (by modification time) from
-    `statics/media` (including the per-chat folders the download-media API creates), `statics/senditems`, and the
-    inbound-image copies older releases wrote to `storages/`. The databases and other files in `storages/` are never
-    deleted.
-  - Webhook consumers that fetch media from `/statics/media/...` must do so within the retention window.
 - Auto reject incoming calls
   - `--auto-reject-call=true` or `WHATSAPP_AUTO_REJECT_CALL=true` (see [Webhook Payload](./docs/webhook-payload.md#call-events) for call events)
 - Configurable presence on connect
@@ -222,7 +215,6 @@ To use environment variables:
 | `WHATSAPP_AUTO_MARK_READ`               | Auto-mark incoming messages as read                           | `false`                                      | `WHATSAPP_AUTO_MARK_READ=true`                |
 | `WHATSAPP_AUTO_REJECT_CALL`             | Auto-reject incoming WhatsApp calls                           | `false`                                      | `WHATSAPP_AUTO_REJECT_CALL=true`              |
 | `WHATSAPP_AUTO_DOWNLOAD_MEDIA`          | Auto-download media from incoming messages                    | `true`                                       | `WHATSAPP_AUTO_DOWNLOAD_MEDIA=false`          |
-| `WHATSAPP_MEDIA_RETENTION_DAYS`         | Delete downloaded and sent media older than N days (`0` = disabled) | `0`                                    | `WHATSAPP_MEDIA_RETENTION_DAYS=30`            |
 | `WHATSAPP_WEBHOOK`                      | Webhook URL(s) for events (comma-separated)                   | -                                            | `WHATSAPP_WEBHOOK=https://webhook.site/xxx`   |
 | `WHATSAPP_WEBHOOK_SECRET`               | Webhook secret for validation                                 | `secret`                                     | `WHATSAPP_WEBHOOK_SECRET=super-secret-key`    |
 | `WHATSAPP_WEBHOOK_INSECURE_SKIP_VERIFY` | Skip TLS verification for webhooks (insecure)                 | `false`                                      | `WHATSAPP_WEBHOOK_INSECURE_SKIP_VERIFY=true`  |
