@@ -97,7 +97,7 @@ Download:
   - `--autoreply="Don't reply this message"`
 - Auto mark read incoming messages
   - `--auto-mark-read=true` (automatically marks incoming messages as read)
-- Auto download media from incoming messages
+- Auto-download media for forwarded messages (see [Media Messages](./docs/webhook-payload.md#media-messages))
   - `--auto-download-media=false` (disable automatic media downloads, default: `true`)
 - Auto reject incoming calls
   - `--auto-reject-call=true` or `WHATSAPP_AUTO_REJECT_CALL=true` (see [Webhook Payload](./docs/webhook-payload.md#call-events) for call events)
@@ -214,7 +214,7 @@ To use environment variables:
 | `WHATSAPP_AUTO_REPLY`                   | Auto-reply message                                            | -                                            | `WHATSAPP_AUTO_REPLY="Auto reply message"`    |
 | `WHATSAPP_AUTO_MARK_READ`               | Auto-mark incoming messages as read                           | `false`                                      | `WHATSAPP_AUTO_MARK_READ=true`                |
 | `WHATSAPP_AUTO_REJECT_CALL`             | Auto-reject incoming WhatsApp calls                           | `false`                                      | `WHATSAPP_AUTO_REJECT_CALL=true`              |
-| `WHATSAPP_AUTO_DOWNLOAD_MEDIA`          | Auto-download media from incoming messages                    | `true`                                       | `WHATSAPP_AUTO_DOWNLOAD_MEDIA=false`          |
+| `WHATSAPP_AUTO_DOWNLOAD_MEDIA`          | Enable media auto-download (see [Media Messages](./docs/webhook-payload.md#media-messages)) | `true`                                       | `WHATSAPP_AUTO_DOWNLOAD_MEDIA=false`          |
 | `WHATSAPP_WEBHOOK`                      | Webhook URL(s) for events (comma-separated)                   | -                                            | `WHATSAPP_WEBHOOK=https://webhook.site/xxx`   |
 | `WHATSAPP_WEBHOOK_SECRET`               | Webhook secret for validation                                 | `secret`                                     | `WHATSAPP_WEBHOOK_SECRET=super-secret-key`    |
 | `WHATSAPP_WEBHOOK_INSECURE_SKIP_VERIFY` | Skip TLS verification for webhooks (insecure)                 | `false`                                      | `WHATSAPP_WEBHOOK_INSECURE_SKIP_VERIFY=true`  |

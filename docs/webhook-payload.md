@@ -793,9 +793,11 @@ post-sync reconciliation (e.g., Chatwoot contact upserts) exactly once.
 
 ## Media Messages
 
+Automatic downloads are performed when building message payloads for a configured webhook or Chatwoot. With `WHATSAPP_AUTO_DOWNLOAD_MEDIA=true`, inbound images are saved once under `statics/media/` for the payload, without a second copy under `storages/`. If neither forwarding destination is configured, incoming image metadata is stored without downloading the image.
+
 ### Image Message
 
-When `WHATSAPP_AUTO_DOWNLOAD_MEDIA` is enabled, media is downloaded and `image` contains the file path.
+With auto-download enabled, `image` contains the downloaded file path.
 When disabled, `image` contains an object with the URL.
 
 If a caption is present, it is included in the top-level `body` field (consistent with text messages).
