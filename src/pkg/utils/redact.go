@@ -3,6 +3,8 @@ package utils
 import (
 	"errors"
 	"net/url"
+	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -12,6 +14,8 @@ const redactedUserinfo = "***"
 // errURLDetailsWithheld replaces url.Parse's detail message, which quotes
 // pieces of the input (e.g. `invalid port ":s3cret" after host`).
 var errURLDetailsWithheld = errors.New("invalid URL (details withheld: they may contain credentials)")
+
+var leadingURLScheme = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*://`)
 
 // RedactURLCredentials hides the user and password of a URL (e.g. a proxy URL)
 // so it can be logged, keeping scheme, host and port for diagnosis:
@@ -36,33 +40,36 @@ func RedactURLCredentials(raw string) string {
 	return prefix + mask + rest
 }
 
-// RedactURLError makes an error involving the URL raw safe to log. A
-// *url.Error about raw itself (from url.Parse) has its URL redacted and its
-// detail message withheld; any other error has the user and password of raw
-// masked out of its message, e.g. whatsmeow's `unsupported proxy scheme "user"`
-// for "user:pass@host", or a dial error naming a misparsed user as the host.
 func RedactURLError(err error, raw string) error {
+	if err == nil {
+		return nil
+	}
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) && urlErr.URL == raw {
 		return &url.Error{Op: urlErr.Op, URL: RedactURLCredentials(urlErr.URL), Err: errURLDetailsWithheld}
 	}
 	_, userinfo, _, ok := splitUserinfo(raw)
-	if err == nil || !ok {
+	if !ok {
 		return err
 	}
-	secrets := strings.Split(userinfo, ":")
-	// A host url.Parse found inside our userinfo is a credential fragment, e.g.
-	// "ss" for "user:pa@ss/word@host", which then shows up in dial errors.
-	if u, parseErr := url.Parse(raw); parseErr == nil && u.Hostname() != "" && strings.Contains(userinfo, u.Hostname()) {
-		secrets = append(secrets, u.Hostname())
+	u, parseErr := url.Parse(raw)
+	if parseErr != nil || u.User == nil || u.User.String() != userinfo {
+		return errURLDetailsWithheld
 	}
-	msg := err.Error()
-	redacted := msg
+	secrets := strings.Split(userinfo, ":")
+	secrets = append(secrets, userinfo, u.User.Username())
+	if password, hasPassword := u.User.Password(); hasPassword {
+		secrets = append(secrets, password)
+	}
+	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
+	var replacements []string
 	for _, secret := range secrets {
 		if secret != "" {
-			redacted = strings.ReplaceAll(redacted, secret, redactedUserinfo)
+			replacements = append(replacements, secret, redactedUserinfo)
 		}
 	}
+	msg := err.Error()
+	redacted := strings.NewReplacer(replacements...).Replace(msg)
 	if redacted == msg {
 		return err
 	}
@@ -76,8 +83,8 @@ func splitUserinfo(raw string) (prefix, userinfo, rest string, ok bool) {
 	if at < 0 {
 		return "", "", "", false
 	}
-	if i := strings.Index(raw, "://"); i >= 0 && i < at {
-		prefix = raw[:i+len("://")]
+	if scheme := leadingURLScheme.FindString(raw); len(scheme) > 0 && len(scheme) <= at {
+		prefix = scheme
 	} else if strings.HasPrefix(raw, "//") {
 		prefix = "//"
 	}

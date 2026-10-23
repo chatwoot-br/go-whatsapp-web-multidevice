@@ -79,65 +79,24 @@ func init() {
 	cobra.OnInitialize(initEnvConfig, initApp)
 }
 
-// redactSettings returns a copy of the viper settings that is safe to print:
-// secret-like keys are masked and credentials are stripped from URL values
-// (including comma-separated URL lists such as WHATSAPP_WEBHOOK).
 func redactSettings(settings map[string]any) map[string]any {
 	redacted := make(map[string]any, len(settings))
 	for key, value := range settings {
+		redacted[key] = value
 		str, isString := value.(string)
-		switch {
-		case value == nil, isString && str == "":
-			redacted[key] = value
-		case isSecretSettingKey(key):
+		if value == nil || isString && str == "" {
+			continue
+		}
+		switch key {
+		case "whatsapp_webhook_secret", "chatwoot_webhook_secret", "chatwoot_api_token":
 			redacted[key] = "***"
-		case isString && (isURLSettingKey(key) || strings.Contains(str, "://")):
-			redacted[key] = redactURLList(str)
-		default:
-			if nested, ok := value.(map[string]any); ok {
-				redacted[key] = redactSettings(nested)
-			} else {
-				redacted[key] = value
+		case "whatsapp_proxy_url", "db_uri":
+			if isString {
+				redacted[key] = utils.RedactURLCredentials(str)
 			}
 		}
 	}
 	return redacted
-}
-
-// redactURLList redacts each URL of a comma-separated list. A piece without
-// "://" is kept with the previous one, since a comma is legal in a password.
-func redactURLList(value string) string {
-	var urls []string
-	for _, piece := range strings.Split(value, ",") {
-		if len(urls) > 0 && !strings.Contains(piece, "://") {
-			urls[len(urls)-1] += "," + piece
-			continue
-		}
-		urls = append(urls, piece)
-	}
-	for i, u := range urls {
-		urls[i] = utils.RedactURLCredentials(u)
-	}
-	return strings.Join(urls, ",")
-}
-
-// isURLSettingKey reports whether a setting holds a URL that may embed
-// credentials even without a scheme, e.g. whatsapp_proxy_url, db_uri.
-func isURLSettingKey(key string) bool {
-	key = strings.ToLower(key)
-	return strings.HasSuffix(key, "_url") || strings.HasSuffix(key, "_uri") || key == "whatsapp_webhook"
-}
-
-// isSecretSettingKey reports whether a setting holds a credential that must
-// never be printed, e.g. app_basic_auth, *_webhook_secret, chatwoot_api_token.
-func isSecretSettingKey(key string) bool {
-	key = strings.ToLower(key)
-	for _, marker := range []string{"secret", "token", "password", "auth"} {
-		if strings.Contains(key, marker) {
-			return true
-		}
-	}
-	return false
 }
 
 // initEnvConfig loads configuration from environment variables

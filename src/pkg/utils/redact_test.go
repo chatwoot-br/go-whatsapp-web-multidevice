@@ -39,6 +39,10 @@ func TestRedactURLCredentials(t *testing.T) {
 		{"unescaped at then slash in password", "socks5://user:s3cret@dor/s3cret2@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
 		{"comma in password", "socks5://user:2024,s3cret@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
 		{"missing scheme", "user:s3cret@proxy.example.com:1080", "***:***@proxy.example.com:1080"},
+		{"scheme delimiter inside password", "user:pa://ss@proxy.example.com:1080", "***:***@proxy.example.com:1080"},
+		{"invalid leading scheme token", "1user://s3cret@proxy.example.com:1080", "***:***@proxy.example.com:1080"},
+		{"overlapping user and misparsed host", "socks5://frag:pa@fragsecret.invalid/rest@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
+		{"scheme delimiter after comma in password", "socks5://proxyuser:2024,https://secret@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
 		{"missing at and host", "socks5://user:s3cret", "<redacted>"},
 		{"unparseable without credentials", "://bad", "<redacted>"},
 	}
@@ -79,23 +83,43 @@ func TestRedactURLError(t *testing.T) {
 	_, parseErr := url.Parse(raw)
 	assert.Contains(t, RedactURLError(parseErr, raw).Error(), "proxy.example.com:port", "host stays visible for diagnosis")
 
-	// A request error through a misparsed proxy URL ("user:2024" read as host:port) names the user.
-	raw = "socks5://user:2024#s3cret@proxy.example.com:1080"
-	dialErr := &url.Error{Op: "Get", URL: "https://web.whatsapp.com", Err: errors.New("proxyconnect tcp: dial tcp: lookup user: no such host")}
-	assert.Equal(t, `Get "https://web.whatsapp.com": proxyconnect tcp: dial tcp: lookup ***: no such host`, RedactURLError(dialErr, raw).Error())
+	for _, tt := range []struct {
+		name   string
+		raw    string
+		detail string
+	}{
+		{"user parsed as host", "socks5://user:2024#s3cret@proxy.example.com:1080", "proxyconnect tcp: dial tcp: lookup user: no such host"},
+		{"password parsed as host", "socks5://user:pa@ss3/cret@proxy.example.com:1080", "proxyconnect tcp: dial tcp: lookup ss3: no such host"},
+		{"overlapping user and host", "socks5://frag:pa@fragsecret.invalid/rest@proxy.example.com:1080", "proxyconnect tcp: dial tcp: lookup fragsecret.invalid: no such host"},
+		{"schemeless credentials", "user:s3cret@proxy.example.com:1080", `unsupported proxy scheme "user"`},
+		{"scheme delimiter in password", "user:pa://ss@proxy.example.com:1080", `unsupported proxy scheme "user"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, err := range []error{
+				errors.New(tt.detail),
+				&url.Error{Op: "Get", URL: "https://web.whatsapp.com", Err: errors.New(tt.detail)},
+			} {
+				assert.EqualError(t, RedactURLError(err, tt.raw), "invalid URL (details withheld: they may contain credentials)")
+			}
+		})
+	}
 
-	// "user:pa@ss3/cret@host": url.Parse ends the userinfo at the first '@', so password fragment "ss3" becomes the host.
-	raw = "socks5://user:pa@ss3/cret@proxy.example.com:1080"
-	dialErr = &url.Error{Op: "Get", URL: "https://web.whatsapp.com", Err: errors.New("proxyconnect tcp: dial tcp: lookup ss3: no such host")}
-	assert.Equal(t, `Get "https://web.whatsapp.com": proxyconnect tcp: dial tcp: lookup ***: no such host`, RedactURLError(dialErr, raw).Error())
-
-	// whatsmeow reports an unknown scheme verbatim; without "://" the user is read as the scheme.
-	raw = "user:s3cret@proxy.example.com:1080"
-	schemeErr := fmt.Errorf("unsupported proxy scheme %q", "user")
-	assert.Equal(t, `unsupported proxy scheme "***"`, RedactURLError(schemeErr, raw).Error())
+	for _, tt := range []struct {
+		name   string
+		raw    string
+		detail string
+		want   string
+	}{
+		{"overlapping credentials", "socks5://frag:fragsecret@proxy.example.com:1080", "authentication failed for frag: fragsecret", "authentication failed for ***: ***"},
+		{"encoded credentials", "socks5://u%40ser:pa%3Ass@proxy.example.com:1080", "authentication failed for u@ser: pa:ss (u%40ser:pa%3Ass)", "authentication failed for ***: *** (***)"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.EqualError(t, RedactURLError(errors.New(tt.detail), tt.raw), tt.want)
+		})
+	}
 
 	other := errors.New(`unsupported proxy scheme "ftp"`)
 	assert.Same(t, other, RedactURLError(other, "ftp://proxy.example.com:21"))
-	assert.Same(t, other, RedactURLError(other, raw))
+	assert.Same(t, other, RedactURLError(other, "socks5://user:s3cret@proxy.example.com:1080"))
 	assert.NoError(t, RedactURLError(nil, raw))
 }
