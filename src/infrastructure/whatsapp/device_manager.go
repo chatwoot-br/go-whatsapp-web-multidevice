@@ -522,7 +522,7 @@ func (m *DeviceManager) EnsureClient(ctx context.Context, deviceID string) (*Dev
 			NoMedia:     config.WhatsappProxyNoMedia,
 		}
 		if err := client.SetProxyAddress(config.WhatsappProxyURL, proxyOpts); err != nil {
-			logrus.Warnf("[DEVICE_MANAGER] Failed to set proxy for device %s: %v", deviceID, utils.RedactURLError(err))
+			logrus.Warnf("[DEVICE_MANAGER] Failed to set proxy for device %s: %v", deviceID, utils.RedactURLError(err, config.WhatsappProxyURL))
 		} else {
 			logrus.Infof("[DEVICE_MANAGER] Proxy configured for device %s: %s", deviceID, utils.RedactURLCredentials(config.WhatsappProxyURL))
 		}

@@ -28,7 +28,7 @@ func RefreshWAVersion(ctx context.Context) {
 	embedded := store.GetWAVersion()
 	httpClient, err := waVersionHTTPClient(config.WhatsappProxyURL)
 	if err != nil {
-		logrus.Warnf("WhatsApp Web client version: using embedded %s (invalid proxy URL: %v)", embedded, utils.RedactURLError(err))
+		logrus.Warnf("WhatsApp Web client version: using embedded %s (invalid proxy URL: %v)", embedded, utils.RedactURLError(err, config.WhatsappProxyURL))
 		return
 	}
 
@@ -37,7 +37,7 @@ func RefreshWAVersion(ctx context.Context) {
 
 	latest, err := resolveWAVersion(ctx, httpClient, embedded)
 	if err != nil {
-		logrus.Warnf("WhatsApp Web client version: using embedded %s (refresh failed: %v)", embedded, err)
+		logrus.Warnf("WhatsApp Web client version: using embedded %s (refresh failed: %v)", embedded, utils.RedactURLError(err, config.WhatsappProxyURL))
 		return
 	}
 	if !embedded.LessThan(latest) {

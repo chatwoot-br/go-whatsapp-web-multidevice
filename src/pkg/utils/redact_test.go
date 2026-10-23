@@ -28,13 +28,19 @@ func TestRedactURLCredentials(t *testing.T) {
 		{"missing host", "socks5://user:s3cret@", "socks5://***:***@"},
 		{"no credentials", "socks5://proxy.example.com:1080", "socks5://proxy.example.com:1080"},
 		{"no credentials http", "http://proxy.example.com:3128", "http://proxy.example.com:3128"},
-		{"unparseable password with space", "socks5://user:pa ss@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
-		{"unparseable invalid port", "socks5://user:s3cret@proxy.example.com:port", "socks5://***:***@proxy.example.com:port"},
-		{"unparseable unescaped slash in password", "socks5://user:pa/ss@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
-		{"unescaped at in password", "socks5://user:p@ss@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
+		{"password with space", "socks5://user:pa ss3cret@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
+		{"invalid port", "socks5://user:s3cret@proxy.example.com:port", "socks5://***:***@proxy.example.com:port"},
+		{"unescaped slash in password", "socks5://user:s3cret/x@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
+		// url.Parse reads "user:2024" as host:port for these, leaving User nil.
+		{"unescaped hash after numeric password prefix", "socks5://user:2024#s3cret@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
+		{"unescaped slash after numeric password prefix", "http://user:2024/s3cret@proxy.example.com:3128", "http://***:***@proxy.example.com:3128"},
+		{"unescaped question mark in password", "socks5://user:?s3cret@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
+		{"unescaped at in password", "socks5://user:s3@cret@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
+		{"unescaped at then slash in password", "socks5://user:s3cret@dor/s3cret2@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
+		{"comma in password", "socks5://user:2024,s3cret@proxy.example.com:1080", "socks5://***:***@proxy.example.com:1080"},
 		{"missing scheme", "user:s3cret@proxy.example.com:1080", "***:***@proxy.example.com:1080"},
-		{"unparseable without at", "socks5://user:s3cret", "<redacted>"},
-		{"unparseable without at or credentials", "://bad", "<redacted>"},
+		{"missing at and host", "socks5://user:s3cret", "<redacted>"},
+		{"unparseable without credentials", "://bad", "<redacted>"},
 	}
 
 	for _, tt := range tests {
@@ -48,20 +54,43 @@ func TestRedactURLCredentials(t *testing.T) {
 }
 
 func TestRedactURLError(t *testing.T) {
+	for _, raw := range []string{
+		"socks5://user:s3cret@proxy.example.com:port",
+		"socks5://user:s3cret",                           // inner error quotes `:s3cret`
+		"http://user:s3cret/x@proxy.example.com:3128",    // inner error quotes `:s3cret`
+		"socks5://user:ab%zzs3cret@proxy.example.com:80", // inner error quotes `%zz`
+	} {
+		t.Run(raw, func(t *testing.T) {
+			_, parseErr := url.Parse(raw)
+			require.Error(t, parseErr)
+			require.Contains(t, parseErr.Error(), "s3cret", "url.Parse error is expected to embed the raw URL")
+
+			got := RedactURLError(parseErr, raw)
+			assert.NotContains(t, got.Error(), "s3cret")
+			assert.NotContains(t, got.Error(), "user")
+			assert.NotContains(t, got.Error(), "%zz")
+
+			wrapped := RedactURLError(fmt.Errorf("set proxy: %w", parseErr), raw)
+			assert.NotContains(t, wrapped.Error(), "s3cret")
+		})
+	}
+
 	raw := "socks5://user:s3cret@proxy.example.com:port"
 	_, parseErr := url.Parse(raw)
-	require.Error(t, parseErr)
-	require.Contains(t, parseErr.Error(), "s3cret", "url.Parse error is expected to embed the raw URL")
+	assert.Contains(t, RedactURLError(parseErr, raw).Error(), "proxy.example.com:port", "host stays visible for diagnosis")
 
-	got := RedactURLError(parseErr)
-	assert.NotContains(t, got.Error(), "s3cret")
-	assert.NotContains(t, got.Error(), "user")
-	assert.Contains(t, got.Error(), "proxy.example.com:port")
+	// A request error through a misparsed proxy URL ("user:2024" read as host:port) names the user.
+	raw = "socks5://user:2024#s3cret@proxy.example.com:1080"
+	dialErr := &url.Error{Op: "Get", URL: "https://web.whatsapp.com", Err: errors.New("proxyconnect tcp: dial tcp: lookup user: no such host")}
+	assert.Equal(t, `Get "https://web.whatsapp.com": proxyconnect tcp: dial tcp: lookup ***: no such host`, RedactURLError(dialErr, raw).Error())
 
-	wrapped := RedactURLError(fmt.Errorf("set proxy: %w", parseErr))
-	assert.NotContains(t, wrapped.Error(), "s3cret")
+	// whatsmeow reports an unknown scheme verbatim; without "://" the user is read as the scheme.
+	raw = "user:s3cret@proxy.example.com:1080"
+	schemeErr := fmt.Errorf("unsupported proxy scheme %q", "user")
+	assert.Equal(t, `unsupported proxy scheme "***"`, RedactURLError(schemeErr, raw).Error())
 
-	other := errors.New("unsupported proxy scheme \"ftp\"")
-	assert.Same(t, other, RedactURLError(other))
-	assert.NoError(t, RedactURLError(nil))
+	other := errors.New(`unsupported proxy scheme "ftp"`)
+	assert.Same(t, other, RedactURLError(other, "ftp://proxy.example.com:21"))
+	assert.Same(t, other, RedactURLError(other, raw))
+	assert.NoError(t, RedactURLError(nil, raw))
 }

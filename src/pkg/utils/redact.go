@@ -9,59 +9,71 @@ import (
 // redactedUserinfo replaces the user and password of a URL in log output.
 const redactedUserinfo = "***"
 
+// errURLDetailsWithheld replaces url.Parse's detail message, which quotes
+// pieces of the input (e.g. `invalid port ":s3cret" after host`).
+var errURLDetailsWithheld = errors.New("invalid URL (details withheld: they may contain credentials)")
+
 // RedactURLCredentials hides the user and password of a URL (e.g. a proxy URL)
 // so it can be logged, keeping scheme, host and port for diagnosis:
 // "socks5://user:pass@host:1080" becomes "socks5://***:***@host:1080".
-// Values that do not parse as a URL never come back verbatim when they could
-// carry credentials.
+//
+// The userinfo is taken as everything before the last "@" rather than what
+// url.Parse reports, because an unescaped '#', '/', '?' or '@' in a password
+// makes url.Parse split the credentials into host, path or fragment.
 func RedactURLCredentials(raw string) string {
-	if u, err := url.Parse(raw); err == nil && u.Opaque == "" {
-		if u.User == nil {
-			return raw
-		}
-		// Splice the mask in by hand: url.UserPassword would percent-encode "*".
-		userinfo := redactedUserinfo
-		if _, hasPassword := u.User.Password(); hasPassword {
-			userinfo += ":" + redactedUserinfo
-		}
-		u.User = nil
-		prefix := "//"
-		if u.Scheme != "" {
-			prefix = u.Scheme + "://"
-		}
-		if rest, ok := strings.CutPrefix(u.String(), prefix); ok {
-			return prefix + userinfo + "@" + rest
-		}
-	}
-	return redactUnparsedURL(raw)
-}
-
-// redactUnparsedURL is the fallback for values url.Parse rejects (or reads as
-// opaque, like "user:pass@host:1080"): everything before the last "@" after
-// the scheme is treated as userinfo and dropped.
-func redactUnparsedURL(raw string) string {
-	at := strings.LastIndex(raw, "@")
-	if at < 0 {
-		if strings.Contains(raw, ":") {
-			// Could be "user:pass" with the host missing; nothing safe to keep.
+	prefix, userinfo, rest, ok := splitUserinfo(raw)
+	if !ok {
+		if _, err := url.Parse(raw); err != nil && strings.Contains(raw, ":") {
+			// Could be "scheme://user:pass" with the host missing.
 			return "<redacted>"
 		}
 		return raw
 	}
-	prefix := ""
-	if i := strings.Index(raw, "://"); i >= 0 && i < at {
-		prefix = raw[:i+len("://")]
+	mask := redactedUserinfo
+	if strings.Contains(userinfo, ":") {
+		mask += ":" + redactedUserinfo
 	}
-	return prefix + redactedUserinfo + ":" + redactedUserinfo + raw[at:]
+	return prefix + mask + rest
 }
 
-// RedactURLError rewrites the *url.Error that url.Parse returns, whose message
-// embeds the raw input URL, so the credentials it carries are not logged.
-// Other errors are returned unchanged.
-func RedactURLError(err error) error {
+// RedactURLError makes an error involving the URL raw safe to log. A
+// *url.Error about raw itself (from url.Parse) has its URL redacted and its
+// detail message withheld; any other error has the user and password of raw
+// masked out of its message, e.g. whatsmeow's `unsupported proxy scheme "user"`
+// for "user:pass@host", or a dial error naming a misparsed user as the host.
+func RedactURLError(err error, raw string) error {
 	var urlErr *url.Error
-	if !errors.As(err, &urlErr) {
+	if errors.As(err, &urlErr) && urlErr.URL == raw {
+		return &url.Error{Op: urlErr.Op, URL: RedactURLCredentials(urlErr.URL), Err: errURLDetailsWithheld}
+	}
+	_, userinfo, _, ok := splitUserinfo(raw)
+	if err == nil || !ok {
 		return err
 	}
-	return &url.Error{Op: urlErr.Op, URL: RedactURLCredentials(urlErr.URL), Err: urlErr.Err}
+	msg := err.Error()
+	redacted := msg
+	for _, secret := range strings.Split(userinfo, ":") {
+		if secret != "" {
+			redacted = strings.ReplaceAll(redacted, secret, redactedUserinfo)
+		}
+	}
+	if redacted == msg {
+		return err
+	}
+	return errors.New(redacted)
+}
+
+// splitUserinfo splits raw into "scheme://", the userinfo, and "@host..." at
+// the last "@". ok is false when raw has no "@".
+func splitUserinfo(raw string) (prefix, userinfo, rest string, ok bool) {
+	at := strings.LastIndex(raw, "@")
+	if at < 0 {
+		return "", "", "", false
+	}
+	if i := strings.Index(raw, "://"); i >= 0 && i < at {
+		prefix = raw[:i+len("://")]
+	} else if strings.HasPrefix(raw, "//") {
+		prefix = "//"
+	}
+	return prefix, raw[len(prefix):at], raw[at:], true
 }

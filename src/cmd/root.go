@@ -91,17 +91,41 @@ func redactSettings(settings map[string]any) map[string]any {
 			redacted[key] = value
 		case isSecretSettingKey(key):
 			redacted[key] = "***"
-		case isString && strings.Contains(str, "://"):
-			urls := strings.Split(str, ",")
-			for i, u := range urls {
-				urls[i] = utils.RedactURLCredentials(u)
-			}
-			redacted[key] = strings.Join(urls, ",")
+		case isString && (isURLSettingKey(key) || strings.Contains(str, "://")):
+			redacted[key] = redactURLList(str)
 		default:
-			redacted[key] = value
+			if nested, ok := value.(map[string]any); ok {
+				redacted[key] = redactSettings(nested)
+			} else {
+				redacted[key] = value
+			}
 		}
 	}
 	return redacted
+}
+
+// redactURLList redacts each URL of a comma-separated list. A piece without
+// "://" is kept with the previous one, since a comma is legal in a password.
+func redactURLList(value string) string {
+	var urls []string
+	for _, piece := range strings.Split(value, ",") {
+		if len(urls) > 0 && !strings.Contains(piece, "://") {
+			urls[len(urls)-1] += "," + piece
+			continue
+		}
+		urls = append(urls, piece)
+	}
+	for i, u := range urls {
+		urls[i] = utils.RedactURLCredentials(u)
+	}
+	return strings.Join(urls, ",")
+}
+
+// isURLSettingKey reports whether a setting holds a URL that may embed
+// credentials even without a scheme, e.g. whatsapp_proxy_url, db_uri.
+func isURLSettingKey(key string) bool {
+	key = strings.ToLower(key)
+	return strings.HasSuffix(key, "_url") || strings.HasSuffix(key, "_uri") || key == "whatsapp_webhook"
 }
 
 // isSecretSettingKey reports whether a setting holds a credential that must

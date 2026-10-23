@@ -115,7 +115,7 @@ func InitWaCLI(ctx context.Context, storeContainer, keysStoreContainer *sqlstore
 			NoMedia:     config.WhatsappProxyNoMedia,
 		}
 		if err := client.SetProxyAddress(config.WhatsappProxyURL, proxyOpts); err != nil {
-			logrus.Warnf("Failed to set proxy: %v", utils.RedactURLError(err))
+			logrus.Warnf("Failed to set proxy: %v", utils.RedactURLError(err, config.WhatsappProxyURL))
 		} else {
 			logrus.Infof("Proxy configured: %s", utils.RedactURLCredentials(config.WhatsappProxyURL))
 		}
