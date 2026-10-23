@@ -79,9 +79,29 @@ func init() {
 	cobra.OnInitialize(initEnvConfig, initApp)
 }
 
+func redactSettings(settings map[string]any) map[string]any {
+	redacted := make(map[string]any, len(settings))
+	for key, value := range settings {
+		redacted[key] = value
+		str, isString := value.(string)
+		if value == nil || isString && str == "" {
+			continue
+		}
+		switch key {
+		case "whatsapp_webhook_secret", "chatwoot_webhook_secret", "chatwoot_api_token":
+			redacted[key] = "***"
+		case "whatsapp_proxy_url", "db_uri":
+			if isString {
+				redacted[key] = utils.RedactURLCredentials(str)
+			}
+		}
+	}
+	return redacted
+}
+
 // initEnvConfig loads configuration from environment variables
 func initEnvConfig() {
-	fmt.Println(viper.AllSettings())
+	fmt.Println(redactSettings(viper.AllSettings()))
 	// Application settings
 	if envPort := viper.GetString("app_port"); envPort != "" {
 		config.AppPort = envPort

@@ -183,6 +183,12 @@ an older or equal version, an unusable response, or any lookup or proxy error le
 One `WhatsApp Web client version: …` log line reports the outcome. This check runs only at startup: restart a running
 instance to refresh its version after a WhatsApp version cutoff.
 
+Proxy configuration logs mask URL usernames and passwords, for example
+`socks5://***:***@proxy.example.com:1080`. Proxy-related errors are sanitized; ambiguous URL error details are withheld
+when they may contain credentials. The startup settings output masks URL userinfo in `WHATSAPP_PROXY_URL` and `DB_URI`,
+and fully masks nonempty `WHATSAPP_WEBHOOK_SECRET`, `CHATWOOT_WEBHOOK_SECRET`, and `CHATWOOT_API_TOKEN` values.
+All other settings print unchanged.
+
 ### Environment Variables
 
 You can configure the application using environment variables. Configuration can be set in three ways (in order of

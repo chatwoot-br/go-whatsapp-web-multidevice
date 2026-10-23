@@ -8,6 +8,7 @@ import (
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
 	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
+	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store"
@@ -114,9 +115,9 @@ func InitWaCLI(ctx context.Context, storeContainer, keysStoreContainer *sqlstore
 			NoMedia:     config.WhatsappProxyNoMedia,
 		}
 		if err := client.SetProxyAddress(config.WhatsappProxyURL, proxyOpts); err != nil {
-			logrus.Warnf("Failed to set proxy: %v", err)
+			logrus.Warnf("Failed to set proxy: %v", utils.RedactURLError(err, config.WhatsappProxyURL))
 		} else {
-			logrus.Infof("Proxy configured: %s", config.WhatsappProxyURL)
+			logrus.Infof("Proxy configured: %s", utils.RedactURLCredentials(config.WhatsappProxyURL))
 		}
 	}
 
