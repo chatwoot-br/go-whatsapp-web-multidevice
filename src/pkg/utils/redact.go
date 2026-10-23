@@ -50,9 +50,15 @@ func RedactURLError(err error, raw string) error {
 	if err == nil || !ok {
 		return err
 	}
+	secrets := strings.Split(userinfo, ":")
+	// A host url.Parse found inside our userinfo is a credential fragment, e.g.
+	// "ss" for "user:pa@ss/word@host", which then shows up in dial errors.
+	if u, parseErr := url.Parse(raw); parseErr == nil && u.Hostname() != "" && strings.Contains(userinfo, u.Hostname()) {
+		secrets = append(secrets, u.Hostname())
+	}
 	msg := err.Error()
 	redacted := msg
-	for _, secret := range strings.Split(userinfo, ":") {
+	for _, secret := range secrets {
 		if secret != "" {
 			redacted = strings.ReplaceAll(redacted, secret, redactedUserinfo)
 		}

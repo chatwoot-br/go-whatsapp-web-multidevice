@@ -84,6 +84,11 @@ func TestRedactURLError(t *testing.T) {
 	dialErr := &url.Error{Op: "Get", URL: "https://web.whatsapp.com", Err: errors.New("proxyconnect tcp: dial tcp: lookup user: no such host")}
 	assert.Equal(t, `Get "https://web.whatsapp.com": proxyconnect tcp: dial tcp: lookup ***: no such host`, RedactURLError(dialErr, raw).Error())
 
+	// "user:pa@ss3/cret@host": url.Parse ends the userinfo at the first '@', so password fragment "ss3" becomes the host.
+	raw = "socks5://user:pa@ss3/cret@proxy.example.com:1080"
+	dialErr = &url.Error{Op: "Get", URL: "https://web.whatsapp.com", Err: errors.New("proxyconnect tcp: dial tcp: lookup ss3: no such host")}
+	assert.Equal(t, `Get "https://web.whatsapp.com": proxyconnect tcp: dial tcp: lookup ***: no such host`, RedactURLError(dialErr, raw).Error())
+
 	// whatsmeow reports an unknown scheme verbatim; without "://" the user is read as the scheme.
 	raw = "user:s3cret@proxy.example.com:1080"
 	schemeErr := fmt.Errorf("unsupported proxy scheme %q", "user")
