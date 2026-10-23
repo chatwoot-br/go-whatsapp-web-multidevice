@@ -79,9 +79,46 @@ func init() {
 	cobra.OnInitialize(initEnvConfig, initApp)
 }
 
+// redactSettings returns a copy of the viper settings that is safe to print:
+// secret-like keys are masked and credentials are stripped from URL values
+// (including comma-separated URL lists such as WHATSAPP_WEBHOOK).
+func redactSettings(settings map[string]any) map[string]any {
+	redacted := make(map[string]any, len(settings))
+	for key, value := range settings {
+		str, isString := value.(string)
+		switch {
+		case value == nil, isString && str == "":
+			redacted[key] = value
+		case isSecretSettingKey(key):
+			redacted[key] = "***"
+		case isString && strings.Contains(str, "://"):
+			urls := strings.Split(str, ",")
+			for i, u := range urls {
+				urls[i] = utils.RedactURLCredentials(u)
+			}
+			redacted[key] = strings.Join(urls, ",")
+		default:
+			redacted[key] = value
+		}
+	}
+	return redacted
+}
+
+// isSecretSettingKey reports whether a setting holds a credential that must
+// never be printed, e.g. app_basic_auth, *_webhook_secret, chatwoot_api_token.
+func isSecretSettingKey(key string) bool {
+	key = strings.ToLower(key)
+	for _, marker := range []string{"secret", "token", "password", "auth"} {
+		if strings.Contains(key, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 // initEnvConfig loads configuration from environment variables
 func initEnvConfig() {
-	fmt.Println(viper.AllSettings())
+	fmt.Println(redactSettings(viper.AllSettings()))
 	// Application settings
 	if envPort := viper.GetString("app_port"); envPort != "" {
 		config.AppPort = envPort

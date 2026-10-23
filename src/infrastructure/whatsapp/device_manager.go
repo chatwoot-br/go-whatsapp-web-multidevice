@@ -12,6 +12,7 @@ import (
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
 	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
 	domainDevice "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/device"
+	"github.com/aldinokemal/go-whatsapp-web-multidevice/pkg/utils"
 	fiberUtils "github.com/gofiber/fiber/v2/utils"
 	"github.com/sirupsen/logrus"
 	"go.mau.fi/whatsmeow"
@@ -521,9 +522,9 @@ func (m *DeviceManager) EnsureClient(ctx context.Context, deviceID string) (*Dev
 			NoMedia:     config.WhatsappProxyNoMedia,
 		}
 		if err := client.SetProxyAddress(config.WhatsappProxyURL, proxyOpts); err != nil {
-			logrus.Warnf("[DEVICE_MANAGER] Failed to set proxy for device %s: %v", deviceID, err)
+			logrus.Warnf("[DEVICE_MANAGER] Failed to set proxy for device %s: %v", deviceID, utils.RedactURLError(err))
 		} else {
-			logrus.Infof("[DEVICE_MANAGER] Proxy configured for device %s: %s", deviceID, config.WhatsappProxyURL)
+			logrus.Infof("[DEVICE_MANAGER] Proxy configured for device %s: %s", deviceID, utils.RedactURLCredentials(config.WhatsappProxyURL))
 		}
 	}
 
