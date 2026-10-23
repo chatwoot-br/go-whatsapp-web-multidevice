@@ -11,8 +11,8 @@ import (
 // redactedUserinfo replaces the user and password of a URL in log output.
 const redactedUserinfo = "***"
 
-// errURLDetailsWithheld replaces url.Parse's detail message, which quotes
-// pieces of the input (e.g. `invalid port ":s3cret" after host`).
+// errURLDetailsWithheld replaces error details that may quote credentials,
+// including url.Parse errors and hostnames misparsed from malformed userinfo.
 var errURLDetailsWithheld = errors.New("invalid URL (details withheld: they may contain credentials)")
 
 var leadingURLScheme = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*://`)
@@ -40,6 +40,10 @@ func RedactURLCredentials(raw string) string {
 	return prefix + mask + rest
 }
 
+// RedactURLError sanitizes errors for logging alongside raw, the configured URL.
+// Ambiguous userinfo requires withholding details: URL parsing can interpret
+// credential fragments as hostnames. Unambiguous secrets are replaced in one
+// pass so masking one secret cannot expose a fragment of an overlapping secret.
 func RedactURLError(err error, raw string) error {
 	if err == nil {
 		return nil
