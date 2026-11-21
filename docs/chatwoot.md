@@ -488,6 +488,7 @@ CHATWOOT_IGNORE_JIDS=@g.us,628123456789@s.whatsapp.net
 | Message Type | Supported | Notes |
 |--------------|-----------|-------|
 | Text | ✅ | Full text content preserved |
+| Option menus and picks | ✅ | See [Option Menus and Picks](webhook-payload.md#option-menus-and-picks) |
 | Images | ✅ | Displayed as attachments |
 | Audio | ✅ | Displayed as attachments |
 | Video | ✅ | Displayed as attachments |

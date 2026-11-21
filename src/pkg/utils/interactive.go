@@ -16,10 +16,7 @@ const maxCarouselDepth = 2
 // template and interactive messages) and the options picked from them (list,
 // buttons, template-button and interactive responses) as readable plain text.
 //
-// Menus render as header/title, body, footer and then the options as a
-// numbered list, numbered in one sequence across list sections. Option titles
-// are kept verbatim so agents can type them back. Picks render as the chosen
-// option's title, falling back to its description and then its id.
+// See docs/webhook-payload.md (Option Menus and Picks) for the rendered format.
 //
 // It returns "" when msg is not one of these types or carries nothing
 // renderable, so callers can keep skipping empty messages.
@@ -215,8 +212,8 @@ func renderInteractiveMessage(im *waE2E.InteractiveMessage, depth int) string {
 }
 
 // nativeFlowParams holds the buttonParamsJSON / paramsJSON keys GoWA reads.
-// Parsing is lenient: unknown keys are ignored and invalid JSON yields the
-// zero value, so a malformed button still renders by its name.
+// Parsing is lenient: unknown keys and decoding errors are ignored, so a
+// malformed button falls back to any decoded fields or its name.
 type nativeFlowParams struct {
 	DisplayText string `json:"display_text"`
 	Title       string `json:"title"`
