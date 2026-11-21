@@ -206,6 +206,40 @@ Fields commonly found inside the `payload` object:
 }
 ```
 
+### Option Menus and Picks
+
+Business bots send option menus as list, buttons, template or interactive
+messages, and the option someone picks arrives as a list, buttons,
+template-button or interactive response. GoWA renders both into `body` as plain
+text:
+
+- **Menus:** the header or title, the body text and the footer, then the options
+  as a numbered list. The numbering runs across list sections, and the option
+  titles are copied exactly. URL, call and copy buttons show their value
+  (`Rastrear: https://...`). Flow and payment buttons are marked as needing the
+  phone. Templates without buttons render only their text.
+- **Picks:** the title of the chosen option. If the title is missing, the
+  description or the option id is used instead.
+
+The raw `list` key is still sent for list messages. Header images and videos
+on menus are not extracted as media.
+
+```json
+{
+  "event": "message",
+  "device_id": "628987654321@s.whatsapp.net",
+  "payload": {
+    "id": "3EB0C127D7BACC83D6A3",
+    "chat_id": "628123456789@s.whatsapp.net",
+    "from": "628123456789@s.whatsapp.net",
+    "timestamp": "2023-10-15T10:36:00Z",
+    "is_from_me": false,
+    "body": "Escolha uma das opções\n\n[Ver opções]\n1. Pedidos\n2. Dúvidas",
+    "list": { "description": "Escolha uma das opções", "buttonText": "Ver opções", "sections": ["..."] }
+  }
+}
+```
+
 ### Reaction Message
 
 ```json
