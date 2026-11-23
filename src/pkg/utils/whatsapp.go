@@ -185,19 +185,10 @@ func ExtractMessageTextFromProto(msg *waE2E.Message) string {
 		return doc.GetCaption()
 	}
 
-	// Check for buttons response message
-	if buttonsResponse := msg.GetButtonsResponseMessage(); buttonsResponse != nil {
-		return buttonsResponse.GetSelectedDisplayText()
-	}
-
-	// Check for list response message
-	if listResponse := msg.GetListResponseMessage(); listResponse != nil {
-		return listResponse.GetTitle()
-	}
-
-	// Check for template button reply
-	if templateButtonReply := msg.GetTemplateButtonReplyMessage(); templateButtonReply != nil {
-		return templateButtonReply.GetSelectedDisplayText()
+	// Business option menus (list, buttons, template, interactive) and the
+	// options picked from them render as readable text
+	if interactive := ExtractInteractiveText(msg); interactive != "" {
+		return interactive
 	}
 
 	// Check for shared contact card

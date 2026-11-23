@@ -255,11 +255,16 @@ func buildMessageBody(ctx context.Context, client *whatsmeow.Client, evt *events
 		payload["body"] = message.Text
 	}
 
-	// Fallback: extract caption from media messages if no text body was set
+	// Fallback: extract a media caption or render an option menu/pick if no text body was set.
 	if _, hasBody := payload["body"]; !hasBody {
 		msg := utils.UnwrapMessage(evt.Message)
 		if caption := utils.ExtractMediaCaption(msg); caption != "" {
 			payload["body"] = caption
+		} else if interactive := utils.ExtractInteractiveText(msg); interactive != "" {
+			// Business option menus and the options picked from them carry no
+			// plain text, so render them; consumers that read only body (such
+			// as Chatwoot) would otherwise drop them. Raw keys like "list" stay.
+			payload["body"] = interactive
 		}
 	}
 
